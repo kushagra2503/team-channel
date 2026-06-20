@@ -13,7 +13,7 @@
 It gives each teammate:
 
 - Their own **git worktree + branch** from the same base commit
-- The same **task vault** context, inspired by Ghost Vault
+- The same **workspace vault** context, inspired by Ghost Vault
 - A **local MCP server** so Claude Code, Cursor, Codex, Ghost, etc. can read/publish/ask through one API
 - A **CLI and dashboard** to see who is in which workspace, on what branch, doing what
 - A safe **agent-to-agent ask/inbox** layer for messages, not remote execution
@@ -21,6 +21,12 @@ It gives each teammate:
 Product rule:
 
 > If an agent is running inside a teambridge worktree, shared context is available automatically. If it is not in a teambridge worktree, teambridge stays out of the way.
+
+Naming rule:
+
+- **Session name** is the user-facing name passed to `teambridge start billing-v2`.
+- **Workspace** is the stored runtime object for that session (`workspace_id`, manifest, vault, relay channel).
+- In CLI help, prefer `session_name`; internally, use `workspace`.
 
 ---
 
@@ -60,7 +66,7 @@ Developer A machine                                           Developer B machin
 
 | Layer | Final implementation |
 | --- | --- |
-| **Brain** | Ghost Vault-shaped markdown task vault, materialized from event queue |
+| **Brain** | Ghost Vault-shaped markdown workspace vault, materialized from event queue |
 | **Hands** | `git worktree` per participant, branch `team/{workspace}/{user}` |
 | **Nervous system** | Local daemon + CLI + web dashboard + MCP server + optional relay |
 
@@ -114,13 +120,13 @@ Package manager: **pnpm**.
 | Local HTTP API | `Hono` or `Fastify` |
 | MCP | `@modelcontextprotocol/sdk` |
 | Git operations | `execa` wrapping `git` first; avoid complex git libraries early |
-| Local DB | `better-sqlite3` or `node:sqlite` when stable enough |
+| Local DB | `better-sqlite3` |
 | File watching | `chokidar` |
 | Config validation | `zod` |
 | YAML | `yaml` |
 | Dashboard | React + Vite + TanStack Query |
 | Realtime local events | Server-Sent Events first; WebSocket when bidirectional dashboard actions are needed |
-| Hosted relay MVP | Supabase Auth + Postgres + Realtime |
+| Hosted relay first version | Supabase Auth + Postgres + Realtime |
 | Tests | Vitest |
 | Packaging | `tsx` for dev, `tsup` for build |
 
@@ -152,12 +158,12 @@ The shared context is **local-first**, but the cross-device workspace has a remo
 Logical shared vault = workspace context everyone sees
 Supabase = canonical event log + latest vault checkpoint + presence + auth
 Local vault = materialized working copy of that shared context
-Git = durable code + optional long-term team canon
+Git = durable code and branches
 ```
 
 For a real cross-device workspace, Supabase stores the **canonical shared context stream**: curated events, inbox messages, and periodic vault checkpoints. Each machine materializes that stream into local markdown files under `.teambridge/workspaces/{workspace}/vault/`.
 
-If Supabase goes down, local work and the local task vault still work. New events queue locally and sync when the relay reconnects. A brand-new third teammate cannot fully bootstrap from Supabase while it is down unless the team is also using git-sync for the vault/events.
+If Supabase goes down, local work and the local workspace vault still work. New events queue locally and sync when the relay reconnects. A brand-new third teammate cannot fully bootstrap from Supabase while it is down unless the team is also using git-sync for the vault/events.
 
 In practical terms:
 
@@ -165,9 +171,9 @@ In practical terms:
 | --- | --- | --- |
 | Supabase `workspace_events` | Curated observations, decisions, blockers, asks, replies | Canonical cross-device event stream |
 | Supabase vault checkpoints | Latest compact materialized vault snapshot | Fast bootstrap for new joiners |
-| Local task vault | Readable markdown context for the current workspace | Local materialized working copy for agents and humans |
+| Local workspace vault | Readable markdown context for the current workspace | Local materialized working copy for agents and humans |
 | Local `events.jsonl` | Append-only workspace events | Offline queue and local replay log |
-| Git | Code, branches, optional `.teambridge/team-vault/` | Durable code history and optional long-term team memory |
+| Git | Code and branches | Durable code history |
 
 Event propagation rule:
 
@@ -187,13 +193,12 @@ Inside each repo:
 ```text
 .teambridge/
 ├── config.yaml                     # tracked, team convention
-├── team-vault/                     # optional tracked team canon
 ├── workspaces/
 │   └── billing-v2/
 │       ├── manifest.json           # workspace join contract
 │       ├── inbox/                  # durable ask/reply files
 │       ├── events.jsonl            # append-only workspace event log
-│       └── vault/                  # materialized task vault
+│       └── vault/                  # materialized workspace vault
 └── worktrees/                      # gitignored local worktrees
 ```
 
@@ -261,17 +266,17 @@ Local path mapping lives in `~/.teambridge/state.sqlite`, not the manifest.
 
 ---
 
-## 4. Vault Model
+## 4. Workspace Vault Model
 
-### 4.1 Vault Types
+There is only one teambridge vault type in the first product: the **workspace vault**.
 
 | Vault | Location | Sync | Purpose |
 | --- | --- | --- | --- |
-| Personal vault | `~/ghost/vault/ghost-vault` | Never by teambridge | User preferences and private memory |
-| Team vault | `.teambridge/team-vault/` | Optional git-tracked | Repo-level conventions and durable architecture |
-| Task vault | `.teambridge/workspaces/{name}/vault/` | Relay or git-sync | Current workspace context |
+| Workspace vault | `.teambridge/workspaces/{session_name}/vault/` | Supabase events/checkpoints, or git-sync fallback | Shared context for the current team session |
 
-### 4.2 Task Vault Shape
+No personal vault and no separate team vault are part of teambridge's core model. If someone starts or joins a teambridge session, that session is already the collaboration boundary.
+
+### 4.2 Workspace Vault Shape
 
 ```text
 vault/
@@ -311,22 +316,87 @@ Why:
 
 Use:
 
-- `.teambridge/workspaces/{ws}/events.jsonl` for simple local MVP
+- `.teambridge/workspaces/{ws}/events.jsonl` for the simple local version
 - `events` table in Supabase for relay mode
 - `vault/` as materialized docs
 
-### 4.4 Hybrid Write Model
+The system should **not** merge Alice's local `vault/` folder with Bob's local `vault/` folder. Local vaults are caches/materialized views. The shared checkpoint is rebuilt from:
+
+```text
+previous checkpoint + workspace_events ordered by per-workspace `seq`
+```
+
+That makes joins, replay, dedupe, and conflict detection tractable.
+
+### 4.4 Checkpoint Builder and Conflicts
+
+The latest shared checkpoint in Supabase is produced by a checkpoint builder.
+
+```text
+last checkpoint at seq 100
+new events seq 101..145
+  -> apply events deterministically
+  -> update materialized vault files
+  -> detect conflicts
+  -> write checkpoint at seq 145
+```
+
+Checkpoint builder options:
+
+| Option | Use |
+| --- | --- |
+| Leader daemon with failover | First implementation: elected online participant builds checkpoints |
+| Hosted worker | Later: Supabase Edge Function / queue worker builds checkpoints centrally |
+| Any daemon with lock | Distributed fallback with compare-and-swap lock |
+
+First-version leader rule:
+
+```text
+1. Each online daemon heartbeats presence.
+2. Checkpoint lease row stores leader_device_id + lease_expires_at.
+3. Current leader renews lease while online.
+4. If lease expires, any online daemon may acquire with compare-and-swap.
+5. New leader builds from latest checkpoint seq + missing events.
+```
+
+This avoids making the creator a single point of failure.
+
+Collision rule:
+
+> Conflicting events are never silently overwritten. They produce `conflict_detected` events and entries in `conflicts.md`.
+
+Examples:
+
+| Collision | Handling |
+| --- | --- |
+| Alice says Redis idempotency, Bob says DB unique constraint | Add `conflict_detected`, ping owners, wait for decision |
+| Two people claim `packages/core` ownership | Add ownership conflict; ask workspace/package owner |
+| Two API contract values differ | Add contract conflict; ask path owner |
+| Markdown patch fails | Preserve both notes; require human resolution |
+
+Resolution flow:
+
+```text
+conflict_detected
+  -> write conflicts.md
+  -> inbox ask relevant owners/agents
+  -> agents propose / humans decide
+  -> decision event with resolves: conf_id
+  -> next checkpoint materializes resolved state
+```
+
+### 4.5 Hybrid Write Model
 
 | Writer | What it writes |
 | --- | --- |
 | Main agent | `team_publish`: append observation, decision, blocker, failed attempt |
 | Daemon background writer | Curates canonical markdown files |
 | Human | `teambridge vault edit`, `teambridge reply`, dashboard edits later |
-| Dream/archive job | Promotes task vault decisions into team vault |
+| Checkpoint builder | Produces the latest shared vault checkpoint for joiners |
 
 Do not let multiple agents freely edit `projects/*.md`. That becomes merge chaos.
 
-### 4.5 Injection Policy
+### 4.6 Injection Policy
 
 Default:
 
@@ -371,7 +441,7 @@ Does:
 1. Resolve `base_ref` from CLI argument or config default
 2. Resolve and record immutable `base_commit`
 3. Create workspace manifest
-4. Scaffold task vault
+4. Scaffold workspace vault
 5. Create creator branch and worktree
 6. Register workspace in local daemon
 7. Start relay channel if configured
@@ -465,7 +535,21 @@ Dashboard ----> local teambridge daemon ----> files / sqlite / relay / MCP
 Agents -----
 ```
 
-The daemon is the source of truth at runtime.
+The daemon is the **local runtime authority**: CLI, dashboard, hooks, and MCP all talk to it. For cross-device work, the daemon syncs against Supabase's canonical workspace event stream.
+
+Workspace resolution is explicit. The daemon never assumes an HTTP MCP client magically provides cwd.
+
+Resolution order:
+
+```text
+1. Explicit MCP query params: workspace_id/session_name + worktree path
+2. Headers from hook/MCP wrapper: x-teambridge-cwd or x-teambridge-worktree
+3. Local state.sqlite mapping: known worktree path -> workspace_id
+4. .teambridge/.active marker written by teambridge enter/join
+5. If unresolved: return empty resources and no-op tools
+```
+
+For Claude Code, the SessionStart hook can call the daemon with the actual cwd. For Cursor or other MCP clients, teambridge should install a small wrapper/config that passes cwd/worktree metadata where the client supports it; otherwise users can still run inside a worktree and rely on `state.sqlite` path mapping.
 
 ### 6.2 CLI Responsibilities
 
@@ -477,9 +561,9 @@ teambridge start <session_name> [base_ref]
 teambridge join <session_name>
 teambridge enter <session_name>
 teambridge status
-teambridge ws show <workspace>
-teambridge ws who <workspace>
-teambridge ws branches <workspace>
+teambridge ws show <session_name>
+teambridge ws who <session_name>
+teambridge ws branches <session_name>
 teambridge ask <person> "question"
 teambridge inbox
 teambridge vault search "query"
@@ -510,7 +594,7 @@ It subscribes via SSE/WebSocket to daemon events:
 - Vault decisions/blockers
 - Relay status
 
-It should be read-mostly in MVP. Later:
+It should be read-mostly in the first version. Later:
 
 - Approve/reply to inbox
 - Edit ownership
@@ -543,6 +627,8 @@ Local daemon exposes:
 http://127.0.0.1:9474/mcp?workspace=auto&worktree=auto
 ```
 
+`auto` means: resolve using explicit request metadata, hook-provided cwd headers, or `state.sqlite` path mappings. The daemon must not rely on generic HTTP MCP requests containing cwd by default.
+
 Installed by `teambridge init` into `.mcp.json`:
 
 ```json
@@ -572,7 +658,7 @@ Installed by `teambridge init` into `.mcp.json`:
 | --- | --- |
 | `vault_tree` | List vault files |
 | `vault_read` | Read a vault markdown file |
-| `vault_search` | Search task/team vault |
+| `vault_search` | Search workspace vault |
 | `vault_snapshot` | Bounded snapshot |
 | `team_publish` | Publish observation/decision/blocker |
 | `team_ask` | Ask teammate's agent/human |
@@ -590,7 +676,7 @@ Optional:
 | --- | --- |
 | `workspace_briefing` | Explain workspace context to an agent |
 | `handoff_summary` | Summarize what a joiner needs to know |
-| `archive_summary` | Generate task closeout summary |
+| `archive_summary` | Generate session closeout summary |
 
 ### 7.5 Hooks vs MCP
 
@@ -695,7 +781,69 @@ Never auto-answer requests that imply edits, commands, commits, deploys, or secr
 
 ## 9. Cross-Device Sync and Services
 
-### 9.1 MVP Local Modes
+### 9.0 Pub/Sub With Persistence
+
+Teambridge's backend relay is **pub/sub with persistence**, not pure ephemeral pub/sub.
+
+```text
+Alice's agent fires event
+  -> Alice local daemon
+  -> Supabase/backend publishes to workspace channel
+  -> Bob/Carol daemons subscribed to that channel receive it
+  -> their local vaults materialize it
+  -> hooks/MCP expose it to their agents
+```
+
+Pub/sub layers:
+
+| Layer | Role |
+| --- | --- |
+| Local daemon | Publishes local events, subscribes to remote events |
+| Supabase Realtime | Pub/sub channel per workspace |
+| Postgres event table | Durable event history |
+| Local `events.jsonl` | Offline queue + local replay |
+| Hooks | Notify/inject agent when relevant |
+| MCP | Agent pulls details or publishes new events |
+
+Why not pure pub/sub only?
+
+Pure pub/sub is ephemeral. If Bob is offline, he misses events. Teambridge needs:
+
+```text
+Pub/sub for realtime
+Database event log for missed events
+Local events.jsonl for offline work
+Vault checkpoint for fast bootstrap
+```
+
+Delivery flow:
+
+```text
+team_publish(decision)
+  -> local events.jsonl
+  -> local vault update
+  -> Supabase workspace_events insert
+  -> Supabase Realtime broadcast
+  -> subscribed daemons receive event
+  -> append local events.jsonl
+  -> materialize local vault
+  -> hook injects delta / MCP resource updates
+```
+
+Layer responsibilities:
+
+```text
+Supabase = pub/sub + history
+Daemon = subscriber + materializer
+Hook = agent notifier
+MCP = agent API
+```
+
+One-line architecture:
+
+> Teambridge is pub/sub plus durable event sourcing plus local vault materialization.
+
+### 9.1 Local Modes Before Hosted Relay
 
 Start with two modes:
 
@@ -786,9 +934,17 @@ workspace_id uuid
 type text
 actor_id uuid
 payload jsonb
+seq bigint not null
 created_at timestamptz
 dedupe_key text
 ```
+
+Ordering rule:
+
+- `seq` is assigned by Postgres per workspace when inserting `workspace_events`.
+- Checkpoint builders apply events ordered by `(seq asc)`.
+- `created_at` is for display only, not deterministic ordering.
+- Local offline events get temporary local IDs; when synced, Supabase assigns final `seq`.
 
 `workspace_vault_checkpoints`:
 
@@ -796,6 +952,7 @@ dedupe_key text
 id uuid primary key
 workspace_id uuid
 event_id uuid
+seq bigint not null
 format text -- markdown_bundle | compact_json
 payload jsonb -- compact files or object storage pointer
 created_at timestamptz
@@ -835,7 +992,7 @@ Do not add CRDT early. Event log + single writer is simpler.
 
 | Action | Allowed by default? |
 | --- | --- |
-| Read task vault | Yes |
+| Read workspace vault | Yes |
 | Publish note/decision | Yes |
 | Ask teammate | Yes, rate-limited |
 | Reply to ask | Human-approved by default |
@@ -854,7 +1011,7 @@ Do not add CRDT early. Event log + single writer is simpler.
 
 ### 10.3 Auth
 
-MVP:
+Local-first version:
 
 - Identity from `git config user.email`
 - Local trust
@@ -867,142 +1024,7 @@ Hosted:
 
 ---
 
-## 11. Build Phases
-
-### Phase 1 - Local Workspace Core
-
-Deliver:
-
-- `teambridge init`
-- `.teambridge/config.yaml`
-- `.mcp.json` merge
-- daemon start/status
-- `teambridge start`
-- `teambridge join`
-- auto worktree + branch
-- manifest
-- `teambridge enter`
-
-Acceptance:
-
-- Two local users/identities can create separate branches from same base
-- `teambridge ws show` displays branches and ownership
-
-### Phase 2 - CLI Visibility
-
-Deliver:
-
-- `status`
-- `ws list/show/who/branches`
-- ownership commands
-- local daemon API
-- SSE stream for state changes
-
-Acceptance:
-
-- CLI accurately shows workspace participants and worktree paths
-
-### Phase 3 - MCP Server v1
-
-Deliver:
-
-- HTTP MCP server
-- `.mcp.json` install
-- Resources: context, manifest, inbox pending
-- Tools: `ws_status`, `ws_who`, `vault_tree`, `vault_read`, `vault_search`
-
-Acceptance:
-
-- Claude/Cursor can call MCP tools from inside teambridge worktree
-
-### Phase 4 - Vault Writer
-
-Deliver:
-
-- Task vault scaffold
-- `events.jsonl`
-- `team_publish`
-- background writer queue
-- compact context generation
-
-Acceptance:
-
-- Agent publishes decision -> vault updates -> another agent can read it
-
-### Phase 5 - Auto-Inject
-
-Deliver:
-
-- Claude Code SessionStart hook
-- compact inject once
-- delta inject for teammate events
-- dedupe event IDs
-- debug snapshot command
-
-Acceptance:
-
-- User runs `claude` normally in worktree and sees team context without flags
-
-### Phase 6 - Agent Ask/Inbox
-
-Deliver:
-
-- `team_ask`
-- `team_inbox`
-- `team_read_reply`
-- CLI `ask`, `inbox`, `reply`
-- inbox files
-- local queue behavior
-
-Acceptance:
-
-- Alice asks Bob, Bob replies, Alice's agent receives reply as context
-
-### Phase 7 - Dashboard
-
-Deliver:
-
-- Local dashboard served by daemon
-- Workspace list/detail
-- Participants
-- Branches
-- Vault highlights
-- Inbox approval queue
-
-Acceptance:
-
-- Dashboard reflects same state as CLI without CLI running
-
-### Phase 8 - Hosted Relay
-
-Deliver:
-
-- Supabase Auth
-- workspace event sync
-- Realtime presence
-- inbox push
-- RLS
-
-Acceptance:
-
-- Two laptops in different networks can join same workspace and exchange vault/inbox events
-
-### Phase 9 - Archive/Dream
-
-Deliver:
-
-- workspace archive
-- task vault -> team vault promotion
-- summary generation
-- stale workspace cleanup
-
-Acceptance:
-
-- Closing workspace produces durable team memory and cleanup plan
-
----
-
-## 12. Final Defaults
+## 11. Final Defaults
 
 | Decision | Default |
 | --- | --- |
@@ -1019,16 +1041,16 @@ Acceptance:
 | Worktree base | `teambridge start <session_name> [base_ref]`; default `current` |
 | Agent context | Auto compact inject in worktree |
 | Agent messaging | Inbox + relay, text only by default |
-| Remote execution | Off by default, not MVP |
+| Remote execution | Off by default, not in the first version |
 
 ---
 
-## 13. Final Mental Model
+## 12. Final Mental Model
 
 ```text
 teambridge start <session_name> [base_ref]
   -> resolves base_ref to base_commit
-  -> creates workspace, task vault, branch, worktree, manifest
+  -> creates workspace vault, branch, worktree, manifest
 
 teambridge join <session_name>
   -> creates participant branch/worktree from recorded base_commit
@@ -1051,5 +1073,5 @@ relay
 
 One-liner:
 
-> Teambridge is a local-first daemon with a CLI, MCP server, task vault, worktree manager, and optional hosted relay. CLI starts work. MCP lets agents participate. Dashboard shows the room. Vault remembers. Worktrees keep code safe.
+> Teambridge is a local-first daemon with a CLI, MCP server, workspace vault, worktree manager, and optional hosted relay. CLI starts work. MCP lets agents participate. Dashboard shows the room. Vault remembers. Worktrees keep code safe.
 
