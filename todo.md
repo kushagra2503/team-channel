@@ -40,7 +40,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 - [ ] Step 3, Nihal first:
   - Add TypeScript build setup for core/backend packages.
   - Convert contract types into runtime-validated schemas where needed.
-  - Add contract tests for workspace manifest shape, event shape, inbox messages, and checkpoint metadata.
+  - Add contract tests for workspace manifest shape, participant shape, publish event shape, vault context shape, and API result shape.
   - Implement daemon startup and `GET /health`.
   - Implement local config discovery.
   - Implement local SQLite state using `better-sqlite3`.

@@ -52,9 +52,11 @@ export type VaultSearchResponse = {
   results: VaultSearchResult[];
 };
 
-export type HookContextResponse = {
+export type VaultContextResponse = {
   context: VaultContext;
 };
+
+export type HookContextResponse = VaultContextResponse;
 
 export type JoinWorkspaceResponse = {
   manifest: WorkspaceManifest;
