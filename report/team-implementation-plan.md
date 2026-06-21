@@ -110,6 +110,7 @@ Rules:
 - Local-only mode can assign `seq` from the local daemon. Supabase mode must use relay-assigned canonical `seq`.
 - `base_ref` is only resolved during `start`. `join` uses recorded `base_commit`.
 - Event payloads should describe context, not raw code diffs.
+- User-published context uses one event type, `publish`, with a required vault-relative `targetFile`.
 - Runtime validation can be added after the type shapes settle.
 
 ## Expected Package Layout
@@ -176,24 +177,26 @@ Required behavior:
 - Local daemon applies events ordered by `seq`.
 - Use `dedupeKey` where duplicate publishes are possible.
 
-Phase 1 should already use typed publish events locally. The CLI can expose a simple shorthand:
+Phase 1 should use one user-published event type: `publish`. The CLI writes to a vault file chosen by the user/agent:
 
 ```bash
-teambridge publish decision "Backend is the source of truth for invoice state."
-teambridge publish observation "Frontend reads derived totals from the invoice API."
-teambridge publish blocker "Need refresh-token behavior decided before UI retry logic."
-teambridge publish test_result "pnpm test passed for billing package."
+teambridge publish decisions.md "Backend is the source of truth for invoice state."
+teambridge publish observations.md "Frontend reads derived totals from the invoice API."
+teambridge publish blockers.md "Need refresh-token behavior decided before UI retry logic."
+teambridge publish test-results.md "pnpm test passed for billing package."
 ```
 
-These map to `WorkspaceEvent.type` values such as `decision`, `observation`, `blocker`, and `test_result`. The vault materializer should route each event type to the right local vault files:
+Phase 1 keeps the vault intentionally flat:
 
 ```text
-decision       -> MEMORY.md, CURRENT_GOALS.md, day-logs/{date}.md
-observation    -> MEMORY.md, topics/{topic}.md, day-logs/{date}.md
-blocker        -> CURRENT_GOALS.md, conflicts.md when relevant
-test_result    -> day-logs/{date}.md, CURRENT_GOALS.md when it changes status
-attempt_failed -> MEMORY.md, day-logs/{date}.md
+decisions.md
+observations.md
+blockers.md
+test-results.md
+attempts.md
 ```
+
+The materializer writes every user `publish` event to its `targetFile`. Filtering in Phase 1 is by file name. If the vault becomes nested later, add a filename alias/migration layer in the materializer rather than changing old event records.
 
 The hosted relay later adds cross-device ordering and sync. It should not change the local event model.
 
@@ -205,22 +208,20 @@ Default files:
 
 ```text
 .teambridge/workspaces/{session_name}/vault/
-├── MEMORY.md
-├── CURRENT_GOALS.md
-├── conflicts.md
-├── people.md
-├── projects/
-├── day-logs/
-├── topics/
-├── procedures/
-└── sessions/
+├── README.md
+├── decisions.md
+├── observations.md
+├── blockers.md
+├── test-results.md
+└── attempts.md
 ```
 
 Important:
 
 - Do not merge vault folders across users.
 - Materialize from events/checkpoints.
-- `sessions/` is excluded from sync/injection by default.
+- Treat the flat files as a Phase 1 projection. The source of truth remains `events.jsonl`.
+- Keep the route table isolated so a later nested vault can be introduced by changing the materializer, not the event log.
 
 ### Checkpoints
 
@@ -237,14 +238,14 @@ Behavior:
 
 Conflict examples:
 
-- Two decisions contradict each other.
+- Two published notes contradict each other.
 - A vault patch conflicts with current materialized state.
 
 Behavior:
 
 - Emit `conflict_detected`.
 - Materialize to `conflicts.md`.
-- Resolve with `conflict_resolved` or a decision event.
+- Resolve with `conflict_resolved` or a new `publish` event.
 - Never silently overwrite conflicting context.
 
 ### Inbox
@@ -375,7 +376,7 @@ Execution order:
   - Nihal implements daemon workspace create/join APIs and workspace manifest persistence.
   - Kushagra implements `start`, `join`, `enter`, base commit resolution, and worktree creation.
 - Step 6, Nihal + Kushagra in parallel:
-  - Nihal implements local event append, typed publish events, event-to-vault routing, materialization, and rebuild.
+  - Nihal implements local event append, `publish` events with `targetFile`, vault materialization, and rebuild.
   - Kushagra implements `publish`, `vault read`, and `vault search`.
 - Step 7, Ronish after daemon read endpoints exist: wire dashboard/MCP stubs to workspace, participant, branch, and vault data.
 
@@ -386,15 +387,15 @@ teambridge init
 teambridge start billing-refactor main
 teambridge join billing-refactor --as kushagra
 teambridge join billing-refactor --as ronish
-teambridge publish decision "Backend is the source of truth for invoice state."
-teambridge vault read CURRENT_GOALS.md
+teambridge publish decisions.md "Backend is the source of truth for invoice state."
+teambridge vault read decisions.md
 teambridge vault search "invoice state"
 ```
 
 Pass when:
 
 - Three local participants have separate branches from the same `base_commit`.
-- A typed publish event updates the correct vault files.
+- A `publish` event updates the vault file named by `targetFile`.
 - The vault can be deleted and rebuilt from `events.jsonl`.
 - No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
 
@@ -423,19 +424,19 @@ Pass example:
 ```bash
 # Device A, Nihal
 teambridge start billing-refactor main
-teambridge publish observation "Refresh endpoint retries forever when token refresh fails."
+teambridge publish observations.md "Refresh endpoint retries forever when token refresh fails."
 
 # Device B, Kushagra
 teambridge join billing-refactor
 teambridge vault search "Refresh endpoint"
 
 # Device A goes offline, publishes locally, then reconnects.
-teambridge publish blocker "Need backend decision before changing retry UI."
+teambridge publish blockers.md "Need backend decision before changing retry UI."
 teambridge status
 
 # Device C, Ronish, joins late.
 teambridge join billing-refactor
-teambridge vault read MEMORY.md
+teambridge vault read observations.md
 ```
 
 Pass when:
@@ -474,7 +475,7 @@ Inside the agent session:
 
 ```text
 team_publish({
-  type: "observation",
+  targetFile: "observations.md",
   payload: { text: "Frontend calls refresh endpoint without retry cap." }
 })
 

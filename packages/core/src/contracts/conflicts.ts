@@ -1,5 +1,5 @@
 export type ConflictStatus = 'open' | 'resolved' | 'ignored';
-export type ConflictKind = 'decision' | 'vault' | 'branch' | 'unknown';
+export type ConflictKind = 'content' | 'vault' | 'branch' | 'unknown';
 
 export type Conflict = {
   id: string;
@@ -16,6 +16,6 @@ export type Conflict = {
 
 export type ResolveConflictRequest = {
   conflictId: string;
-  decision: string;
+  resolutionText: string;
 };
 

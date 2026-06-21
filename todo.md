@@ -59,10 +59,11 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Kushagra: implement `teambridge enter <session_name>`.
 - [ ] Step 6, Nihal + Kushagra in parallel:
   - Nihal: implement local event append to `events.jsonl`.
-  - Nihal: implement typed local publish events: `decision`, `observation`, `blocker`, `test_result`, `attempt_failed`.
-  - Nihal: implement event-type routing into vault files.
+  - Nihal: implement the single local user event type: `publish`.
+  - Nihal: require publish `targetFile` as a vault-relative markdown path.
+  - Nihal: support flat Phase 1 target files: `decisions.md`, `observations.md`, `blockers.md`, `test-results.md`, `attempts.md`.
   - Nihal: implement local vault materialization and vault rebuild from events.
-  - Kushagra: implement `teambridge publish <type> <text>`.
+  - Kushagra: implement `teambridge publish <target_file> <text>`.
   - Kushagra: implement `teambridge vault read <path>`.
   - Kushagra: implement `teambridge vault search <query>`.
 - [ ] Step 7, Ronish after daemon read endpoints exist:
@@ -84,18 +85,19 @@ teambridge start billing-refactor main
 teambridge join billing-refactor --as kushagra
 teambridge join billing-refactor --as ronish
 
-# Nihal publishes a typed local event.
-teambridge publish decision "Backend is the source of truth for invoice state."
+# Nihal publishes into a flat vault file.
+teambridge publish decisions.md "Backend is the source of truth for invoice state."
 
 # Any participant can read/search the materialized vault.
-teambridge vault read CURRENT_GOALS.md
+teambridge vault read decisions.md
 teambridge vault search "invoice state"
 ```
 
 Pass when:
 
 - [ ] Three local participants have separate branches from the same `base_commit`.
-- [ ] A typed publish event updates the correct vault files.
+- [ ] A `publish` event with `targetFile` updates the correct flat vault file.
+- [ ] Filtering can work by `targetFile` for Phase 1.
 - [ ] The vault can be deleted and rebuilt from `events.jsonl`.
 - [ ] No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
 
@@ -142,19 +144,19 @@ Goal: two or more real devices can sync context through Supabase, recover after 
 ```bash
 # Device A, Nihal
 teambridge start billing-refactor main
-teambridge publish observation "Refresh endpoint retries forever when token refresh fails."
+teambridge publish observations.md "Refresh endpoint retries forever when token refresh fails."
 
 # Device B, Kushagra
 teambridge join billing-refactor
 teambridge vault search "Refresh endpoint"
 
 # Device A goes offline, publishes locally, then reconnects.
-teambridge publish blocker "Need backend decision before changing retry UI."
+teambridge publish blockers.md "Need backend decision before changing retry UI."
 teambridge status
 
 # Device C, Ronish, joins late.
 teambridge join billing-refactor
-teambridge vault read MEMORY.md
+teambridge vault read observations.md
 ```
 
 Pass when:
@@ -216,7 +218,7 @@ Inside the agent session:
 
 ```text
 team_publish({
-  type: "observation",
+  targetFile: "observations.md",
   payload: { text: "Frontend calls refresh endpoint without retry cap." }
 })
 

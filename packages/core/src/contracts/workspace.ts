@@ -1,7 +1,7 @@
 import type { AgentKind, Participant } from './participant';
 
 export type WorkspaceStatus = 'active' | 'archived';
-export type RelayMode = 'local' | 'git-sync' | 'supabase';
+export type RelayMode = 'local';
 
 export type Workspace = {
   id: string;

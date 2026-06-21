@@ -63,7 +63,7 @@ teambridge status
 teambridge ws show <session_name>
 teambridge ws who <session_name>
 teambridge ws branches <session_name>
-teambridge publish <type> <text>
+teambridge publish <target_file> <text>
 teambridge ask <person> "question"
 teambridge inbox
 teambridge reply <message_id> "answer"
@@ -108,20 +108,21 @@ Supabase
 
 There is only one Teambridge vault type in the first product: the **workspace vault**.
 
+Phase 1 keeps the vault flat and easy to change:
+
 ```text
 .teambridge/workspaces/{session_name}/vault/
-├── MEMORY.md
-├── CURRENT_GOALS.md
-├── conflicts.md
-├── people.md
-├── projects/
-├── day-logs/
-├── topics/
-├── procedures/
-└── sessions/              # excluded from sync/injection by default
+├── README.md
+├── decisions.md
+├── observations.md
+├── blockers.md
+├── test-results.md
+└── attempts.md
 ```
 
 The vault is shared logically, but each teammate reads from a local materialized copy.
+
+The vault layout is a projection, not the source of truth. Keep the materializer behind a routing table so the flat files can later become a nested vault without changing the event log.
 
 ## Event Flow
 
@@ -137,24 +138,35 @@ agent/team_publish or teambridge publish
   -> MCP resources / hook deltas
 ```
 
-Published context uses typed events from the start. Examples:
+User-published context uses one event type, `publish`. The vault-relative `targetFile` decides where the markdown projection goes. Examples:
 
 ```bash
-teambridge publish decision "Backend is the source of truth for invoice state."
-teambridge publish observation "Frontend reads derived totals from the invoice API."
-teambridge publish blocker "Need refresh-token behavior decided before UI retry logic."
-teambridge publish test_result "pnpm test passed for billing package."
+teambridge publish decisions.md "Backend is the source of truth for invoice state."
+teambridge publish observations.md "Frontend reads derived totals from the invoice API."
+teambridge publish blockers.md "Need refresh-token behavior decided before UI retry logic."
+teambridge publish test-results.md "pnpm test passed for billing package."
 ```
 
-The local vault materializer routes event types into the right files:
+Phase 1 uses these simple target files:
 
 ```text
-decision       -> MEMORY.md, CURRENT_GOALS.md, day-logs/{date}.md
-observation    -> MEMORY.md, topics/{topic}.md, day-logs/{date}.md
-blocker        -> CURRENT_GOALS.md, conflicts.md when relevant
-test_result    -> day-logs/{date}.md, CURRENT_GOALS.md when it changes status
-attempt_failed -> MEMORY.md, day-logs/{date}.md
+decisions.md
+observations.md
+blockers.md
+test-results.md
+attempts.md
 ```
+
+Agents use the same filename-driven model:
+
+```text
+team_publish({
+  targetFile: "observations.md",
+  payload: { text: "Frontend calls refresh endpoint without retry cap." }
+})
+```
+
+The event type in `events.jsonl` is always `publish` for user-authored context. Filtering in Phase 1 is by `targetFile`. If the vault becomes nested later, add a filename alias/migration layer in the materializer instead of changing old event records.
 
 ## Checkpoints
 

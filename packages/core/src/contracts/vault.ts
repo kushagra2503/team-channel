@@ -1,3 +1,11 @@
+export type PhaseOneVaultFile =
+  | 'README.md'
+  | 'decisions.md'
+  | 'observations.md'
+  | 'blockers.md'
+  | 'test-results.md'
+  | 'attempts.md';
+
 export type VaultFile = {
   path: string;
   content: string;

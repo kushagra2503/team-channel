@@ -1,9 +1,5 @@
 export type WorkspaceEventType =
-  | 'observation'
-  | 'decision'
-  | 'blocker'
-  | 'test_result'
-  | 'attempt_failed'
+  | 'publish'
   | 'team_ask'
   | 'team_reply'
   | 'vault_patch'
@@ -11,12 +7,7 @@ export type WorkspaceEventType =
   | 'conflict_resolved'
   | 'checkpoint_created';
 
-export type PublishableEventType =
-  | 'observation'
-  | 'decision'
-  | 'blocker'
-  | 'test_result'
-  | 'attempt_failed';
+export type VaultTargetFile = string;
 
 export type WorkspaceEvent<TPayload = unknown> = {
   id: string;
@@ -26,41 +17,19 @@ export type WorkspaceEvent<TPayload = unknown> = {
   actorId: string;
   deviceId: string;
   payload: TPayload;
+  targetFile?: VaultTargetFile;
   dedupeKey?: string;
   createdAt: string;
 };
 
-export type PublishEventRequest<TPayload = unknown> = {
-  type: PublishableEventType;
+export type PublishEventPayload = {
+  text: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type PublishEventRequest<TPayload = PublishEventPayload> = {
+  targetFile: VaultTargetFile;
   payload: TPayload;
   dedupeKey?: string;
-};
-
-export type DecisionEventPayload = {
-  text: string;
-  resolvesConflictId?: string;
-  affectedPaths?: string[];
-};
-
-export type ObservationEventPayload = {
-  text: string;
-  affectedPaths?: string[];
-};
-
-export type BlockerEventPayload = {
-  text: string;
-  blockedBy?: string[];
-  affectedPaths?: string[];
-};
-
-export type TestResultEventPayload = {
-  command?: string;
-  status: 'passed' | 'failed' | 'skipped';
-  summary: string;
-};
-
-export type EventVaultRoute = {
-  type: PublishableEventType;
-  targetFiles: string[];
 };
 

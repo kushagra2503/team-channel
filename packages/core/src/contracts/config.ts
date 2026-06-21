@@ -1,8 +1,6 @@
-import type { RelayMode } from './workspace';
-
 export type TeambridgeConfig = {
   schemaVersion: 1;
-  defaultRelayMode: RelayMode;
+  defaultRelayMode: 'local';
   daemonPort: number;
   mcpPort: number;
   autoInject: boolean;
