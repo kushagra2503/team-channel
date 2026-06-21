@@ -107,6 +107,7 @@ Rules:
 
 - Contract changes must be reviewed by all three before feature code depends on them.
 - `createdAt` is display metadata only. Ordering uses `seq`.
+- Local-only mode can assign `seq` from the local daemon. Supabase mode must use relay-assigned canonical `seq`.
 - `base_ref` is only resolved during `start`. `join` uses recorded `base_commit`.
 - Event payloads should describe context, not raw code diffs.
 - Runtime validation can be added after the type shapes settle.
@@ -171,7 +172,7 @@ Required behavior:
 
 - Append locally first when possible.
 - Sync to relay when online.
-- Backend assigns canonical per-workspace `seq`.
+- The local daemon assigns per-workspace `seq` in local-only mode; Supabase assigns canonical per-workspace `seq` in relay mode.
 - Local daemon applies events ordered by `seq`.
 - Use `dedupeKey` where duplicate publishes are possible.
 
@@ -227,7 +228,7 @@ Checkpoints speed up new joiners.
 
 Behavior:
 
-- Build checkpoints from `previous checkpoint + events ordered by seq`.
+- Build checkpoints from the previous checkpoint plus events ordered by `seq`.
 - Store checkpoint metadata and blob path remotely.
 - Use a checkpoint lease so another online daemon can take over if the leader disappears.
 - A missing checkpoint must not break sync; it only makes bootstrap slower.
@@ -355,80 +356,69 @@ created_at
 
 ## Implementation Phases
 
+The detailed checklist lives in `todo.md`. This section explains the same plan as a timeline: who goes first, who can work in parallel, and what workflow proves each phase.
+
 ### Phase 1: Local-First Foundation
 
-Goal: Teambridge works on one machine with multiple local participants/worktrees before any hosted sync exists.
+Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participants with separate worktrees, one shared local event log, and one materialized workspace vault.
 
-This phase proves the core product loop without Supabase, MCP, hooks, or dashboard polish. If this does not feel useful locally, remote sync will only hide problems.
+Execution order:
 
-Deliver:
+- Step 1, everyone: agree on the current contract shapes in `packages/core/src/contracts/`.
+- Step 2, everyone in parallel:
+  - Nihal adds `packages/core`, `packages/daemon`, and `packages/vault`.
+  - Kushagra adds `packages/cli` and CLI parser skeleton.
+  - Ronish adds `packages/mcp` and `apps/dashboard` skeletons.
+- Step 3, Nihal first: make the local daemon real enough for other packages to call it: health, config discovery, local SQLite, local workspace store, and contract validation/tests.
+- Step 4, Kushagra after daemon health/config exist: implement `teambridge init`, `teambridge status`, `teambridge ws show`, `teambridge ws who`, `teambridge ws branches`, and CLI-to-daemon wiring.
+- Step 5, Nihal + Kushagra in parallel:
+  - Nihal implements daemon workspace create/join APIs and workspace manifest persistence.
+  - Kushagra implements `start`, `join`, `enter`, base commit resolution, and worktree creation.
+- Step 6, Nihal + Kushagra in parallel:
+  - Nihal implements local event append, typed publish events, event-to-vault routing, materialization, and rebuild.
+  - Kushagra implements `publish`, `vault read`, and `vault search`.
+- Step 7, Ronish after daemon read endpoints exist: wire dashboard/MCP stubs to workspace, participant, branch, and vault data.
 
-- pnpm + TypeScript workspace setup
-- Contract package builds
-- CLI skeleton
-- Daemon skeleton
-- Local SQLite state
-- `teambridge init`
-- `teambridge start`
-- `teambridge join`
-- `teambridge status`
-- Local event log
-- Typed local publish events
-- Event-type routing into vault files
-- Local vault materialization
-- Basic vault read/search
-
-Workflow to achieve:
+Pass example:
 
 ```bash
-# Nihal starts a local workspace from main.
 teambridge init
 teambridge start billing-refactor main
-
-# Teambridge creates Nihal's worktree and records the immutable base commit.
-teambridge status
-teambridge enter billing-refactor
-
-# Kushagra is simulated locally as a second participant/worktree.
 teambridge join billing-refactor --as kushagra
-
-# Ronish is simulated locally as a third participant/worktree.
 teambridge join billing-refactor --as ronish
-
-# Nihal publishes context from his local worktree.
-teambridge publish decision "Backend is the source of truth for invoice state; frontend only renders derived totals."
-
-# Kushagra can read the same materialized vault from his own worktree.
+teambridge publish decision "Backend is the source of truth for invoice state."
 teambridge vault read CURRENT_GOALS.md
 teambridge vault search "invoice state"
 ```
 
-Expected result:
+Pass when:
 
-- Two local worktrees can join the same workspace.
-- Three simulated participants can have separate branches from the same `base_commit`.
-- Typed events from one participant update the correct workspace vault files.
-- The vault can be deleted and rebuilt from the local event log.
-- Contracts are imported across packages.
-- No part of the local workflow requires Supabase or internet access.
+- Three local participants have separate branches from the same `base_commit`.
+- A typed publish event updates the correct vault files.
+- The vault can be deleted and rebuilt from `events.jsonl`.
+- No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
 
-### Phase 2: Relay, Sync, and Bootstrap
+### Phase 2: Supabase Relay and Cross-Device Sync
 
-Goal: Two devices can share context through Supabase.
+Goal: real devices can sync context through Supabase, recover after offline work, and bootstrap late joiners from checkpoint + event replay.
 
-Deliver:
+Execution order:
 
-- Supabase schema
-- Auth/session flow
-- Event insert with canonical `seq`
-- Realtime subscriptions
-- Offline queue/retry
-- Checkpoint upload/download
-- Checkpoint lease failover
-- New joiner bootstrap
-- Conflict events and `conflicts.md`
+- Step 1, Nihal first: create Supabase schema, RLS, auth/session validation, and canonical event insert with per-workspace `seq`.
+- Step 2, Kushagra + Ronish in parallel while Nihal finishes relay internals:
+  - Kushagra builds CLI login/status UX against mocked or early relay responses.
+  - Ronish builds dashboard realtime/sync screens against mocked events and updates MCP resource contracts.
+- Step 3, Nihal next: implement Realtime subscriptions, offline queue/retry, and event dedupe.
+- Step 4, Kushagra after relay event APIs exist: connect `start`, `join`, and `status` to real relay behavior.
+- Step 5, Nihal + Ronish in parallel:
+  - Nihal implements checkpoint upload/download, lease failover, and new joiner bootstrap.
+  - Ronish shows checkpoint age, checkpoint `seq`, and sync health in dashboard.
+- Step 6, everyone in parallel:
+  - Nihal implements conflict detection/resolution.
+  - Ronish surfaces conflicts in dashboard.
+  - Kushagra exposes checkpoint/bootstrap/conflict progress in CLI status.
 
-Workflow to achieve:
+Pass example:
 
 ```bash
 # Device A, Nihal
@@ -439,58 +429,48 @@ teambridge publish observation "Refresh endpoint retries forever when token refr
 teambridge join billing-refactor
 teambridge vault search "Refresh endpoint"
 
-# Device A goes offline and publishes locally.
+# Device A goes offline, publishes locally, then reconnects.
 teambridge publish blocker "Need backend decision before changing retry UI."
-
-# Device A reconnects. Device B receives the event and materializes it.
 teambridge status
-teambridge vault read CURRENT_GOALS.md
 
 # Device C, Ronish, joins late.
 teambridge join billing-refactor
 teambridge vault read MEMORY.md
 ```
 
-Expected result:
+Pass when:
 
 - Device A publishes an event and Device B materializes it.
-- A new joiner can bootstrap from checkpoint + event replay.
-- If checkpoint leader goes offline, another daemon can acquire lease.
-- Events are replayed by canonical `seq`, not by `createdAt`.
 - Offline events sync after reconnect without duplicates.
-- Conflicts appear in `conflicts.md` instead of silently overwriting context.
+- Device C bootstraps from checkpoint + event replay.
+- Events replay by canonical `seq`, not `createdAt`.
+- Checkpoint builder failover works when the current leader disappears.
 
-### Phase 3: Agent UX, MCP, Dashboard
+### Phase 3: Agent UX, MCP, Inbox, and Dashboard
 
-Goal: Agents and humans can use Teambridge naturally.
+Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, and dashboard without per-session flags.
 
-Deliver:
+Execution order:
 
-- HTTP MCP server
-- MCP resources/tools
-- Claude Code hook auto-injection
-- Compact vault context
-- Delta update injection
-- `teambridge ask`
-- `teambridge inbox`
-- `teambridge reply`
-- Dashboard workspace list
-- Dashboard participants/branches/presence
-- Dashboard inbox/conflicts views
-- End-to-end dogfood workflow
+- Step 1, Nihal first: implement hook context, delta context, inbox, conflict resolve, and daemon authorization endpoints.
+- Step 2, Ronish + Kushagra in parallel:
+  - Ronish implements HTTP MCP server, workspace/worktree resolution, and MCP resources.
+  - Kushagra implements Claude Code hook auto-injection, compact context UX, and delta injection.
+- Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
+  - Ronish implements MCP tools: `team_publish`, `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`.
+  - Kushagra implements `teambridge ask`, `teambridge inbox`, `teambridge reply`, and unread/pending question UX.
+- Step 4, Ronish after dashboard APIs are stable: implement dashboard workspace, participants, branches, presence, inbox, conflicts, and vault highlights.
+- Step 5, Nihal while integrations land: add end-to-end tests for local participants, offline/reconnect sync, and new joiner bootstrap.
+- Step 6, Kushagra + everyone: document and dogfood one real Teambridge session.
 
-Workflow to achieve:
+Pass example:
 
 ```bash
-# Kushagra enters his Teambridge worktree and starts Claude Code.
 cd "$(teambridge enter billing-refactor)"
 claude
-
-# Claude automatically receives compact vault context through hooks.
-# Claude can use MCP to publish, search, and ask.
 ```
 
-Agent workflow to prove through MCP:
+Inside the agent session:
 
 ```text
 team_publish({
@@ -506,25 +486,16 @@ team_ask({
 })
 ```
 
-Human dashboard workflow:
-
 ```bash
 teambridge dashboard
 ```
 
-Expected dashboard state:
+Pass when:
 
-- Nihal, Kushagra, and Ronish appear with branches, presence, and last activity.
-- Inbox shows open questions and replies.
-- Conflicts are visible and can be resolved.
-- Vault highlights show current goals, decisions, blockers, and recent changes.
-
-Expected result:
-
-- Claude Code gets context automatically inside a Teambridge worktree.
-- Agent can publish/read/search/ask through MCP.
-- Humans can see workspace state in dashboard.
-- Normal use does not require per-session flags.
+- Claude Code receives compact context automatically inside a Teambridge worktree.
+- Agent can publish, read, search, and ask through MCP.
+- CLI inbox and dashboard show the same questions/replies.
+- Dashboard shows participants, branches, presence, conflicts, and vault highlights.
 - No MCP tool can remotely execute commands on another teammate's machine.
 
 ## Review Checklist

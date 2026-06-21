@@ -1,5 +1,7 @@
 import type { VaultCheckpoint } from './checkpoints';
+import type { TeambridgeError } from './errors';
 import type { WorkspaceEvent } from './events';
+import type { WorktreeInfo } from './git';
 import type { InboxMessage } from './inbox';
 import type { Participant } from './participant';
 import type { VaultContext, VaultFile, VaultSearchResult } from './vault';
@@ -12,14 +14,19 @@ export type ApiOk<T> = {
 
 export type ApiFail = {
   ok: false;
-  error: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
+  error: TeambridgeError;
 };
 
 export type ApiResult<T> = ApiOk<T> | ApiFail;
+
+export type WorkspaceListResponse = {
+  workspaces: Workspace[];
+};
+
+export type StartWorkspaceResponse = {
+  manifest: WorkspaceManifest;
+  worktree: WorktreeInfo;
+};
 
 export type WorkspaceStatusResponse = {
   workspace: Workspace;
@@ -51,6 +58,6 @@ export type HookContextResponse = {
 
 export type JoinWorkspaceResponse = {
   manifest: WorkspaceManifest;
-  worktreePath: string;
+  worktree: WorktreeInfo;
 };
 

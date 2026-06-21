@@ -48,6 +48,9 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 - [ ] Step 4, Kushagra after daemon health/config exist:
   - Implement `teambridge init`.
   - Implement `teambridge status`.
+  - Implement `teambridge ws show <session_name>`.
+  - Implement `teambridge ws who <session_name>`.
+  - Implement `teambridge ws branches <session_name>`.
   - Wire CLI calls to the local daemon.
 - [ ] Step 5, Nihal + Kushagra in parallel:
   - Nihal: implement daemon workspace create/join APIs and persist workspace manifests.

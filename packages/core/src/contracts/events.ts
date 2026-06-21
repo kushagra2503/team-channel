@@ -11,6 +11,13 @@ export type WorkspaceEventType =
   | 'conflict_resolved'
   | 'checkpoint_created';
 
+export type PublishableEventType =
+  | 'observation'
+  | 'decision'
+  | 'blocker'
+  | 'test_result'
+  | 'attempt_failed';
+
 export type WorkspaceEvent<TPayload = unknown> = {
   id: string;
   workspaceId: string;
@@ -24,7 +31,7 @@ export type WorkspaceEvent<TPayload = unknown> = {
 };
 
 export type PublishEventRequest<TPayload = unknown> = {
-  type: WorkspaceEventType;
+  type: PublishableEventType;
   payload: TPayload;
   dedupeKey?: string;
 };
@@ -51,13 +58,6 @@ export type TestResultEventPayload = {
   status: 'passed' | 'failed' | 'skipped';
   summary: string;
 };
-
-export type PublishableEventType =
-  | 'observation'
-  | 'decision'
-  | 'blocker'
-  | 'test_result'
-  | 'attempt_failed';
 
 export type EventVaultRoute = {
   type: PublishableEventType;

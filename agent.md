@@ -44,7 +44,7 @@ Events notify everyone, then materialize locally, then all agents can use the up
 1. **Shared brain, separate hands.** Shared context lives in the workspace vault. Code edits happen in each user's own worktree.
 2. **Events are source of truth.** Markdown vault files are materialized views, not the canonical cross-device truth.
 3. **No local vault folder merging.** Checkpoints are built from ordered events, not by merging Alice's and Bob's vault folders.
-4. **Use `seq`, not timestamps.** Cross-device event ordering uses per-workspace monotonic `seq` assigned by the backend.
+4. **Use `seq`, not timestamps.** Event replay uses per-workspace monotonic `seq`: the local daemon assigns it in local-only mode, and the relay assigns it in Supabase mode.
 5. **No remote execution.** Agents can message and publish context. They cannot run commands or edit another teammate's machine/branch.
 6. **Daemon is the local runtime authority.** CLI, dashboard, hooks, and MCP talk to the daemon.
 7. **MCP is the primary agent API.** Hooks only make Claude Code feel automatic.
@@ -63,6 +63,7 @@ teambridge status
 teambridge ws show <session_name>
 teambridge ws who <session_name>
 teambridge ws branches <session_name>
+teambridge publish <type> <text>
 teambridge ask <person> "question"
 teambridge inbox
 teambridge reply <message_id> "answer"
@@ -73,6 +74,8 @@ teambridge dashboard
 ```
 
 `start` resolves `base_ref` to immutable `base_commit`. `join` always uses the recorded `base_commit`; it must not re-resolve `main` or any moving branch.
+
+For local simulation and dogfooding, `start` and `join` may accept a display-name option such as `--as kushagra`. This is participant metadata only, not path locking.
 
 ## Architecture
 
@@ -94,7 +97,7 @@ Optional hosted relay:
 
 ```text
 Supabase
-  -> workspace_events with per-workspace seq
+  -> workspace_events with canonical per-workspace seq
   -> workspace_vault_checkpoints
   -> inbox_messages
   -> presence
@@ -123,11 +126,11 @@ The vault is shared logically, but each teammate reads from a local materialized
 ## Event Flow
 
 ```text
-agent/team_publish
+agent/team_publish or teambridge publish
   -> local daemon
   -> local events.jsonl
   -> local vault materialization
-  -> Supabase workspace_events
+  -> Supabase workspace_events when relay is enabled
   -> subscribed teammate daemons
   -> teammate local events.jsonl
   -> teammate local vault materialization
@@ -163,7 +166,7 @@ New joiner flow:
 teambridge join billing-v2
   -> fetch workspace manifest
   -> fetch latest checkpoint
-  -> fetch events after checkpoint seq
+  -> fetch events after checkpoint `seq`
   -> materialize local vault
   -> create worktree from base_commit
 ```
@@ -171,7 +174,7 @@ teambridge join billing-v2
 Checkpoint builders apply:
 
 ```text
-previous checkpoint + workspace_events ordered by seq
+previous checkpoint + workspace_events ordered by `seq`
 ```
 
 If events collide, create `conflict_detected` and materialize the issue in `conflicts.md`. Do not silently overwrite.
