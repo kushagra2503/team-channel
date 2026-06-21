@@ -63,9 +63,11 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Nihal: require publish `targetFile` as a vault-relative markdown path.
   - Nihal: support flat Phase 1 target files: `decisions.md`, `observations.md`, `blockers.md`, `test-results.md`, `attempts.md`.
   - Nihal: implement local vault materialization and vault rebuild from events.
+  - Nihal: implement basic `vault context` by concatenating flat vault files up to a byte/character limit and returning `truncated`.
   - Kushagra: implement `teambridge publish <target_file> <text>`.
   - Kushagra: implement `teambridge vault read <path>`.
   - Kushagra: implement `teambridge vault search <query>`.
+  - Kushagra: implement `teambridge vault context`.
 - [ ] Step 7, Ronish after daemon read endpoints exist:
   - Stub MCP resource names from contracts.
   - Stub dashboard API client against daemon response contracts.
@@ -91,6 +93,7 @@ teambridge publish decisions.md "Backend is the source of truth for invoice stat
 # Any participant can read/search the materialized vault.
 teambridge vault read decisions.md
 teambridge vault search "invoice state"
+teambridge vault context
 ```
 
 Pass when:
@@ -98,6 +101,7 @@ Pass when:
 - [ ] Three local participants have separate branches from the same `base_commit`.
 - [ ] A `publish` event with `targetFile` updates the correct flat vault file.
 - [ ] Filtering can work by `targetFile` for Phase 1.
+- [ ] `vault context` returns a concatenated flat-vault context with `includedPaths`, `lastSeq`, and `truncated`.
 - [ ] The vault can be deleted and rebuilt from `events.jsonl`.
 - [ ] No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
 
@@ -185,7 +189,7 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox`, `teambridge://conflicts`.
   - Kushagra: implement Claude Code hook auto-injection.
   - Kushagra: ensure normal use needs no per-session CLI flags.
-  - Kushagra: implement compact vault context generation UX.
+  - Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX.
   - Kushagra: implement delta injection for teammate updates.
 - [ ] Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
   - Ronish: implement MCP tools: `team_publish`, `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`.

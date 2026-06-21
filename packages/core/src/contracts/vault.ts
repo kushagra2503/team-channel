@@ -40,6 +40,8 @@ export type VaultContext = {
   workspaceId: string;
   content: string;
   includedPaths: string[];
+  truncated: boolean;
+  maxBytes?: number;
   lastSeq?: number;
 };
 

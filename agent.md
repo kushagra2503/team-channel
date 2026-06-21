@@ -168,6 +168,8 @@ team_publish({
 
 The event type in `events.jsonl` is always `publish` for user-authored context. Filtering in Phase 1 is by `targetFile`. If the vault becomes nested later, add a filename alias/migration layer in the materializer instead of changing old event records.
 
+Phase 1 should also expose a simple `vault context` response. It does not need smart ranking yet: concatenate the flat vault files in a stable order up to a configured byte/character limit, then return the content with `includedPaths`, `lastSeq`, and `truncated`. Later phases can replace this with smarter compact context generation without changing the basic contract.
+
 ## Checkpoints
 
 Supabase stores latest vault checkpoints for fast bootstrap.

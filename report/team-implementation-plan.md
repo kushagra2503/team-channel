@@ -222,6 +222,7 @@ Important:
 - Materialize from events/checkpoints.
 - Treat the flat files as a Phase 1 projection. The source of truth remains `events.jsonl`.
 - Keep the route table isolated so a later nested vault can be introduced by changing the materializer, not the event log.
+- Phase 1 `vault context` should simply concatenate flat vault files up to a configured byte/character limit and return `includedPaths`, `lastSeq`, and `truncated`. Smarter ranking/summarization comes later.
 
 ### Checkpoints
 
@@ -376,8 +377,8 @@ Execution order:
   - Nihal implements daemon workspace create/join APIs and workspace manifest persistence.
   - Kushagra implements `start`, `join`, `enter`, base commit resolution, and worktree creation.
 - Step 6, Nihal + Kushagra in parallel:
-  - Nihal implements local event append, `publish` events with `targetFile`, vault materialization, and rebuild.
-  - Kushagra implements `publish`, `vault read`, and `vault search`.
+  - Nihal implements local event append, `publish` events with `targetFile`, vault materialization, rebuild, and basic truncated `vault context`.
+  - Kushagra implements `publish`, `vault read`, `vault search`, and `vault context`.
 - Step 7, Ronish after daemon read endpoints exist: wire dashboard/MCP stubs to workspace, participant, branch, and vault data.
 
 Pass example:
@@ -390,12 +391,14 @@ teambridge join billing-refactor --as ronish
 teambridge publish decisions.md "Backend is the source of truth for invoice state."
 teambridge vault read decisions.md
 teambridge vault search "invoice state"
+teambridge vault context
 ```
 
 Pass when:
 
 - Three local participants have separate branches from the same `base_commit`.
 - A `publish` event updates the vault file named by `targetFile`.
+- `vault context` returns concatenated flat vault content with truncation metadata.
 - The vault can be deleted and rebuilt from `events.jsonl`.
 - No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
 
@@ -456,7 +459,7 @@ Execution order:
 - Step 1, Nihal first: implement hook context, delta context, inbox, conflict resolve, and daemon authorization endpoints.
 - Step 2, Ronish + Kushagra in parallel:
   - Ronish implements HTTP MCP server, workspace/worktree resolution, and MCP resources.
-  - Kushagra implements Claude Code hook auto-injection, compact context UX, and delta injection.
+  - Kushagra upgrades the Phase 1 context endpoint into smarter compact context UX, then wires Claude Code hook auto-injection and delta injection.
 - Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
   - Ronish implements MCP tools: `team_publish`, `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`.
   - Kushagra implements `teambridge ask`, `teambridge inbox`, `teambridge reply`, and unread/pending question UX.
