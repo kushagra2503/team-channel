@@ -34,17 +34,17 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 
 - [ ] Step 1, everyone: agree on the current contract shapes in `packages/core/src/contracts/`.
 - [ ] Step 2, everyone in parallel:
-  - Nihal: add `packages/core`, `packages/daemon`, and `packages/vault`.
+  - [x] Nihal: add `packages/core`, `packages/daemon`, and `packages/vault`.
   - Kushagra: add `packages/cli` and CLI command parser skeleton.
   - Ronish: add `packages/mcp` and `apps/dashboard` skeletons.
 - [ ] Step 3, Nihal first:
-  - Add TypeScript build setup for core/backend packages.
-  - Convert contract types into runtime-validated schemas where needed.
-  - Add contract tests for workspace manifest shape, participant shape, publish event shape, vault context shape, and API result shape.
-  - Implement daemon startup and `GET /health`.
-  - Implement local config discovery.
-  - Implement local SQLite state using `better-sqlite3`.
-  - Implement local workspace store.
+  - [x] Add TypeScript build setup for core/backend packages.
+  - [x] Convert contract types into runtime-validated schemas where needed.
+  - [x] Add contract tests for workspace manifest shape, participant shape, publish event shape, vault context shape, and API result shape.
+  - [x] Implement daemon startup and `GET /health`.
+  - [x] Implement local config discovery.
+  - [x] Implement local SQLite state using a Phase 1 SQLite adapter.
+  - [x] Implement local workspace store.
 - [ ] Step 4, Kushagra after daemon health/config exist:
   - Implement `teambridge init`.
   - Implement `teambridge status`.
@@ -54,29 +54,31 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Wire CLI calls to the local daemon.
   - Make CLI requests repo-aware: resolve the current working directory to the current git repo root and send that `repoRoot` to the daemon.
   - Keep daemon startup generic; normal users should not have to start the daemon with `--repo`.
-- [ ] Step 5, Nihal + Kushagra in parallel:
-  - Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
+- [x] Step 5, Nihal backend workspace APIs:
+  - [x] Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
+- [ ] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
   - Kushagra: implement `teambridge start <session_name> [base_ref]`, sending the current repo root as `repoRoot`, resolving `base_ref` to immutable `base_commit`, and creating the creator worktree/branch.
   - Kushagra: implement `teambridge join <session_name>`, use recorded `base_commit`, and create participant worktree/branch.
   - Kushagra: implement `teambridge enter <session_name>`.
-- [ ] Step 6, Nihal + Kushagra in parallel:
-  - Nihal: implement local event append to `events.jsonl`.
-  - Nihal: implement the single local user event type: `publish`.
-  - Nihal: require publish `targetFile` as a vault-relative markdown path.
-  - Nihal: support flat Phase 1 target files: `decisions.md`, `observations.md`, `blockers.md`, `test-results.md`, `attempts.md`.
-  - Nihal: implement local vault materialization and vault rebuild from events.
-  - Nihal: implement basic `vault context` by concatenating flat vault files up to a byte/character limit and returning `truncated`.
+- [x] Step 7, Nihal backend event and vault APIs:
+  - [x] Nihal: implement local event append to `events.jsonl`.
+  - [x] Nihal: implement the single local user event type: `publish`.
+  - [x] Nihal: require publish `targetFile` as a vault-relative markdown path.
+  - [x] Nihal: support flat Phase 1 target files: `decisions.md`, `observations.md`, `blockers.md`, `test-results.md`, `attempts.md`.
+  - [x] Nihal: implement local vault materialization and vault rebuild from events.
+  - [x] Nihal: implement basic `vault context` by concatenating flat vault files up to a byte/character limit and returning `truncated`.
+- [ ] Step 8, Kushagra vault CLI after backend event and vault APIs exist:
   - Kushagra: implement `teambridge publish <target_file> <text>`.
   - Kushagra: implement `teambridge vault read <path>`.
   - Kushagra: implement `teambridge vault search <query>`.
   - Kushagra: implement `teambridge vault context`.
-- [ ] Step 7, Ronish after daemon read endpoints exist:
+- [ ] Step 9, Ronish after daemon read endpoints exist:
   - Stub MCP resource names from contracts.
   - Stub dashboard API client against daemon response contracts.
   - Show local workspace list.
   - Show local participants/branches.
   - Show vault file highlights.
-- [ ] Step 8, everyone: prove the local pass example below.
+- [ ] Step 10, everyone: prove the local pass example below.
 
 ### Phase 1 Pass Example
 

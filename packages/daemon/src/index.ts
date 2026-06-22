@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { z } from 'zod';
 import type {
   ApiResult,
   EventListResponse,
@@ -14,6 +15,7 @@ import type {
   PublishEventRequest,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
+  TeambridgeConfig,
   TeambridgeErrorCode,
   VaultContextResponse,
   VaultReadResponse,
@@ -21,6 +23,12 @@ import type {
   WorkspaceEvent,
   WorkspaceListResponse,
   WorkspaceManifest
+} from '@teambridge/core';
+import {
+  JoinWorkspaceRequestSchema,
+  PublishEventRequestSchema,
+  StartWorkspaceRequestSchema,
+  TeambridgeConfigSchema
 } from '@teambridge/core';
 import {
   createVaultContext,
@@ -32,6 +40,41 @@ import {
 } from '@teambridge/vault';
 
 const DEFAULT_PORT = 9473;
+
+const StartRequestBodySchema = StartWorkspaceRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const JoinRequestBodySchema = JoinWorkspaceRequestSchema.extend({
+  repoRoot: z.string().min(1).optional(),
+  worktreePath: z.string().min(1).optional()
+});
+
+const PublishRequestBodySchema = PublishEventRequestSchema.extend({
+  repoRoot: z.string().min(1).optional(),
+  actorId: z.string().min(1).optional(),
+  deviceId: z.string().min(1).optional()
+});
+
+const VaultRebuildRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional()
+});
+
+const ConfigRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional()
+});
+
+const DEFAULT_CONFIG: TeambridgeConfig = {
+  schemaVersion: 1,
+  defaultRelayMode: 'local',
+  daemonPort: DEFAULT_PORT,
+  mcpPort: 9474,
+  autoInject: true,
+  vaultInjectionMode: 'compact',
+  vault: {
+    contextMaxBytes: 24000
+  }
+};
 
 type StartRequestBody = StartWorkspaceRequest & {
   repoRoot?: string;
@@ -265,6 +308,55 @@ function sendJson<T>(response: ServerResponse, status: number, body: ApiResult<T
 
 async function ensureTeambridgeDirs(repoRoot: string): Promise<void> {
   await mkdir(join(repoRoot, '.teambridge', 'workspaces'), { recursive: true });
+}
+
+function getConfigPath(repoRoot: string): string {
+  return join(repoRoot, '.teambridge', 'config.json');
+}
+
+async function readRepoConfig(repoRoot: string): Promise<TeambridgeConfig> {
+  const configPath = getConfigPath(repoRoot);
+  const content = await readFile(configPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+
+    throw error;
+  });
+
+  if (!content) {
+    return DEFAULT_CONFIG;
+  }
+
+  return TeambridgeConfigSchema.parse(JSON.parse(content));
+}
+
+async function initRepoConfig(repoRoot: string): Promise<{ config: TeambridgeConfig; path: string; created: boolean }> {
+  await ensureTeambridgeDirs(repoRoot);
+
+  const configPath = getConfigPath(repoRoot);
+  const existing = await readFile(configPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+
+    throw error;
+  });
+
+  if (existing) {
+    return {
+      config: TeambridgeConfigSchema.parse(JSON.parse(existing)),
+      path: configPath,
+      created: false
+    };
+  }
+
+  await writeFile(configPath, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, { flag: 'wx' });
+  return {
+    config: DEFAULT_CONFIG,
+    path: configPath,
+    created: true
+  };
 }
 
 async function startWorkspace(state: AppState, body: StartRequestBody): Promise<StartWorkspaceResponse> {
@@ -585,6 +677,21 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/config') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const config = await readRepoConfig(repoRoot);
+    sendJson(response, 200, ok({ config, path: getConfigPath(repoRoot), exists: config !== DEFAULT_CONFIG }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/config/init') {
+    const body = ConfigRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const result = await initRepoConfig(repoRoot);
+    sendJson(response, result.created ? 201 : 200, ok(result));
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/workspaces') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     sendJson<WorkspaceListResponse>(response, 200, ok({ workspaces: listWorkspaces(repoRoot) }));
@@ -592,14 +699,14 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   }
 
   if (method === 'POST' && url.pathname === '/workspaces/start') {
-    const body = await readJsonBody<StartRequestBody>(request);
+    const body = StartRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const result = await startWorkspace(state, body);
     sendJson(response, 201, ok(result));
     return;
   }
 
   if (method === 'POST' && url.pathname === '/workspaces/join') {
-    const body = await readJsonBody<JoinRequestBody>(request);
+    const body = JoinRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const result = await joinWorkspace(state, body);
     sendJson(response, 201, ok(result));
     return;
@@ -622,7 +729,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   if (method === 'POST' && eventListMatch) {
     const workspaceIdentifier = decodeURIComponent(eventListMatch[1]);
-    const body = await readJsonBody<PublishRequestBody>(request);
+    const body = PublishRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const event = await appendPublishEvent(state, workspaceIdentifier, body);
     sendJson(response, 201, ok({ event }));
     return;
@@ -652,7 +759,8 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && vaultContextMatch) {
     const workspaceIdentifier = decodeURIComponent(vaultContextMatch[1]);
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
-    const maxBytes = Number(url.searchParams.get('maxBytes') ?? 24000);
+    const repoConfig = await readRepoConfig(repoRoot);
+    const maxBytes = Number(url.searchParams.get('maxBytes') ?? repoConfig.vault.contextMaxBytes);
     const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
     if (!workspace) {
       sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
@@ -672,7 +780,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   const vaultRebuildMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/rebuild$/);
   if (method === 'POST' && vaultRebuildMatch) {
     const workspaceIdentifier = decodeURIComponent(vaultRebuildMatch[1]);
-    const body = await readJsonBody<{ repoRoot?: string }>(request);
+    const body = VaultRebuildRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
     const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
     if (!workspace) {
@@ -723,6 +831,11 @@ function main(): void {
 
   const server = createServer((request, response) => {
     handleRequest(state, request, response).catch((error: unknown) => {
+      if (error instanceof z.ZodError) {
+        sendJson(response, 400, fail('INVALID_REQUEST', 'Request body failed validation', error.issues));
+        return;
+      }
+
       const message = error instanceof Error ? error.message : 'Unknown daemon error';
       sendJson(response, 500, fail('INTERNAL_ERROR', message));
     });

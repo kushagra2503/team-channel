@@ -5,6 +5,9 @@ export type TeambridgeConfig = {
   mcpPort: number;
   autoInject: boolean;
   vaultInjectionMode: 'compact';
+  vault: {
+    contextMaxBytes: number;
+  };
 };
 
 export type WorkspaceConfig = {

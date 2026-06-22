@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@teambridge/core": "workspace:*",
-    "@teambridge/vault": "workspace:*"
+    "@teambridge/vault": "workspace:*",
+    "zod": "^4.4.3"
   }
 }
