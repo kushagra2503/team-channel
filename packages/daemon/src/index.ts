@@ -1,25 +1,51 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type {
   ApiResult,
+  EventListResponse,
+  JoinWorkspaceRequest,
+  JoinWorkspaceResponse,
   Participant,
+  PublishEventPayload,
+  PublishEventRequest,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   TeambridgeErrorCode,
+  VaultContextResponse,
+  VaultReadResponse,
   Workspace,
+  WorkspaceEvent,
   WorkspaceListResponse,
   WorkspaceManifest
 } from '@teambridge/core';
-import { initializePhaseOneVault } from '@teambridge/vault';
+import {
+  createVaultContext,
+  initializePhaseOneVault,
+  materializePublishEvent,
+  readEventsJsonl,
+  readVaultFile,
+  rebuildPhaseOneVault
+} from '@teambridge/vault';
 
 const DEFAULT_PORT = 9473;
 
 type StartRequestBody = StartWorkspaceRequest & {
   repoRoot?: string;
+};
+
+type JoinRequestBody = JoinWorkspaceRequest & {
+  repoRoot?: string;
+  worktreePath?: string;
+};
+
+type PublishRequestBody = PublishEventRequest & {
+  repoRoot?: string;
+  actorId?: string;
+  deviceId?: string;
 };
 
 type AppState = {
@@ -382,6 +408,174 @@ function listParticipants(repoRoot: string, workspaceId: string): Participant[] 
   return rows.map(rowToParticipant);
 }
 
+function getWorkspaceByIdentifier(repoRoot: string, identifier: string): Workspace | undefined {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from workspaces where id = ${sqlValue(identifier)} or session_name = ${sqlValue(identifier)} limit 1`
+  );
+
+  return row ? rowToWorkspace(row) : undefined;
+}
+
+function getLastSeq(repoRoot: string, workspaceId: string): number {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<{ last_seq?: number }>(
+    dbPath,
+    `select last_seq from local_sequences where workspace_id = ${sqlValue(workspaceId)}`
+  );
+
+  return row?.last_seq ?? 0;
+}
+
+async function writeWorkspaceManifest(repoRoot: string, workspace: Workspace): Promise<WorkspaceManifest> {
+  const manifest: WorkspaceManifest = {
+    ...workspace,
+    schemaVersion: 1,
+    participants: listParticipants(repoRoot, workspace.id)
+  };
+
+  await writeFile(
+    join(getWorkspaceDir(repoRoot, workspace.sessionName), 'manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`
+  );
+
+  return manifest;
+}
+
+function getWorkspacePaths(repoRoot: string, workspace: Workspace): { workspaceDir: string; eventsPath: string; vaultDir: string } {
+  const workspaceDir = getWorkspaceDir(repoRoot, workspace.sessionName);
+  return {
+    workspaceDir,
+    eventsPath: join(workspaceDir, 'events.jsonl'),
+    vaultDir: join(workspaceDir, 'vault')
+  };
+}
+
+async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<JoinWorkspaceResponse> {
+  if (!body.sessionName?.trim()) {
+    throw new Error('sessionName is required');
+  }
+
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  await ensureTeambridgeDirs(repoRoot);
+
+  const workspace = getWorkspaceByIdentifier(repoRoot, body.sessionName.trim());
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${body.sessionName}`);
+  }
+
+  const dbPath = initializeStateDb(repoRoot);
+  const now = new Date().toISOString();
+  const displayName = safeDisplayName(body.displayName ?? process.env.USER ?? 'local');
+  const participantId = `user_${randomUUID()}`;
+  const branch = `teambridge/${workspace.sessionName}/${displayName}`;
+  const participant: Participant = {
+    id: participantId,
+    workspaceId: workspace.id,
+    displayName,
+    branch,
+    agent: body.agent,
+    status: 'active',
+    lastSeenAt: now
+  };
+
+  runSql(dbPath, `
+    insert into participants (
+      id, workspace_id, display_name, branch, agent, status, last_seen_at
+    ) values (
+      ${sqlValue(participant.id)},
+      ${sqlValue(participant.workspaceId)},
+      ${sqlValue(participant.displayName)},
+      ${sqlValue(participant.branch)},
+      ${sqlValue(participant.agent ?? null)},
+      ${sqlValue(participant.status)},
+      ${sqlValue(participant.lastSeenAt)}
+    );
+  `);
+
+  const currentCommit = runGit(repoRoot, ['rev-parse', 'HEAD']);
+  const worktreePath = body.worktreePath ? resolve(body.worktreePath) : repoRoot;
+
+  if (body.worktreePath) {
+    runSql(dbPath, `
+      insert or replace into worktrees (
+        workspace_id, user_id, path, branch, base_commit, current_commit, dirty
+      ) values (
+        ${sqlValue(workspace.id)},
+        ${sqlValue(participantId)},
+        ${sqlValue(worktreePath)},
+        ${sqlValue(branch)},
+        ${sqlValue(workspace.baseCommit)},
+        ${sqlValue(currentCommit)},
+        0
+      );
+    `);
+  }
+
+  const manifest = await writeWorkspaceManifest(repoRoot, workspace);
+
+  return {
+    manifest,
+    worktree: {
+      workspaceId: workspace.id,
+      userId: participantId,
+      path: worktreePath,
+      branch,
+      baseCommit: workspace.baseCommit,
+      currentCommit,
+      dirty: false
+    }
+  };
+}
+
+async function appendPublishEvent(
+  state: AppState,
+  workspaceIdentifier: string,
+  body: PublishRequestBody
+): Promise<WorkspaceEvent<PublishEventPayload>> {
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${workspaceIdentifier}`);
+  }
+
+  if (!body.targetFile) {
+    throw new Error('targetFile is required');
+  }
+
+  const payload = body.payload as PublishEventPayload | undefined;
+  if (!payload?.text?.trim()) {
+    throw new Error('payload.text is required');
+  }
+
+  const dbPath = initializeStateDb(repoRoot);
+  runSql(
+    dbPath,
+    `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
+  );
+  const seq = getLastSeq(repoRoot, workspace.id);
+
+  const event: WorkspaceEvent<PublishEventPayload> = {
+    id: `evt_${randomUUID()}`,
+    workspaceId: workspace.id,
+    seq,
+    type: 'publish',
+    actorId: body.actorId ?? workspace.createdBy,
+    deviceId: body.deviceId ?? 'device_local',
+    targetFile: body.targetFile,
+    payload,
+    dedupeKey: body.dedupeKey,
+    createdAt: new Date().toISOString()
+  };
+
+  const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
+  await materializePublishEvent(vaultDir, event);
+
+  return event;
+}
+
 async function handleRequest(state: AppState, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
@@ -401,6 +595,94 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const body = await readJsonBody<StartRequestBody>(request);
     const result = await startWorkspace(state, body);
     sendJson(response, 201, ok(result));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/workspaces/join') {
+    const body = await readJsonBody<JoinRequestBody>(request);
+    const result = await joinWorkspace(state, body);
+    sendJson(response, 201, ok(result));
+    return;
+  }
+
+  const eventListMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/events$/);
+  if (method === 'GET' && eventListMatch) {
+    const workspaceIdentifier = decodeURIComponent(eventListMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath);
+    sendJson<EventListResponse>(response, 200, ok({ events }));
+    return;
+  }
+
+  if (method === 'POST' && eventListMatch) {
+    const workspaceIdentifier = decodeURIComponent(eventListMatch[1]);
+    const body = await readJsonBody<PublishRequestBody>(request);
+    const event = await appendPublishEvent(state, workspaceIdentifier, body);
+    sendJson(response, 201, ok({ event }));
+    return;
+  }
+
+  const vaultReadMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/read$/);
+  if (method === 'GET' && vaultReadMatch) {
+    const workspaceIdentifier = decodeURIComponent(vaultReadMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const path = url.searchParams.get('path');
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    if (!path) {
+      sendJson(response, 400, fail('INVALID_REQUEST', 'path query parameter is required'));
+      return;
+    }
+
+    const file = await readVaultFile(getWorkspacePaths(repoRoot, workspace).vaultDir, path);
+    sendJson<VaultReadResponse>(response, 200, ok({ file }));
+    return;
+  }
+
+  const vaultContextMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/context$/);
+  if (method === 'GET' && vaultContextMatch) {
+    const workspaceIdentifier = decodeURIComponent(vaultContextMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const maxBytes = Number(url.searchParams.get('maxBytes') ?? 24000);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    const context = await createVaultContext(
+      workspace.id,
+      getWorkspacePaths(repoRoot, workspace).vaultDir,
+      getLastSeq(repoRoot, workspace.id),
+      maxBytes
+    );
+    sendJson<VaultContextResponse>(response, 200, ok({ context }));
+    return;
+  }
+
+  const vaultRebuildMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/rebuild$/);
+  if (method === 'POST' && vaultRebuildMatch) {
+    const workspaceIdentifier = decodeURIComponent(vaultRebuildMatch[1]);
+    const body = await readJsonBody<{ repoRoot?: string }>(request);
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
+    const result = await rebuildPhaseOneVault(vaultDir, eventsPath);
+    sendJson(response, 200, ok({ rebuilt: true, lastSeq: result.lastSeq }));
     return;
   }
 
