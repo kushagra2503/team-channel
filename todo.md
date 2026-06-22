@@ -52,9 +52,11 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Implement `teambridge ws who <session_name>`.
   - Implement `teambridge ws branches <session_name>`.
   - Wire CLI calls to the local daemon.
+  - Make CLI requests repo-aware: resolve the current working directory to the current git repo root and send that `repoRoot` to the daemon.
+  - Keep daemon startup generic; normal users should not have to start the daemon with `--repo`.
 - [ ] Step 5, Nihal + Kushagra in parallel:
   - Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
-  - Kushagra: implement `teambridge start <session_name> [base_ref]`, resolve `base_ref` to immutable `base_commit`, and create creator worktree/branch.
+  - Kushagra: implement `teambridge start <session_name> [base_ref]`, sending the current repo root as `repoRoot`, resolving `base_ref` to immutable `base_commit`, and creating the creator worktree/branch.
   - Kushagra: implement `teambridge join <session_name>`, use recorded `base_commit`, and create participant worktree/branch.
   - Kushagra: implement `teambridge enter <session_name>`.
 - [ ] Step 6, Nihal + Kushagra in parallel:

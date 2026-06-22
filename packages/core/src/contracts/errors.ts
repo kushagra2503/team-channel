@@ -6,6 +6,7 @@ export type TeambridgeErrorCode =
   | 'CONFLICT'
   | 'RELAY_UNAVAILABLE'
   | 'INVALID_REQUEST'
+  | 'NOT_FOUND'
   | 'INTERNAL_ERROR';
 
 export type TeambridgeError = {

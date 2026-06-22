@@ -1,0 +1,13 @@
+{
+  "name": "teambridge",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "daemon": "pnpm --filter @teambridge/daemon start"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3"
+  }
+}

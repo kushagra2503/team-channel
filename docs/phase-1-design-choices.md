@@ -217,7 +217,27 @@ Instead:
 - Preserve old `targetFile` values.
 - Teach the materializer how old target files map to new projections.
 
-## 8. Phase 1 Success Criteria
+## 8. Split Packages Early
+
+Current package boundaries:
+
+```text
+packages/core   = shared contracts and types
+packages/vault  = vault helpers and materialization logic
+packages/daemon = local backend server
+packages/cli    = future command-line UI
+```
+
+Why:
+
+- `core` is not the CLI. It is the shared contract layer that daemon, CLI, dashboard, hooks, and MCP can all import.
+- `vault` is not the CLI. It owns reusable vault behavior so the daemon does not become the only place where vault rules exist.
+- Splitting early lets Kushagra and Ronish build CLI/dashboard later against `@teambridge/core` without pulling daemon internals.
+- Each package can have its own dependencies and build output while the root workspace still runs one `pnpm build`.
+
+Do not make CLI code import directly from `packages/daemon`. Public shapes should come from `@teambridge/core`, and reusable vault behavior should come from `@teambridge/vault`.
+
+## 9. Phase 1 Success Criteria
 
 The first version passes when this local flow works:
 
