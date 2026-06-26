@@ -19,6 +19,17 @@ export type ApiFail = {
 
 export type ApiResult<T> = ApiOk<T> | ApiFail;
 
+export function apiOk<T>(data: T): ApiOk<T> {
+  return { ok: true, data };
+}
+
+export function apiFail(code: TeambridgeError['code'], message: string, details?: unknown): ApiFail {
+  return {
+    ok: false,
+    error: { code, message, details }
+  };
+}
+
 export type WorkspaceListResponse = {
   workspaces: Workspace[];
 };

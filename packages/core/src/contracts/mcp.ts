@@ -30,10 +30,13 @@ export type VaultReadToolInput = {
   path: string;
 };
 
-export type McpResourceName =
-  | 'teambridge://workspace'
-  | 'teambridge://participants'
-  | 'teambridge://vault/context'
-  | 'teambridge://inbox'
-  | 'teambridge://conflicts';
+export const MCP_RESOURCE_NAMES = [
+  'teambridge://workspace',
+  'teambridge://participants',
+  'teambridge://vault/context',
+  'teambridge://inbox',
+  'teambridge://conflicts'
+] as const;
+
+export type McpResourceName = (typeof MCP_RESOURCE_NAMES)[number];
 

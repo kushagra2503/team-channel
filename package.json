@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
+    "dashboard": "pnpm --filter @teambridge/dashboard dev --host 127.0.0.1",
     "daemon": "pnpm --filter @teambridge/daemon start",
-    "test": "pnpm --filter @teambridge/core test"
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

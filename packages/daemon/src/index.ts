@@ -302,8 +302,22 @@ async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
 }
 
 function sendJson<T>(response: ServerResponse, status: number, body: ApiResult<T>): void {
-  response.writeHead(status, { 'content-type': 'application/json' });
+  response.writeHead(status, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'content-type': 'application/json'
+  });
   response.end(JSON.stringify(body, null, 2));
+}
+
+function sendCorsPreflight(response: ServerResponse): void {
+  response.writeHead(204, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type'
+  });
+  response.end();
 }
 
 async function ensureTeambridgeDirs(repoRoot: string): Promise<void> {
@@ -672,6 +686,11 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
 
+  if (method === 'OPTIONS') {
+    sendCorsPreflight(response);
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/health') {
     sendJson(response, 200, ok({ status: 'ok' }));
     return;
@@ -796,27 +815,24 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   const statusMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/status$/);
   if (method === 'GET' && statusMatch) {
-    const workspaceId = statusMatch[1];
+    const workspaceIdentifier = decodeURIComponent(statusMatch[1]);
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     const dbPath = initializeStateDb(repoRoot);
-    const [row] = querySql<Record<string, unknown>>(
-      dbPath,
-      `select * from workspaces where id = ${sqlValue(workspaceId)}`
-    );
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
 
-    if (!row) {
-      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceId} was not found`));
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
       return;
     }
 
     const [sequence] = querySql<{ last_seq?: number }>(
       dbPath,
-      `select last_seq from local_sequences where workspace_id = ${sqlValue(workspaceId)}`
+      `select last_seq from local_sequences where workspace_id = ${sqlValue(workspace.id)}`
     );
 
     sendJson(response, 200, ok({
-      workspace: rowToWorkspace(row),
-      participants: listParticipants(repoRoot, workspaceId),
+      workspace,
+      participants: listParticipants(repoRoot, workspace.id),
       lastSeq: sequence?.last_seq ?? 0
     }));
     return;
