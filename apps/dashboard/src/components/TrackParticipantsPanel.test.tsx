@@ -10,10 +10,10 @@ describe('TrackParticipantsPanel', () => {
     expect(screen.getByText('Select a track to see participants.')).toBeTruthy();
   });
 
-  it('renders participant rows with branch', () => {
+  it('renders participant rows with name and status', () => {
     render(<TrackParticipantsPanel status={makeWorkspaceStatus()} />);
 
     expect(screen.getByText('Ronish')).toBeTruthy();
-    expect(screen.getByText('teambridge/billing-refactor/ronish')).toBeTruthy();
+    expect(screen.getByText('Active')).toBeTruthy();
   });
 });

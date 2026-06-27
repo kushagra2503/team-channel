@@ -3,10 +3,7 @@ import type { Participant, WorkspaceStatusResponse } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
-import {
-  participantActivity,
-  prettyParticipantName
-} from './participantDisplay';
+import { prettyParticipantName } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
 export type TrackParticipantsPanelProps = {
@@ -24,6 +21,12 @@ const PRESENCE_DOT: Record<'active' | 'idle' | 'offline', string> = {
   offline: 'bg-muted-foreground/40'
 };
 
+const STATUS_LABEL: Record<'active' | 'idle' | 'offline', string> = {
+  active: 'Active',
+  idle: 'Idle',
+  offline: 'Offline'
+};
+
 const ENTER = COLUMN_ENTER;
 const HIDE = COLUMN_HIDE;
 
@@ -38,8 +41,7 @@ function MemberRow({
   index: number;
   columnIndex: number;
 }) {
-  const activity = participantActivity(participant);
-  const showDot = activity.tone === 'active' || activity.tone === 'idle';
+  const showDot = participant.status !== 'offline';
 
   return (
     <motion.div
@@ -56,7 +58,7 @@ function MemberRow({
         />
         {showDot ? (
           <span
-            className={`absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-sidebar ${PRESENCE_DOT[activity.tone]}`}
+            className={`absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-sidebar ${PRESENCE_DOT[participant.status]}`}
           />
         ) : null}
       </div>
@@ -64,8 +66,8 @@ function MemberRow({
         <span className="block truncate text-sm font-medium">
           {prettyParticipantName(participant.displayName)}
         </span>
-        <span className="block truncate font-mono text-xs text-muted-foreground">
-          {participant.branch}
+        <span className="block truncate text-xs text-muted-foreground">
+          {STATUS_LABEL[participant.status]}
         </span>
       </div>
     </motion.div>

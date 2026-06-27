@@ -59,9 +59,9 @@ Two identity layers: **project team** (roster) vs **track participants** (who is
 | Left sidebar (middle) | Tracks in this project |
 | Center | Vault highlights — sections from vault context, per-row color/assign/copy |
 | Right sidebar (top) | **All Members** / **This Track** toggle with animated indicator |
-| Right sidebar (body) | Project roster or track participants (branch per row), collapsible |
+| Right sidebar (body) | Project roster or track-filtered roster (same row layout), collapsible |
 
-Vault assign chips use **first name only**; track participant rows show full name + branch.
+Vault assign chips use **first name only**; member rows show full name and status in both tabs.
 
 ## Vault highlights
 
