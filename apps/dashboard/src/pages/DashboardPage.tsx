@@ -227,6 +227,7 @@ export function DashboardPage() {
           columnIndex={0}
           tracks={tracks}
           selectedTrackId={selectedTrackId}
+          clientConfig={clientConfig}
           error={tracksError}
           onSelectTrack={setSelectedTrackId}
         />

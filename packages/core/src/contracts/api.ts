@@ -1,7 +1,7 @@
 import type { VaultCheckpoint } from './checkpoints';
 import type { TeambridgeError } from './errors';
 import type { WorkspaceEvent } from './events';
-import type { WorktreeInfo } from './git';
+import type { WorktreeInfo, RepoContext } from './git';
 import type { InboxMessage } from './inbox';
 import type { Participant } from './participant';
 import type { LocalUserProfile } from './config';
@@ -102,5 +102,9 @@ export type HookContextResponse = VaultContextResponse;
 export type JoinWorkspaceResponse = {
   manifest: WorkspaceManifest;
   worktree: WorktreeInfo;
+};
+
+export type RepoContextResponse = {
+  context: RepoContext;
 };
 

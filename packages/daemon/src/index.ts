@@ -2,8 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdirSync, existsSync } from 'node:fs';
+import { join, resolve, relative, isAbsolute } from 'node:path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -28,6 +28,8 @@ import type {
   UpsertProjectMemberResponse,
   PublishEventPayload,
   PublishEventRequest,
+  RepoContext,
+  RepoContextResponse,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   TeambridgeConfig,
@@ -87,6 +89,11 @@ const SaveLocalUserBodySchema = SaveLocalUserProfileRequestSchema.extend({
 
 const UpsertProjectMemberBodySchema = UpsertProjectMemberRequestSchema.extend({
   repoRoot: z.string().min(1).optional()
+});
+
+const OpenPathBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  path: z.string().min(1)
 });
 
 const JoinRequestBodySchema = JoinWorkspaceRequestSchema.extend({
@@ -177,9 +184,23 @@ function fail(code: TeambridgeErrorCode, message: string, details?: unknown): Ap
   };
 }
 
+function findGitRepoRoot(startDir: string): string {
+  let current = resolve(startDir);
+  while (true) {
+    if (existsSync(join(current, '.git'))) {
+      return current;
+    }
+    const parent = resolve(current, '..');
+    if (parent === current) {
+      return startDir;
+    }
+    current = parent;
+  }
+}
+
 function parseArgs(argv: string[]): { port: number; repoRoot: string } {
   let port = Number(process.env.TEAMBRIDGE_DAEMON_PORT ?? DEFAULT_PORT);
-  let repoRoot = process.env.TEAMBRIDGE_REPO_ROOT ?? process.cwd();
+  let repoRoot = process.env.TEAMBRIDGE_REPO_ROOT ?? findGitRepoRoot(process.cwd());
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -231,6 +252,173 @@ function getCurrentBranch(repoRoot: string): string {
   } catch {
     return 'HEAD';
   }
+}
+
+type ParsedRemote = {
+  owner: string;
+  name: string;
+  webBase: string;
+};
+
+function parseGitRemote(remote: string): ParsedRemote | null {
+  const sshMatch = remote.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
+  if (sshMatch) {
+    const host = sshMatch[1];
+    const segments = sshMatch[2].replace(/\.git$/, '').split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      const owner = segments[0];
+      const name = segments.slice(1).join('/');
+      return { owner, name, webBase: `https://${host}/${owner}/${name}` };
+    }
+  }
+
+  try {
+    const normalized = remote.replace(/\.git$/, '');
+    const url = normalized.includes('://') ? new URL(normalized) : new URL(`https://${normalized}`);
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      const owner = segments[0];
+      const name = segments[1];
+      return { owner, name, webBase: `${url.protocol}//${url.host}/${owner}/${name}` };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function branchWebUrl(webBase: string | null, branch: string): string | null {
+  if (!webBase || !branch || branch === 'HEAD') {
+    return null;
+  }
+  return `${webBase}/tree/${encodeURIComponent(branch)}`;
+}
+
+function commitWebUrl(webBase: string | null, commitSha: string | null): string | null {
+  if (!webBase || !commitSha) {
+    return null;
+  }
+  return `${webBase}/commit/${commitSha}`;
+}
+
+function getPrimaryWorktreePath(repoRoot: string, workspaceId: string): string {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<{ path: string }>(
+    dbPath,
+    `select path from worktrees where workspace_id = ${sqlValue(workspaceId)} order by rowid asc`
+  );
+  if (rows.length === 0) {
+    return repoRoot;
+  }
+
+  const resolvedRoot = resolve(repoRoot);
+  const alternate = rows.find((row) => resolve(String(row.path)) !== resolvedRoot);
+  return resolve(alternate?.path ?? rows[0].path);
+}
+
+function resolveLastPushRef(localPath: string, branch: string): string | null {
+  if (!branch || branch === 'HEAD') {
+    return null;
+  }
+
+  try {
+    const upstream = runGit(localPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+    if (upstream) {
+      const ahead = Number(runGit(localPath, ['rev-list', '--count', `${upstream}..HEAD`]) || '0');
+      return ahead > 0 ? upstream : 'HEAD';
+    }
+  } catch {
+    // fall through to origin/<branch>
+  }
+
+  try {
+    runGit(localPath, ['rev-parse', '--verify', `origin/${branch}`]);
+    return `origin/${branch}`;
+  } catch {
+    return 'HEAD';
+  }
+}
+
+function getLastPushInfo(
+  localPath: string,
+  branch: string
+): { lastPushAt: string | null; lastPushCommitSha: string | null } {
+  const ref = resolveLastPushRef(localPath, branch);
+  if (!ref) {
+    return { lastPushAt: null, lastPushCommitSha: null };
+  }
+
+  try {
+    const output = runGit(localPath, ['log', '-1', '--format=%cI%n%H', ref]);
+    const [lastPushAt, lastPushCommitSha] = output.split('\n');
+    return {
+      lastPushAt: lastPushAt || null,
+      lastPushCommitSha: lastPushCommitSha || null
+    };
+  } catch {
+    return { lastPushAt: null, lastPushCommitSha: null };
+  }
+}
+
+function buildRepoContext(repoRoot: string, workspaceId?: string): RepoContext {
+  const localPath = workspaceId ? getPrimaryWorktreePath(repoRoot, workspaceId) : repoRoot;
+  let remoteUrl: string | null = null;
+  let branch = 'HEAD';
+  let lastCommitAt: string | null = null;
+
+  try {
+    remoteUrl = runGit(localPath, ['config', '--get', 'remote.origin.url']) || null;
+  } catch {
+    try {
+      remoteUrl = runGit(repoRoot, ['config', '--get', 'remote.origin.url']) || null;
+    } catch {
+      remoteUrl = null;
+    }
+  }
+
+  try {
+    branch = runGit(localPath, ['branch', '--show-current']) || 'HEAD';
+  } catch {
+    branch = 'HEAD';
+  }
+
+  try {
+    lastCommitAt = runGit(localPath, ['log', '-1', '--format=%cI']) || null;
+  } catch {
+    lastCommitAt = null;
+  }
+
+  const parsed = remoteUrl ? parseGitRemote(remoteUrl) : null;
+  const { lastPushAt, lastPushCommitSha } = getLastPushInfo(localPath, branch);
+
+  return {
+    remoteUrl,
+    repoOwner: parsed?.owner ?? null,
+    repoName: parsed?.name ?? null,
+    repoLabel: parsed ? `${parsed.owner}/${parsed.name}` : null,
+    repoWebUrl: parsed?.webBase ?? null,
+    branch,
+    branchWebUrl: branchWebUrl(parsed?.webBase ?? null, branch),
+    localPath,
+    lastCommitAt,
+    lastPushAt,
+    lastPushCommitSha,
+    lastPushCommitWebUrl: commitWebUrl(parsed?.webBase ?? null, lastPushCommitSha)
+  };
+}
+
+function openPathOnDevice(targetPath: string): void {
+  const resolved = resolve(targetPath);
+  if (process.platform === 'darwin') {
+    execFileSync('open', [resolved], { stdio: 'ignore' });
+    return;
+  }
+  if (process.platform === 'win32') {
+    execFileSync('cmd', ['/c', 'start', '', resolved], { stdio: 'ignore' });
+    return;
+  }
+  execFileSync('xdg-open', [resolved], { stdio: 'ignore' });
 }
 
 function getRepoRootHash(repoRoot: string): string {
@@ -1125,6 +1313,36 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     const profile = await readLocalUserProfile(repoRoot);
     sendJson<LocalUserProfileResponse>(response, 200, ok({ profile, path: getUserProfilePath(repoRoot) }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/repo/context') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspaceId = url.searchParams.get('workspaceId') ?? undefined;
+    let resolvedWorkspaceId = workspaceId;
+    if (workspaceId && !getWorkspaceByIdentifier(repoRoot, workspaceId)) {
+      resolvedWorkspaceId = undefined;
+    }
+    sendJson<RepoContextResponse>(response, 200, ok({ context: buildRepoContext(repoRoot, resolvedWorkspaceId) }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/repo/open-path') {
+    try {
+      const body = OpenPathBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      const target = resolve(body.path);
+      const rel = relative(resolve(repoRoot), target);
+      if (rel.startsWith('..') || isAbsolute(rel)) {
+        sendJson(response, 400, fail('INVALID_REQUEST', 'Path must be inside the repository'));
+        return;
+      }
+      openPathOnDevice(target);
+      sendJson(response, 200, ok({ opened: target }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open path';
+      sendJson(response, 400, fail('INVALID_REQUEST', message));
+    }
     return;
   }
 

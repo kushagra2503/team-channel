@@ -2,6 +2,7 @@ import type {
   ApiResult,
   ProjectListResponse,
   ProjectMemberListResponse,
+  RepoContextResponse,
   TrackListResponse,
   VaultAnnotateResponseBody,
   VaultContextResponse,
@@ -91,6 +92,33 @@ export function getProjectTracks(
   signal?: AbortSignal
 ): Promise<TrackListResponse> {
   return getJson<TrackListResponse>(`/projects/${encodeURIComponent(projectId)}/tracks`, config, undefined, signal);
+}
+
+export function getRepoContext(
+  config: TeambridgeClientConfig,
+  workspaceId?: string,
+  signal?: AbortSignal
+): Promise<RepoContextResponse> {
+  return getJson<RepoContextResponse>(
+    '/repo/context',
+    config,
+    workspaceId ? { workspaceId } : undefined,
+    signal
+  );
+}
+
+export async function openRepoPath(
+  config: TeambridgeClientConfig,
+  path: string,
+  signal?: AbortSignal
+): Promise<{ opened: string }> {
+  const response = await fetch(buildTeambridgeUrl('/repo/open-path', config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<{ opened: string }>(response);
 }
 
 export function getWorkspaceStatus(
