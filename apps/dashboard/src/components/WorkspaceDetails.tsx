@@ -78,7 +78,7 @@ export function WorkspaceDetails({ status, loading = false, error }: WorkspaceDe
   return (
     <section aria-label="Workspace details" className="flex flex-col gap-1 py-2">
       <SidebarGroup className="py-1">
-        <SidebarGroupLabel>
+        <SidebarGroupLabel className="tabular-nums">
           {total} {total === 1 ? 'Member' : 'Members'}
         </SidebarGroupLabel>
       </SidebarGroup>
