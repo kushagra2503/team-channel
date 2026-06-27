@@ -3,8 +3,8 @@ import { buildDisplayNameAvatarUrl, type TeambridgeClientConfig } from '@/api/te
 export function avatarUrlForDisplayName(
   displayName: string,
   config: TeambridgeClientConfig,
-  avatarRev?: number
+  rev?: number | string
 ): string | undefined {
   if (!config.daemonBaseUrl) return undefined;
-  return buildDisplayNameAvatarUrl(displayName, config, avatarRev);
+  return buildDisplayNameAvatarUrl(displayName, config, rev);
 }

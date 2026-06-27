@@ -66,7 +66,9 @@ import {
   rebuildPhaseOneVault
 } from '@teambridge/vault';
 import {
+  DEFAULT_PFP_QUERY,
   generatePfp,
+  getAvatarVersionForDisplayName,
   getOrGenerateAvatar,
   regenerateAvatar,
   type DitherAlgorithm,
@@ -638,7 +640,31 @@ function sendCorsPreflight(response: ServerResponse): void {
   response.end();
 }
 
-const AVATAR_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const AVATAR_CACHE_CONTROL = 'public, max-age=86400, must-revalidate';
+
+function avatarEtag(buffer: Buffer): string {
+  return `"${createHash('sha256').update(buffer).digest('hex').slice(0, 16)}"`;
+}
+
+function sendAvatarPng(response: ServerResponse, request: IncomingMessage, png: Buffer): void {
+  const etag = avatarEtag(png);
+  if (request.headers['if-none-match'] === etag) {
+    response.writeHead(304, {
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'GET,POST,OPTIONS',
+      'access-control-allow-headers': 'content-type',
+      etag,
+      'cache-control': AVATAR_CACHE_CONTROL
+    });
+    response.end();
+    return;
+  }
+
+  sendBinary(response, 200, png, 'image/png', {
+    'cache-control': AVATAR_CACHE_CONTROL,
+    etag
+  });
+}
 
 function sendBinary(
   response: ServerResponse,
@@ -731,7 +757,12 @@ async function saveLocalUserProfile(
 async function ensureAvatarForDisplayName(repoRoot: string, displayName: string): Promise<void> {
   const slug = avatarNameSlug(displayName);
   const avatarId = avatarStorageId(displayName);
-  await getOrGenerateAvatar(repoRoot, avatarId, { query: displayName }, findLegacyAvatarIdsForSlug(repoRoot, slug));
+  await getOrGenerateAvatar(
+    repoRoot,
+    avatarId,
+    { query: DEFAULT_PFP_QUERY },
+    findLegacyAvatarIdsForSlug(repoRoot, slug)
+  );
 }
 
 function resolveParticipantDisplayName(repoRoot: string, bodyDisplayName: string | undefined, profile: LocalUserProfile | null): string {
@@ -1312,7 +1343,10 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && url.pathname === '/user/profile') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     const profile = await readLocalUserProfile(repoRoot);
-    sendJson<LocalUserProfileResponse>(response, 200, ok({ profile, path: getUserProfilePath(repoRoot) }));
+    const avatarVersion = profile
+      ? await getAvatarVersionForDisplayName(repoRoot, profile.displayName)
+      : undefined;
+    sendJson<LocalUserProfileResponse>(response, 200, ok({ profile, path: getUserProfilePath(repoRoot), avatarVersion }));
     return;
   }
 
@@ -1370,13 +1404,14 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     const avatarId = `name_${slug}`;
     const legacyIds = findLegacyAvatarIdsForSlug(repoRoot, slug);
+    const avatarParams = avatarOptionsFromParams(url.searchParams);
     const { png } = await getOrGenerateAvatar(
       repoRoot,
       avatarId,
-      avatarOptionsFromParams(url.searchParams),
+      { ...avatarParams, query: avatarParams.query ?? DEFAULT_PFP_QUERY },
       legacyIds
     );
-    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    sendAvatarPng(response, request, png);
     return;
   }
 
@@ -1389,7 +1424,15 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
       return;
     }
-    sendJson<ProjectMemberListResponse>(response, 200, ok({ members: listProjectMembers(repoRoot, projectId) }));
+    const profile = await readLocalUserProfile(repoRoot);
+    const localAvatarVersion = profile
+      ? await getAvatarVersionForDisplayName(repoRoot, profile.displayName)
+      : undefined;
+    sendJson<ProjectMemberListResponse>(response, 200, ok({
+      members: listProjectMembers(repoRoot, projectId),
+      localUser: profile,
+      localAvatarVersion
+    }));
     return;
   }
 
@@ -1432,13 +1475,14 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const avatarId = avatarStorageId(member.displayName);
     const slug = avatarNameSlug(member.displayName);
     const legacyIds = findLegacyAvatarIdsForSlug(repoRoot, slug);
+    const avatarParams = avatarOptionsFromParams(url.searchParams);
     const { png } = await getOrGenerateAvatar(
       repoRoot,
       avatarId,
-      avatarOptionsFromParams(url.searchParams),
+      { ...avatarParams, query: avatarParams.query ?? DEFAULT_PFP_QUERY },
       legacyIds
     );
-    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    sendAvatarPng(response, request, png);
     return;
   }
 
@@ -1628,13 +1672,14 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const avatarId = avatarStorageId(participant.displayName);
     const slug = avatarNameSlug(participant.displayName);
     const legacyIds = [participantId, ...findLegacyAvatarIdsForSlug(repoRoot, slug).filter((id) => id !== participantId)];
+    const avatarParams = avatarOptionsFromParams(url.searchParams);
     const { png } = await getOrGenerateAvatar(
       repoRoot,
       avatarId,
-      avatarOptionsFromParams(url.searchParams),
+      { ...avatarParams, query: avatarParams.query ?? DEFAULT_PFP_QUERY },
       legacyIds
     );
-    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    sendAvatarPng(response, request, png);
     return;
   }
 

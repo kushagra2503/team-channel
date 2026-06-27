@@ -107,7 +107,7 @@ describe('DashboardPage', () => {
   it('loads tracks and renders vault content for the selected track', async () => {
     const track = makeWorkspace({ id: 'ws_track1', sessionName: 'data-ingestion', projectId });
     api.getProjectTracks.mockResolvedValue({ tracks: [track] });
-    api.getProjectMembers.mockResolvedValue({ members: [] });
+    api.getProjectMembers.mockResolvedValue({ members: [], localUser: null });
     api.getWorkspaceStatus.mockResolvedValue(makeWorkspaceStatus({ workspace: track, lastSeq: 2 }));
     api.getVaultContext.mockResolvedValue({ context: makeVaultContext() });
 
@@ -119,7 +119,7 @@ describe('DashboardPage', () => {
 
   it('shows track loading errors', async () => {
     api.getProjectTracks.mockRejectedValue(new Error('Unable to load tracks.'));
-    api.getProjectMembers.mockResolvedValue({ members: [] });
+    api.getProjectMembers.mockResolvedValue({ members: [], localUser: null });
 
     renderAtRoute(`/projects/${projectId}`, <DashboardPage />, true);
 

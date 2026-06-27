@@ -58,6 +58,11 @@ test('CLI init → project create → track start → status against a live daem
   const profileAfterCreate = await apiGet('/user/profile', { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(profileAfterCreate.body.data.profile.defaultProjectId, projectId);
 
+  const projectMembers = await apiGet(`/projects/${projectId}/members`, { repoRoot, baseUrl: daemon.baseUrl });
+  assert.equal(projectMembers.response.status, 200);
+  assert.equal(projectMembers.body.data.localUser?.displayName, 'Ada Lovelace');
+  assert.ok(typeof projectMembers.body.data.localAvatarVersion === 'string');
+
   const list = runCli(['project', 'list'], { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(list.exitCode, 0, list.stderr || list.stdout);
   assert.match(list.stdout, new RegExp(`${projectId}\\s+Integration App`));

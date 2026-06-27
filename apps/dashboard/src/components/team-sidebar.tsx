@@ -1,22 +1,25 @@
-import { useState } from 'react';
-import type { WorkspaceStatusResponse } from '@teambridge/core';
+import { useMemo, useState } from 'react';
+import type { LocalUserProfile, WorkspaceStatusResponse } from '@teambridge/core';
 import type { ProjectMember } from '@teambridge/core';
 import { motion } from 'motion/react';
 import { SidebarContent } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { ProjectMemberSidebar } from './ProjectMemberSidebar';
 import { TrackParticipantsPanel } from './TrackParticipantsPanel';
+import { displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 
 export type MembersView = 'all' | 'track';
 
 export type TeamSidebarProps = {
   open: boolean;
   members?: ProjectMember[];
+  localUser?: LocalUserProfile | null;
   trackStatus?: WorkspaceStatusResponse;
   trackError?: string;
   error?: string;
   daemonBaseUrl?: string;
   repoRoot?: string;
+  localAvatarVersion?: string;
   avatarRev?: number;
   onAvatarRev?: () => void;
   columnIndex?: number;
@@ -77,16 +80,30 @@ function MembersViewTabs({
 export function TeamSidebar({
   open,
   members,
+  localUser,
   trackStatus,
   trackError,
   error,
   daemonBaseUrl,
   repoRoot,
+  localAvatarVersion,
   avatarRev,
   columnIndex,
   staggerKey
 }: TeamSidebarProps) {
   const [view, setView] = useState<MembersView>('all');
+
+  const pinnedLocalUser = useMemo<PinnedLocalUser | null>(() => {
+    if (!localUser) return null;
+    if (view === 'all') {
+      const member = members?.find((m) => displayNamesMatch(m.displayName, localUser.displayName));
+      return { displayName: localUser.displayName, status: member?.status ?? 'active' };
+    }
+    const participant = trackStatus?.participants.find((p) =>
+      displayNamesMatch(p.displayName, localUser.displayName)
+    );
+    return { displayName: localUser.displayName, status: participant?.status ?? 'active' };
+  }, [localUser, view, members, trackStatus?.participants]);
 
   return (
     <motion.aside
@@ -102,6 +119,8 @@ export function TeamSidebar({
           {view === 'all' ? (
             <ProjectMemberSidebar
               members={members}
+              localUser={pinnedLocalUser}
+              localAvatarVersion={localAvatarVersion}
               error={error}
               daemonBaseUrl={daemonBaseUrl}
               repoRoot={repoRoot}
@@ -112,6 +131,8 @@ export function TeamSidebar({
           ) : (
             <TrackParticipantsPanel
               status={trackStatus}
+              localUser={pinnedLocalUser}
+              localAvatarVersion={localAvatarVersion}
               error={trackError}
               daemonBaseUrl={daemonBaseUrl}
               repoRoot={repoRoot}

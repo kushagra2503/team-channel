@@ -1,5 +1,6 @@
 import type {
   ApiResult,
+  LocalUserProfileResponse,
   ProjectListResponse,
   ProjectMemberListResponse,
   RepoContextResponse,
@@ -76,6 +77,13 @@ export function listWorkspaces(config: TeambridgeClientConfig, signal?: AbortSig
 
 export function listProjects(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<ProjectListResponse> {
   return getJson<ProjectListResponse>('/projects', config, undefined, signal);
+}
+
+export function getUserProfile(
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<LocalUserProfileResponse> {
+  return getJson<LocalUserProfileResponse>('/user/profile', config, undefined, signal);
 }
 
 export function getProjectMembers(
@@ -159,12 +167,12 @@ export function annotateVaultItem(
 export function buildDisplayNameAvatarUrl(
   displayName: string,
   config: TeambridgeClientConfig,
-  rev?: number
+  rev?: number | string
 ): string {
   return buildTeambridgeUrl(
     `/avatars/by-name/${encodeURIComponent(avatarNameSlug(displayName))}`,
     config,
-    { v: rev }
+    rev !== undefined ? { v: rev } : {}
   );
 }
 

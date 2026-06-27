@@ -3,11 +3,13 @@ import type { Participant, WorkspaceStatusResponse } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
-import { prettyParticipantName } from './participantDisplay';
+import { prettyParticipantName, displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
 export type TrackParticipantsPanelProps = {
   status?: WorkspaceStatusResponse;
+  localUser?: PinnedLocalUser | null;
+  localAvatarVersion?: string;
   error?: string;
   daemonBaseUrl?: string;
   repoRoot?: string;
@@ -30,18 +32,26 @@ const STATUS_LABEL: Record<'active' | 'idle' | 'offline', string> = {
 const ENTER = COLUMN_ENTER;
 const HIDE = COLUMN_HIDE;
 
+type MemberRowData = {
+  key: string;
+  displayName: string;
+  status: 'active' | 'idle' | 'offline';
+  isYou?: boolean;
+  avatarRev?: string;
+};
+
 function MemberRow({
-  participant,
+  row,
   avatarUrl,
   index,
   columnIndex
 }: {
-  participant: Participant;
+  row: MemberRowData;
   avatarUrl?: string;
   index: number;
   columnIndex: number;
 }) {
-  const showDot = participant.status !== 'offline';
+  const showDot = row.status !== 'offline';
 
   return (
     <motion.div
@@ -51,31 +61,74 @@ function MemberRow({
       className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
     >
       <div className="relative shrink-0">
-        <ParticipantAvatar
-          avatarUrl={avatarUrl}
-          displayName={participant.displayName}
-          size={36}
-        />
+        <ParticipantAvatar avatarUrl={avatarUrl} displayName={row.displayName} size={36} />
         {showDot ? (
           <span
-            className={`absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-sidebar ${PRESENCE_DOT[participant.status]}`}
+            className={`absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-sidebar ${PRESENCE_DOT[row.status]}`}
           />
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">
-          {prettyParticipantName(participant.displayName)}
+          {prettyParticipantName(row.displayName)}
+          {row.isYou ? <span className="text-muted-foreground"> (You)</span> : null}
         </span>
-        <span className="block truncate text-xs text-muted-foreground">
-          {STATUS_LABEL[participant.status]}
-        </span>
+        <span className="block truncate text-xs text-muted-foreground">{STATUS_LABEL[row.status]}</span>
       </div>
     </motion.div>
   );
 }
 
+function buildMemberRows(
+  participants: Participant[],
+  localUser?: PinnedLocalUser | null,
+  localAvatarVersion?: string
+): {
+  online: MemberRowData[];
+  offline: MemberRowData[];
+} {
+  const roster = localUser
+    ? participants.filter((p) => !displayNamesMatch(p.displayName, localUser.displayName))
+    : participants;
+
+  const online: MemberRowData[] = [];
+  const offline: MemberRowData[] = [];
+
+  if (localUser) {
+    const youRow: MemberRowData = {
+      key: '__local_user__',
+      displayName: localUser.displayName,
+      status: localUser.status,
+      isYou: true,
+      avatarRev: localAvatarVersion
+    };
+    if (localUser.status === 'offline') {
+      offline.push(youRow);
+    } else {
+      online.push(youRow);
+    }
+  }
+
+  for (const participant of roster) {
+    const row: MemberRowData = {
+      key: participant.id,
+      displayName: participant.displayName,
+      status: participant.status
+    };
+    if (participant.status === 'offline') {
+      offline.push(row);
+    } else {
+      online.push(row);
+    }
+  }
+
+  return { online, offline };
+}
+
 export function TrackParticipantsPanel({
   status,
+  localUser,
+  localAvatarVersion,
   error,
   daemonBaseUrl,
   repoRoot,
@@ -98,31 +151,27 @@ export function TrackParticipantsPanel({
     );
   }
 
-  const online = status.participants.filter((p) => p.status !== 'offline');
-  const offline = status.participants.filter((p) => p.status === 'offline');
-  const total = status.participants.length;
+  const { online, offline } = buildMemberRows(status.participants, localUser, localAvatarVersion);
   const trackId = status.workspace.id;
   const config = { daemonBaseUrl, repoRoot };
-
-  const urlFor = (participant: Participant) =>
-    avatarUrlForDisplayName(participant.displayName, config, avatarRev);
-
+  const urlFor = (row: MemberRowData) =>
+    avatarUrlForDisplayName(row.displayName, config, row.avatarRev ?? avatarRev);
   const offlineStartIndex = online.length + 1;
 
   return (
     <section aria-label="Track participants" className="flex flex-col gap-1 py-2">
-      {total === 0 ? (
+      {online.length === 0 && offline.length === 0 ? (
         <p className="px-3 text-xs text-muted-foreground">No participants on this track yet.</p>
       ) : null}
 
       {online.length > 0 ? (
         <SidebarGroup className="py-1">
           <div className="flex flex-col">
-            {online.map((participant, i) => (
+            {online.map((row, i) => (
               <MemberRow
-                key={`${trackId}-${participant.id}`}
-                participant={participant}
-                avatarUrl={urlFor(participant)}
+                key={`${trackId}-${row.key}`}
+                row={row}
+                avatarUrl={urlFor(row)}
                 index={i}
                 columnIndex={columnIndex}
               />
@@ -142,11 +191,11 @@ export function TrackParticipantsPanel({
             <SidebarGroupLabel>Offline</SidebarGroupLabel>
           </motion.div>
           <div className="flex flex-col">
-            {offline.map((participant, i) => (
+            {offline.map((row, i) => (
               <MemberRow
-                key={`${trackId}-${participant.id}`}
-                participant={participant}
-                avatarUrl={urlFor(participant)}
+                key={`${trackId}-${row.key}`}
+                row={row}
+                avatarUrl={urlFor(row)}
                 index={offlineStartIndex + i}
                 columnIndex={columnIndex}
               />

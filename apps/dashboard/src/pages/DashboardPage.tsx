@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Project, ProjectMember, VaultContext, VaultItemAnnotation, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, ProjectMember, LocalUserProfile, VaultContext, VaultItemAnnotation, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
 import {
   annotateVaultItem,
   getDefaultClientConfig,
@@ -20,6 +20,7 @@ import { SidebarInset } from '@/components/ui/sidebar';
 import { VaultHighlights } from '@/components/VaultHighlights';
 import { buildDisplayNameAvatarUrl } from '@/api/teambridgeClient';
 import { preloadAvatars } from '@/lib/avatar-cache';
+import { readCachedLocalIdentity, writeCachedLocalIdentity } from '@/lib/local-profile-cache';
 
 const LAST_PROJECT_KEY = 'tb_last_project';
 
@@ -64,6 +65,12 @@ export function DashboardPage() {
   const [vaultError, setVaultError] = useState<string>();
   const [teamPanelOpen, setTeamPanelOpen] = useState(true);
   const [avatarRev, setAvatarRev] = useState(0);
+  const daemonUrl = clientConfig.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL;
+  const cachedIdentity = useMemo(() => readCachedLocalIdentity(daemonUrl), [daemonUrl]);
+  const [localUser, setLocalUser] = useState<LocalUserProfile | null>(() => cachedIdentity?.profile ?? null);
+  const [localAvatarVersion, setLocalAvatarVersion] = useState<string | undefined>(
+    () => cachedIdentity?.avatarVersion
+  );
   const abortRef = useRef<AbortController | undefined>(undefined);
 
   const toggleTeamPanel = useCallback(() => {
@@ -132,12 +139,15 @@ export function DashboardPage() {
         .then((res) => {
           cache.setProjectMembers(projectId, res.members);
           setMembers(res.members);
+          setLocalUser(res.localUser);
+          setLocalAvatarVersion(res.localAvatarVersion);
+          writeCachedLocalIdentity(daemonUrl, res.localUser, res.localAvatarVersion);
         })
         .catch(() => { /* non-fatal */ })
     ]);
 
     return () => controller.abort();
-  }, [projectId, clientConfig, cache, navigate, project]);
+  }, [projectId, clientConfig, cache, navigate, project, daemonUrl]);
 
   useEffect(() => {
     if (!selectedTrackId) {
@@ -198,13 +208,26 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (!clientConfig.daemonBaseUrl) return;
+    const urls: string[] = [];
+    if (localUser) {
+      urls.push(
+        buildDisplayNameAvatarUrl(
+          localUser.displayName,
+          clientConfig,
+          localAvatarVersion ?? avatarRev
+        )
+      );
+    }
     const names = new Set<string>();
+    if (localUser) names.add(localUser.displayName);
     for (const member of members) names.add(member.displayName);
     for (const participant of workspaceStatus?.participants ?? []) names.add(participant.displayName);
-    preloadAvatars(
-      [...names].map((displayName) => buildDisplayNameAvatarUrl(displayName, clientConfig, avatarRev))
-    );
-  }, [members, workspaceStatus?.participants, clientConfig, avatarRev]);
+    for (const displayName of names) {
+      if (localUser && displayName === localUser.displayName) continue;
+      urls.push(buildDisplayNameAvatarUrl(displayName, clientConfig, avatarRev));
+    }
+    preloadAvatars(urls);
+  }, [members, workspaceStatus?.participants, localUser, localAvatarVersion, clientConfig, avatarRev]);
 
   const handleVaultAnnotate = useCallback(async (annotation: VaultItemAnnotation) => {
     if (!selectedTrackId) return;
@@ -251,6 +274,8 @@ export function DashboardPage() {
           columnIndex={2}
           open={teamPanelOpen}
           members={members}
+          localUser={localUser}
+          localAvatarVersion={localAvatarVersion}
           trackStatus={workspaceStatus}
           trackError={detailsError}
           daemonBaseUrl={clientConfig.daemonBaseUrl}

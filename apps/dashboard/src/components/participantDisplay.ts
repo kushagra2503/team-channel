@@ -1,5 +1,10 @@
-import type { Participant } from '@teambridge/core';
+import type { Participant, ParticipantStatus } from '@teambridge/core';
 import { normalizeDisplayName } from '@/lib/avatar-identity';
+
+export type PinnedLocalUser = {
+  displayName: string;
+  status: ParticipantStatus;
+};
 
 export type ActivityTone = 'active' | 'idle' | 'offline';
 
@@ -31,6 +36,10 @@ function hashString(value: string): number {
 
 export function normalizeParticipantName(name: string): string {
   return normalizeDisplayName(name);
+}
+
+export function displayNamesMatch(a: string, b: string): boolean {
+  return normalizeDisplayName(a) === normalizeDisplayName(b);
 }
 
 export function prettyParticipantName(raw: string): string {

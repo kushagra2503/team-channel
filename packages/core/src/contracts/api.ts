@@ -46,6 +46,8 @@ export type ProjectListResponse = {
 
 export type ProjectMemberListResponse = {
   members: ProjectMember[];
+  localUser: LocalUserProfile | null;
+  localAvatarVersion?: string;
 };
 
 export type CreateProjectResponse = {
@@ -60,6 +62,7 @@ export type UpsertProjectMemberResponse = {
 export type LocalUserProfileResponse = {
   profile: LocalUserProfile | null;
   path: string;
+  avatarVersion?: string;
 };
 
 export type StartWorkspaceResponse = {

@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { avatarStorageId } from '@teambridge/core';
 
 export type DitherAlgorithm = 'floyd-steinberg' | 'atkinson' | 'bayer';
 
@@ -19,13 +20,15 @@ export type PfpMeta = {
   size: number;
   color: { r: number; g: number; b: number };
   source: 'pexels' | 'procedural';
+  query?: string;
   sourceUrl?: string;
   imageUrl?: string;
   photographer?: string;
   alt?: string;
 };
 
-const DEFAULT_QUERY = 'flower close up';
+export const DEFAULT_PFP_QUERY = 'flower close up';
+const DEFAULT_QUERY = DEFAULT_PFP_QUERY;
 const DEFAULT_SIZE = 220;
 const DEFAULT_ALGORITHM: DitherAlgorithm = 'bayer';
 const DEFAULT_BAYER_LEVEL = 1;
@@ -299,8 +302,22 @@ export async function generatePfp(options: PfpOptions = {}): Promise<{ png: Buff
 
   return {
     png,
-    meta: { algorithm, size, color, source, sourceUrl, imageUrl, photographer, alt }
+    meta: { algorithm, size, color, source, query, sourceUrl, imageUrl, photographer, alt }
   };
+}
+
+/** Detect avatars cached with a non-flower Pexels query (legacy init bug used display names). */
+export function avatarNeedsRegeneration(meta: PfpMeta, expectedQuery = DEFAULT_QUERY): boolean {
+  if (meta.query) {
+    return meta.query !== expectedQuery;
+  }
+  if (meta.source === 'pexels' && meta.alt) {
+    const alt = meta.alt.toLowerCase();
+    if (/portrait|headshot|eyeglasses|\bbeard\b|arms crossed|\bman with|\bwoman with|\bperson with/.test(alt)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function avatarsDir(repoRoot: string): string {
@@ -350,11 +367,29 @@ async function migrateLegacyPexelsAvatar(
     if (!(await avatarExists(repoRoot, legacyId))) continue;
     const meta = await readAvatarMeta(repoRoot, legacyId);
     if (meta.source !== 'pexels') continue;
+    if (avatarNeedsRegeneration(meta, DEFAULT_QUERY)) continue;
     const png = await readFile(avatarPath(repoRoot, legacyId));
-    await writeAvatar(repoRoot, avatarId, png, meta);
-    return { png, meta };
+    const normalizedMeta = { ...meta, query: meta.query ?? DEFAULT_QUERY };
+    await writeAvatar(repoRoot, avatarId, png, normalizedMeta);
+    return { png, meta: normalizedMeta };
   }
   return null;
+}
+
+export async function getAvatarVersion(repoRoot: string, avatarId: string): Promise<string | undefined> {
+  try {
+    const pngStat = await stat(avatarPath(repoRoot, avatarId));
+    return String(Math.floor(pngStat.mtimeMs));
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getAvatarVersionForDisplayName(
+  repoRoot: string,
+  displayName: string
+): Promise<string | undefined> {
+  return getAvatarVersion(repoRoot, avatarStorageId(displayName));
 }
 
 function canUsePexels(): boolean {
@@ -367,28 +402,32 @@ export async function getOrGenerateAvatar(
   options: PfpOptions = {},
   legacyAvatarIds: string[] = []
 ): Promise<{ png: Buffer; meta: PfpMeta }> {
+  const effectiveQuery = options.query?.trim() || DEFAULT_QUERY;
   const existing = await readFile(avatarPath(repoRoot, avatarId)).then((buffer) => buffer).catch(() => null);
   if (existing) {
     const meta = await readAvatarMeta(repoRoot, avatarId);
-    if (meta.source === 'pexels') {
-      return { png: existing, meta };
-    }
-
-    const migrated = await migrateLegacyPexelsAvatar(repoRoot, avatarId, legacyAvatarIds);
-    if (migrated) return migrated;
-
-    if (meta.source === 'procedural' && canUsePexels()) {
+    if (avatarNeedsRegeneration(meta, effectiveQuery)) {
       await rm(avatarPath(repoRoot, avatarId), { force: true });
       await rm(metaPath(repoRoot, avatarId), { force: true });
-    } else {
+    } else if (meta.source === 'pexels') {
       return { png: existing, meta };
+    } else {
+      const migrated = await migrateLegacyPexelsAvatar(repoRoot, avatarId, legacyAvatarIds);
+      if (migrated) return migrated;
+
+      if (meta.source === 'procedural' && canUsePexels()) {
+        await rm(avatarPath(repoRoot, avatarId), { force: true });
+        await rm(metaPath(repoRoot, avatarId), { force: true });
+      } else {
+        return { png: existing, meta };
+      }
     }
   } else {
     const migrated = await migrateLegacyPexelsAvatar(repoRoot, avatarId, legacyAvatarIds);
     if (migrated) return migrated;
   }
 
-  const { png, meta } = await generatePfp({ seed: avatarId, ...options });
+  const { png, meta } = await generatePfp({ seed: avatarId, query: effectiveQuery, ...options });
   await writeAvatar(repoRoot, avatarId, png, meta);
   return { png, meta };
 }
