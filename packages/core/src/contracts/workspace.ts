@@ -15,7 +15,12 @@ export type Workspace = {
   createdAt: string;
   status: WorkspaceStatus;
   relayMode: RelayMode;
+  /** Project this workspace (track) belongs to. Null for legacy workspaces. */
+  projectId: string | null;
 };
+
+/** Alias for Workspace reflecting the new terminology. */
+export type Track = Workspace;
 
 export type WorkspaceManifest = Workspace & {
   schemaVersion: 1;

@@ -1,6 +1,7 @@
 export type TeambridgeErrorCode =
   | 'WORKSPACE_NOT_FOUND'
   | 'WORKTREE_NOT_FOUND'
+  | 'PROJECT_NOT_FOUND'
   | 'UNAUTHENTICATED'
   | 'FORBIDDEN'
   | 'CONFLICT'

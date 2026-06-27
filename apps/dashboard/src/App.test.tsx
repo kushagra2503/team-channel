@@ -1,11 +1,16 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from './App';
+import { ProjectSelectionPage } from './pages/ProjectSelectionPage';
+import { DashboardPage } from './pages/DashboardPage';
 import { makeVaultContext, makeWorkspace, makeWorkspaceStatus } from './test/factories';
 
 const api = vi.hoisted(() => ({
   getDefaultClientConfig: vi.fn(() => ({})),
   DEFAULT_DAEMON_BASE_URL: 'http://127.0.0.1:9473',
+  listProjects: vi.fn(),
+  getProjectMembers: vi.fn(),
+  getProjectTracks: vi.fn(),
   listWorkspaces: vi.fn(),
   getWorkspaceStatus: vi.fn(),
   getVaultContext: vi.fn()
@@ -13,69 +18,86 @@ const api = vi.hoisted(() => ({
 
 vi.mock('./api/teambridgeClient', () => api);
 
-describe('App', () => {
+function renderAtRoute(path: string, element: React.ReactElement) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/" element={<ProjectSelectionPage />} />
+        <Route path="/projects/:projectId" element={element} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+describe('ProjectSelectionPage', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     sessionStorage.clear();
     api.getDefaultClientConfig.mockReturnValue({});
   });
 
-  it('loads workspace list, selected workspace status, and vault context', async () => {
-    const workspace = makeWorkspace({ baseCommit: 'abc123' });
-    api.listWorkspaces.mockResolvedValue({ workspaces: [workspace] });
-    api.getWorkspaceStatus.mockResolvedValue(makeWorkspaceStatus({ workspace, lastSeq: 2 }));
-    api.getVaultContext.mockResolvedValue({
-      context: makeVaultContext()
+  it('shows a list of projects fetched from the API', async () => {
+    api.listProjects.mockResolvedValue({
+      projects: [
+        { id: 'proj_1', name: 'Beacon', description: 'Analytics platform', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'proj_2', name: 'Forge', description: 'Dev tooling', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
+      ]
     });
 
-    render(<App />);
+    renderAtRoute('/', <ProjectSelectionPage />);
 
-    expect(await screen.findAllByText('Ronish')).toBeTruthy();
-    expect(screen.queryByText('Online')).toBeNull();
-    expect(screen.getAllByText('decisions.md').length).toBeGreaterThan(0);
-    expect(screen.getByText(/Backend owns invoice state/)).toBeTruthy();
-    expect(api.getWorkspaceStatus).toHaveBeenCalledWith('ws_123', {}, expect.any(AbortSignal));
-    expect(api.getVaultContext).toHaveBeenCalledWith('ws_123', {}, expect.any(AbortSignal));
+    expect(await screen.findByText('Beacon')).toBeTruthy();
+    expect(screen.getByText('Forge')).toBeTruthy();
+    expect(screen.getByText('Analytics platform')).toBeTruthy();
   });
 
-  it('shows daemon connection errors instead of a blank screen', async () => {
-    api.listWorkspaces.mockRejectedValue(new Error('Unable to reach local Teambridge daemon.'));
+  it('shows an error message when the API is unreachable', async () => {
+    api.listProjects.mockRejectedValue(new Error('Unable to reach local Teambridge daemon.'));
 
-    render(<App />);
+    renderAtRoute('/', <ProjectSelectionPage />);
 
     expect(await screen.findByText('Unable to reach local Teambridge daemon.')).toBeTruthy();
   });
 
-  it('shows workspace detail and vault errors independently', async () => {
-    const workspace = makeWorkspace();
-    api.listWorkspaces.mockResolvedValue({ workspaces: [workspace] });
-    api.getWorkspaceStatus.mockRejectedValue(new Error('Workspace status failed.'));
-    api.getVaultContext.mockRejectedValue(new Error('Vault context failed.'));
+  it('shows empty state when no projects exist', async () => {
+    api.listProjects.mockResolvedValue({ projects: [] });
 
-    render(<App />);
+    renderAtRoute('/', <ProjectSelectionPage />);
 
-    expect(await screen.findByText('Workspace status failed.')).toBeTruthy();
-    expect(screen.getByText('Vault context failed.')).toBeTruthy();
+    expect(await screen.findByText(/No projects found/)).toBeTruthy();
+  });
+});
+
+describe('DashboardPage', () => {
+  const projectId = 'proj_beacon';
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    sessionStorage.clear();
+    api.getDefaultClientConfig.mockReturnValue({});
+    // Prevent unhandled rejection from listProjects call inside DashboardPage
+    api.listProjects.mockResolvedValue({ projects: [] });
   });
 
-  it('clears selected workspace when refresh removes it', async () => {
-    const workspace = makeWorkspace();
-    api.listWorkspaces
-      .mockResolvedValueOnce({ workspaces: [workspace] })
-      .mockResolvedValueOnce({ workspaces: [] });
-    api.getWorkspaceStatus.mockResolvedValue(makeWorkspaceStatus({ workspace }));
-    api.getVaultContext.mockResolvedValue({
-      context: makeVaultContext()
-    });
+  it('loads tracks and renders vault content for the selected track', async () => {
+    const track = makeWorkspace({ id: 'ws_track1', sessionName: 'data-ingestion', projectId });
+    api.getProjectTracks.mockResolvedValue({ tracks: [track] });
+    api.getProjectMembers.mockResolvedValue({ members: [] });
+    api.getWorkspaceStatus.mockResolvedValue(makeWorkspaceStatus({ workspace: track, lastSeq: 2 }));
+    api.getVaultContext.mockResolvedValue({ context: makeVaultContext() });
 
-    const { rerender } = render(<App />);
+    renderAtRoute(`/projects/${projectId}`, <DashboardPage />);
 
-    expect(await screen.findAllByText('Ronish')).toBeTruthy();
-    // Re-mount to simulate a follow-up refresh that returns an empty workspace list.
-    rerender(<App key="second" />);
+    expect(await screen.findByText(/Backend owns invoice state/)).toBeTruthy();
+    expect(api.getWorkspaceStatus).toHaveBeenCalledWith('ws_track1', {}, expect.any(AbortSignal));
+  });
 
-    await waitFor(() => {
-      expect(screen.queryAllByText('Ronish')).toHaveLength(0);
-    });
+  it('shows track loading errors', async () => {
+    api.getProjectTracks.mockRejectedValue(new Error('Unable to load tracks.'));
+    api.getProjectMembers.mockResolvedValue({ members: [] });
+
+    renderAtRoute(`/projects/${projectId}`, <DashboardPage />);
+
+    expect(await screen.findByText('Unable to load tracks.')).toBeTruthy();
   });
 });

@@ -1,5 +1,8 @@
 import type {
   ApiResult,
+  ProjectListResponse,
+  ProjectMemberListResponse,
+  TrackListResponse,
   VaultContextResponse,
   WorkspaceListResponse,
   WorkspaceStatusResponse
@@ -65,6 +68,26 @@ export function getDefaultClientConfig(): TeambridgeClientConfig {
 
 export function listWorkspaces(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<WorkspaceListResponse> {
   return getJson<WorkspaceListResponse>('/workspaces', config, undefined, signal);
+}
+
+export function listProjects(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<ProjectListResponse> {
+  return getJson<ProjectListResponse>('/projects', config, undefined, signal);
+}
+
+export function getProjectMembers(
+  projectId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ProjectMemberListResponse> {
+  return getJson<ProjectMemberListResponse>(`/projects/${encodeURIComponent(projectId)}/members`, config, undefined, signal);
+}
+
+export function getProjectTracks(
+  projectId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<TrackListResponse> {
+  return getJson<TrackListResponse>(`/projects/${encodeURIComponent(projectId)}/tracks`, config, undefined, signal);
 }
 
 export function getWorkspaceStatus(

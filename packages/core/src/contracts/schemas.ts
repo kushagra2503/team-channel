@@ -39,7 +39,8 @@ export const WorkspaceSchema = z.object({
   createdBy: z.string().min(1),
   createdAt: z.string().datetime(),
   status: WorkspaceStatusSchema,
-  relayMode: RelayModeSchema
+  relayMode: RelayModeSchema,
+  projectId: z.string().min(1).nullable()
 });
 
 export const WorkspaceManifestSchema = WorkspaceSchema.extend({
@@ -123,6 +124,7 @@ export const VaultContextSchema = z.object({
 export const TeambridgeErrorCodeSchema = z.enum([
   'WORKSPACE_NOT_FOUND',
   'WORKTREE_NOT_FOUND',
+  'PROJECT_NOT_FOUND',
   'UNAUTHENTICATED',
   'FORBIDDEN',
   'CONFLICT',

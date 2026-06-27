@@ -1,25 +1,30 @@
-import type { VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, ProjectMember, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
 
 type CacheShape = {
   workspaces: Workspace[];
   selectedWorkspaceId?: string;
   status: Record<string, WorkspaceStatusResponse>;
   vault: Record<string, VaultContext>;
+  projects: Project[];
+  projectMembers: Record<string, ProjectMember[]>;
+  lastProjectId?: string;
 };
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 function cacheKey(daemonUrl: string): string {
   return `tb_cache_v${CACHE_VERSION}_${daemonUrl}`;
 }
 
+const EMPTY: CacheShape = { workspaces: [], status: {}, vault: {}, projects: [], projectMembers: {} };
+
 function readCache(daemonUrl: string): CacheShape {
   try {
     const raw = sessionStorage.getItem(cacheKey(daemonUrl));
-    if (!raw) return { workspaces: [], status: {}, vault: {} };
+    if (!raw) return { ...EMPTY };
     return JSON.parse(raw) as CacheShape;
   } catch {
-    return { workspaces: [], status: {}, vault: {} };
+    return { ...EMPTY };
   }
 }
 
@@ -41,6 +46,8 @@ export function createCache(daemonUrl: string) {
   return {
     get workspaces() { return shape.workspaces; },
     get selectedWorkspaceId() { return shape.selectedWorkspaceId; },
+    get projects() { return shape.projects; },
+    get lastProjectId() { return shape.lastProjectId; },
 
     setWorkspaces(workspaces: Workspace[]) {
       shape = { ...shape, workspaces };
@@ -49,6 +56,25 @@ export function createCache(daemonUrl: string) {
 
     setSelectedWorkspaceId(id: string | undefined) {
       shape = { ...shape, selectedWorkspaceId: id };
+      flush();
+    },
+
+    setProjects(projects: Project[]) {
+      shape = { ...shape, projects };
+      flush();
+    },
+
+    setLastProjectId(id: string) {
+      shape = { ...shape, lastProjectId: id };
+      flush();
+    },
+
+    getProjectMembers(projectId: string): ProjectMember[] | undefined {
+      return shape.projectMembers[projectId];
+    },
+
+    setProjectMembers(projectId: string, members: ProjectMember[]) {
+      shape = { ...shape, projectMembers: { ...shape.projectMembers, [projectId]: members } };
       flush();
     },
 

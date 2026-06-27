@@ -15,6 +15,7 @@ export function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
     createdAt,
     status: 'active',
     relayMode: 'local',
+    projectId: null,
     ...overrides
   };
 }

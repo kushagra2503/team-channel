@@ -1,5 +1,5 @@
 import { IconSettings, IconUsers } from '@tabler/icons-react';
-import type { VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
 
 import {
   Breadcrumb,
@@ -15,6 +15,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { getWorkspaceDisplayName } from './workspaceDisplay';
 
 export type SiteHeaderProps = {
+  project?: Project;
   workspace?: Workspace;
   status?: WorkspaceStatusResponse;
   context?: VaultContext;
@@ -24,6 +25,7 @@ export type SiteHeaderProps = {
 };
 
 export function SiteHeader({
+  project,
   workspace,
   status,
   context,
@@ -39,11 +41,27 @@ export function SiteHeader({
 
         <Breadcrumb className="min-w-0">
           <BreadcrumbList className="text-sm">
-            <BreadcrumbItem className="hidden sm:block">Workspace</BreadcrumbItem>
-            <BreadcrumbSeparator className="hidden sm:block" />
-            <BreadcrumbItem className="min-w-0">
-              <BreadcrumbPage className="truncate font-medium">{getWorkspaceDisplayName(workspace)}</BreadcrumbPage>
-            </BreadcrumbItem>
+            {project ? (
+              <>
+                <BreadcrumbItem className="hidden sm:block">
+                  <BreadcrumbPage className="font-medium">{project.name}</BreadcrumbPage>
+                </BreadcrumbItem>
+                {workspace ? (
+                  <>
+                    <BreadcrumbSeparator className="hidden sm:block" />
+                    <BreadcrumbItem className="min-w-0">
+                      <BreadcrumbPage className="truncate text-muted-foreground">
+                        {getWorkspaceDisplayName(workspace)}
+                      </BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <BreadcrumbItem className="min-w-0">
+                <BreadcrumbPage className="truncate font-medium">{getWorkspaceDisplayName(workspace)}</BreadcrumbPage>
+              </BreadcrumbItem>
+            )}
           </BreadcrumbList>
         </Breadcrumb>
 
@@ -61,14 +79,6 @@ export function SiteHeader({
               <Badge variant="outline" className="text-xs">note #{context.lastSeq ?? 0}</Badge>
             ) : null}
           </div>
-
-          {/* Session id chip removed from the top-right for now.
-          {workspace ? (
-            <span className="hidden max-w-40 truncate font-mono text-xs text-muted-foreground lg:block">
-              {getWorkspaceSessionId(workspace)}
-            </span>
-          ) : null}
-          */}
 
           <Button
             type="button"

@@ -4,6 +4,7 @@ import type { WorkspaceEvent } from './events';
 import type { WorktreeInfo } from './git';
 import type { InboxMessage } from './inbox';
 import type { Participant } from './participant';
+import type { Project, ProjectMember } from './project';
 import type { VaultContext, VaultFile, VaultSearchResult } from './vault';
 import type { Workspace, WorkspaceManifest } from './workspace';
 
@@ -32,6 +33,18 @@ export function apiFail(code: TeambridgeError['code'], message: string, details?
 
 export type WorkspaceListResponse = {
   workspaces: Workspace[];
+};
+
+export type TrackListResponse = {
+  tracks: Workspace[];
+};
+
+export type ProjectListResponse = {
+  projects: Project[];
+};
+
+export type ProjectMemberListResponse = {
+  members: ProjectMember[];
 };
 
 export type StartWorkspaceResponse = {

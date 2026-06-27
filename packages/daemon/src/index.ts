@@ -12,12 +12,17 @@ import type {
   JoinWorkspaceRequest,
   JoinWorkspaceResponse,
   Participant,
+  Project,
+  ProjectListResponse,
+  ProjectMember,
+  ProjectMemberListResponse,
   PublishEventPayload,
   PublishEventRequest,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   TeambridgeConfig,
   TeambridgeErrorCode,
+  TrackListResponse,
   VaultContextResponse,
   VaultReadResponse,
   Workspace,
@@ -238,10 +243,47 @@ function initializeStateDb(repoRoot: string): string {
   mkdirSync(teambridgeDir, { recursive: true });
 
   const dbPath = join(teambridgeDir, 'state.sqlite');
+
+  // Migration: rename legacy workspaces table → tracks
+  const existingTables = querySql<{ name: string }>(
+    dbPath,
+    "select name from sqlite_master where type='table' and name in ('workspaces', 'tracks')"
+  );
+  const hasWorkspaces = existingTables.some((t) => t.name === 'workspaces');
+  const hasTracks = existingTables.some((t) => t.name === 'tracks');
+
+  if (hasWorkspaces && !hasTracks) {
+    runSql(dbPath, 'alter table workspaces rename to tracks;');
+  }
+
+  if (hasTracks || hasWorkspaces) {
+    const cols = querySql<{ name: string }>(dbPath, "pragma table_info('tracks')");
+    if (!cols.some((c) => c.name === 'project_id')) {
+      runSql(dbPath, 'alter table tracks add column project_id text;');
+    }
+  }
+
   runSql(dbPath, `
     pragma journal_mode = wal;
 
-    create table if not exists workspaces (
+    create table if not exists projects (
+      id text primary key,
+      name text not null unique,
+      description text not null default '',
+      status text not null check (status in ('active', 'archived')) default 'active',
+      created_at text not null
+    );
+
+    create table if not exists project_members (
+      id text primary key,
+      project_id text not null references projects(id),
+      display_name text not null,
+      status text not null check (status in ('active', 'idle', 'offline')) default 'offline',
+      last_seen_at text not null,
+      unique(project_id, display_name)
+    );
+
+    create table if not exists tracks (
       id text primary key,
       session_name text not null unique,
       repo_remote text,
@@ -252,12 +294,13 @@ function initializeStateDb(repoRoot: string): string {
       created_by text not null,
       created_at text not null,
       status text not null check (status in ('active', 'archived')),
-      relay_mode text not null check (relay_mode = 'local')
+      relay_mode text not null check (relay_mode = 'local'),
+      project_id text references projects(id)
     );
 
     create table if not exists participants (
       id text primary key,
-      workspace_id text not null references workspaces(id),
+      workspace_id text not null references tracks(id),
       display_name text not null,
       branch text not null,
       agent text check (agent in ('claude-code', 'cursor', 'codex', 'ghost', 'unknown') or agent is null),
@@ -268,7 +311,7 @@ function initializeStateDb(repoRoot: string): string {
     );
 
     create table if not exists worktrees (
-      workspace_id text not null references workspaces(id),
+      workspace_id text not null references tracks(id),
       user_id text not null references participants(id),
       path text not null,
       branch text not null,
@@ -281,7 +324,7 @@ function initializeStateDb(repoRoot: string): string {
     );
 
     create table if not exists local_sequences (
-      workspace_id text primary key references workspaces(id),
+      workspace_id text primary key references tracks(id),
       last_seq integer not null default 0
     );
   `);
@@ -301,7 +344,28 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     createdBy: String(row.created_by),
     createdAt: String(row.created_at),
     status: row.status === 'archived' ? 'archived' : 'active',
-    relayMode: 'local'
+    relayMode: 'local',
+    projectId: row.project_id ? String(row.project_id) : null
+  };
+}
+
+function rowToProject(row: Record<string, unknown>): Project {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    description: String(row.description ?? ''),
+    status: row.status === 'archived' ? 'archived' : 'active',
+    createdAt: String(row.created_at)
+  };
+}
+
+function rowToProjectMember(row: Record<string, unknown>): ProjectMember {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    displayName: String(row.display_name),
+    status: (row.status === 'idle' || row.status === 'offline') ? row.status : 'active',
+    lastSeenAt: String(row.last_seen_at)
   };
 }
 
@@ -452,7 +516,8 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
     createdBy: participantId,
     createdAt: now,
     status: 'active',
-    relayMode: 'local'
+    relayMode: 'local',
+    projectId: null
   };
 
   const participant: Participant = {
@@ -477,9 +542,9 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
   runSql(dbPath, `
     begin;
 
-    insert into workspaces (
+    insert into tracks (
       id, session_name, repo_remote, repo_root_hash, base_ref, base_commit,
-      scope_json, created_by, created_at, status, relay_mode
+      scope_json, created_by, created_at, status, relay_mode, project_id
     ) values (
       ${sqlValue(workspace.id)},
       ${sqlValue(workspace.sessionName)},
@@ -491,7 +556,8 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
       ${sqlValue(workspace.createdBy)},
       ${sqlValue(workspace.createdAt)},
       ${sqlValue(workspace.status)},
-      ${sqlValue(workspace.relayMode)}
+      ${sqlValue(workspace.relayMode)},
+      ${sqlValue(workspace.projectId)}
     );
 
     insert into participants (
@@ -548,7 +614,40 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
 
 function listWorkspaces(repoRoot: string): Workspace[] {
   const dbPath = initializeStateDb(repoRoot);
-  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from workspaces order by created_at desc');
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from tracks order by created_at desc');
+  return rows.map(rowToWorkspace);
+}
+
+function listProjects(repoRoot: string): Project[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from projects order by created_at desc');
+  return rows.map(rowToProject);
+}
+
+function getProjectById(repoRoot: string, projectId: string): Project | undefined {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from projects where id = ${sqlValue(projectId)} limit 1`
+  );
+  return row ? rowToProject(row) : undefined;
+}
+
+function listProjectMembers(repoRoot: string, projectId: string): ProjectMember[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from project_members where project_id = ${sqlValue(projectId)} order by display_name asc`
+  );
+  return rows.map(rowToProjectMember);
+}
+
+function listTracksByProject(repoRoot: string, projectId: string): Workspace[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from tracks where project_id = ${sqlValue(projectId)} order by created_at desc`
+  );
   return rows.map(rowToWorkspace);
 }
 
@@ -565,7 +664,7 @@ function getWorkspaceByIdentifier(repoRoot: string, identifier: string): Workspa
   const dbPath = initializeStateDb(repoRoot);
   const [row] = querySql<Record<string, unknown>>(
     dbPath,
-    `select * from workspaces where id = ${sqlValue(identifier)} or session_name = ${sqlValue(identifier)} limit 1`
+    `select * from tracks where id = ${sqlValue(identifier)} or session_name = ${sqlValue(identifier)} limit 1`
   );
 
   return row ? rowToWorkspace(row) : undefined;
@@ -761,6 +860,44 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && url.pathname === '/workspaces') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     sendJson<WorkspaceListResponse>(response, 200, ok({ workspaces: listWorkspaces(repoRoot) }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/tracks') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    sendJson<TrackListResponse>(response, 200, ok({ tracks: listWorkspaces(repoRoot) }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/projects') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    sendJson<ProjectListResponse>(response, 200, ok({ projects: listProjects(repoRoot) }));
+    return;
+  }
+
+  const projectMembersMatch = url.pathname.match(/^\/projects\/([^/]+)\/members$/);
+  if (method === 'GET' && projectMembersMatch) {
+    const projectId = decodeURIComponent(projectMembersMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+      return;
+    }
+    sendJson<ProjectMemberListResponse>(response, 200, ok({ members: listProjectMembers(repoRoot, projectId) }));
+    return;
+  }
+
+  const projectTracksMatch = url.pathname.match(/^\/projects\/([^/]+)\/tracks$/);
+  if (method === 'GET' && projectTracksMatch) {
+    const projectId = decodeURIComponent(projectTracksMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+      return;
+    }
+    sendJson<TrackListResponse>(response, 200, ok({ tracks: listTracksByProject(repoRoot, projectId) }));
     return;
   }
 
