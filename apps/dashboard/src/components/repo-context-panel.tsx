@@ -73,7 +73,7 @@ function ContextRow({
 
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noreferrer" className={className} title={title ?? label}>
+      <a href={href} target="_blank" rel="noreferrer" className={className} title={title}>
         {content}
       </a>
     );
@@ -81,14 +81,14 @@ function ContextRow({
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={cn(className, 'text-left')} title={title ?? label}>
+      <button type="button" onClick={onClick} className={cn(className, 'text-left')} title={title}>
         {content}
       </button>
     );
   }
 
   return (
-    <div className={className} title={title ?? label}>
+    <div className={className} title={title}>
       {content}
     </div>
   );

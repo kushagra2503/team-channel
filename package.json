@@ -5,10 +5,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "dashboard": "pnpm --filter @teambridge/dashboard dev --host 127.0.0.1",
+    "dashboard:preview": "pnpm --filter @teambridge/dashboard build && pnpm --filter @teambridge/dashboard exec vite preview --host 127.0.0.1 --port 5173",
     "daemon": "pnpm --filter @teambridge/daemon start",
-    "cli": "pnpm --filter @teambridge/cli start",
+    "cli": "pnpm --filter @teambridge/cli start --",
+    "teambridge": "node packages/cli/dist/index.js",
     "seed": "node scripts/seed-demo.mjs",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "test:integration": "pnpm build && node --test --test-concurrency=1 tests/integration/*.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
