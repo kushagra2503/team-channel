@@ -30,7 +30,7 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Ronish')).toBeTruthy();
+    expect(await screen.findAllByText('Ronish')).toBeTruthy();
     expect(screen.queryByText('Online')).toBeNull();
     expect(screen.getAllByText('decisions.md').length).toBeGreaterThan(0);
     expect(screen.getByText(/Backend owns invoice state/)).toBeTruthy();
@@ -70,12 +70,12 @@ describe('App', () => {
 
     const { rerender } = render(<App />);
 
-    expect(await screen.findByText('Ronish')).toBeTruthy();
+    expect(await screen.findAllByText('Ronish')).toBeTruthy();
     // Re-mount to simulate a follow-up refresh that returns an empty workspace list.
     rerender(<App key="second" />);
 
     await waitFor(() => {
-      expect(screen.queryByText('Ronish')).toBeNull();
+      expect(screen.queryAllByText('Ronish')).toHaveLength(0);
     });
   });
 });

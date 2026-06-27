@@ -1,4 +1,3 @@
-import { motion } from 'motion/react';
 import { IconSettings, IconUsers } from '@tabler/icons-react';
 import type { VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
 
@@ -51,36 +50,15 @@ export function SiteHeader({
         <div className="ml-auto flex items-center gap-2">
           <div className="hidden items-center gap-2 sm:flex">
             {workspace ? (
-              <motion.span
-                key={workspace.id + '-ref'}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-              >
-                <Badge variant="secondary" className="text-xs">{workspace.baseRef}</Badge>
-              </motion.span>
+              <Badge variant="secondary" className="text-xs">{workspace.baseRef}</Badge>
             ) : null}
             {status ? (
-              <motion.span
-                key={status.workspace.id + '-teammates'}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1], delay: 0.04 }}
-              >
-                <Badge variant="outline" className="text-xs">
-                  {status.participants.length} teammate{status.participants.length === 1 ? '' : 's'}
-                </Badge>
-              </motion.span>
+              <Badge variant="outline" className="text-xs">
+                {status.participants.length} teammate{status.participants.length === 1 ? '' : 's'}
+              </Badge>
             ) : null}
             {context ? (
-              <motion.span
-                key={'note-' + context.lastSeq}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1], delay: 0.08 }}
-              >
-                <Badge variant="outline" className="text-xs">note #{context.lastSeq ?? 0}</Badge>
-              </motion.span>
+              <Badge variant="outline" className="text-xs">note #{context.lastSeq ?? 0}</Badge>
             ) : null}
           </div>
 

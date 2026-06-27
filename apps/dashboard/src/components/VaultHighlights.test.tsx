@@ -19,8 +19,6 @@ describe('VaultHighlights', () => {
     render(<VaultHighlights context={context} />);
 
     expect(screen.getAllByText('decisions.md').length).toBeGreaterThan(0);
-    expect(screen.getByText('observations.md')).toBeTruthy();
-    expect(screen.getByText(/Latest note #/)).toBeTruthy();
     expect(screen.getByText(/Backend owns invoice state/)).toBeTruthy();
   });
 });

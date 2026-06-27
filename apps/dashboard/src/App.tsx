@@ -146,8 +146,16 @@ export function App() {
               onRefreshWorkspaces={loadWorkspaces}
             />
             <SidebarInset>
-              <div className="flex flex-1 flex-col gap-5 p-4 select-text sm:p-6">
-                <VaultHighlights context={vaultContext} error={vaultError} />
+              <div className="flex flex-1 flex-col select-text">
+                <VaultHighlights
+                  context={vaultContext}
+                  error={vaultError}
+                  participants={workspaceStatus?.participants}
+                  workspaceId={workspaceStatus?.workspace.id}
+                  daemonBaseUrl={clientConfig.daemonBaseUrl}
+                  repoRoot={clientConfig.repoRoot}
+                  avatarRev={avatarRev}
+                />
               </div>
             </SidebarInset>
             <TeamSidebar
