@@ -18,10 +18,12 @@ pnpm dashboard       # Vite dev server (default host 127.0.0.1)
 **Your own data (CLI, same backend the dashboard reads):**
 
 ```bash
-pnpm cli init
-pnpm cli project create --name "My App" --description "Optional"
-pnpm cli track start my-track --project <project-id-from-create-output>
+pnpm teambridge init
+pnpm teambridge project create --name "My App" --description "Optional"
+pnpm teambridge track start my-track
 ```
+
+`project create` sets your default project so `track start` links the track to the correct project sidebar without passing `--project`.
 
 Then open the dashboard — your project, track name, roster avatar, and vault shell appear without seed.
 
@@ -48,12 +50,18 @@ The daemon resolves `repoRoot` to the git toplevel. Optional `.env` at repo root
 
 ## Layout (`/projects/:projectId`)
 
+Two identity layers: **project team** (roster) vs **track participants** (who is on this track / branch).
+
 | Region | Content |
 |--------|---------|
 | Top bar | Project name, breadcrumbs |
-| Left sidebar | Tracks in this project |
+| Left sidebar (top) | Repo context — local path (opens in Finder), branch, remote, last push (links to commit when known) |
+| Left sidebar (middle) | Tracks in this project |
+| Left sidebar (footer) | Track participants — agents on the selected track with branch names |
 | Center | Vault highlights — sections from vault context, per-row color/assign/copy |
-| Right sidebar | Project members (team roster), collapsible |
+| Right sidebar | Project team roster, collapsible |
+
+Vault assign chips use **first name only**; track participant rows show full name + branch.
 
 ## Vault highlights
 
@@ -72,4 +80,5 @@ Browser cache key: `tb_cache_v2_${daemonUrl}` (tracks, status, vault context). H
 
 ```bash
 pnpm --filter @teambridge/dashboard test
+pnpm test:integration   # repo root — CLI init → project → track against live daemon
 ```

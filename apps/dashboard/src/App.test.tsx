@@ -15,7 +15,8 @@ const api = vi.hoisted(() => ({
   getProjectTracks: vi.fn(),
   listWorkspaces: vi.fn(),
   getWorkspaceStatus: vi.fn(),
-  getVaultContext: vi.fn()
+  getVaultContext: vi.fn(),
+  getRepoContext: vi.fn()
 }));
 
 vi.mock('./api/teambridgeClient', () => api);
@@ -83,6 +84,22 @@ describe('DashboardPage', () => {
     vi.resetAllMocks();
     sessionStorage.clear();
     api.getDefaultClientConfig.mockReturnValue({});
+    api.getRepoContext.mockResolvedValue({
+      context: {
+        remoteUrl: null,
+        repoOwner: null,
+        repoName: null,
+        repoLabel: null,
+        repoWebUrl: null,
+        branch: 'main',
+        branchWebUrl: null,
+        localPath: '/tmp/repo',
+        lastCommitAt: null,
+        lastPushAt: null,
+        lastPushCommitSha: null,
+        lastPushCommitWebUrl: null
+      }
+    });
     // Prevent unhandled rejection from listProjects call inside DashboardPage
     api.listProjects.mockResolvedValue({ projects: [] });
   });

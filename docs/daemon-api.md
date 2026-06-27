@@ -20,7 +20,12 @@ POST bodies may include `repoRoot` when the route accepts a JSON body.
 | GET | `/config?repoRoot=` | Read repo config |
 | POST | `/config/init` | Create `.teambridge/config.json` |
 
-| POST | `/config/init` | Create `.teambridge/config.json` |
+## Repo context (dashboard sidebar)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/repo/context?repoRoot=&workspaceId=` | Git remote, branch, local path, last push (+ commit web URL when available). Optional `workspaceId` scopes branch to a track worktree. |
+| POST | `/repo/open-path` | Open a path inside the repo on the host (e.g. Finder on macOS). Body: `{ "repoRoot", "path" }`. |
 
 ## Local user profile (CLI + dashboard)
 

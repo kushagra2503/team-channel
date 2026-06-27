@@ -8,13 +8,12 @@ import {
   prettyParticipantName
 } from './participantDisplay';
 
-export type WorkspaceDetailsProps = {
+export type TrackParticipantsPanelProps = {
   status?: WorkspaceStatusResponse;
   error?: string;
   daemonBaseUrl?: string;
   repoRoot?: string;
   avatarRev?: number;
-  onAvatarRev?: () => void;
 };
 
 const PRESENCE_DOT: Record<'active' | 'idle' | 'offline', string> = {
@@ -25,7 +24,16 @@ const PRESENCE_DOT: Record<'active' | 'idle' | 'offline', string> = {
 
 const ENTER = { opacity: 1, y: 0 } as const;
 const HIDE = { opacity: 0, y: 5 } as const;
-function MemberRow({ participant, avatarUrl, index }: { participant: Participant; avatarUrl?: string; index: number }) {
+
+function MemberRow({
+  participant,
+  avatarUrl,
+  index
+}: {
+  participant: Participant;
+  avatarUrl?: string;
+  index: number;
+}) {
   const activity = participantActivity(participant);
   const showDot = activity.tone === 'active' || activity.tone === 'idle';
 
@@ -49,23 +57,27 @@ function MemberRow({ participant, avatarUrl, index }: { participant: Participant
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{prettyParticipantName(participant.displayName)}</span>
-        <span className="block truncate text-xs text-muted-foreground">{activity.label}</span>
+        <span className="block truncate text-sm font-medium">
+          {prettyParticipantName(participant.displayName)}
+        </span>
+        <span className="block truncate font-mono text-xs text-muted-foreground">
+          {participant.branch}
+        </span>
       </div>
     </motion.div>
   );
 }
 
-export function WorkspaceDetails({
+export function TrackParticipantsPanel({
   status,
   error,
   daemonBaseUrl,
   repoRoot,
   avatarRev
-}: WorkspaceDetailsProps) {
+}: TrackParticipantsPanelProps) {
   if (error) {
     return (
-      <section aria-label="Workspace details" className="p-3">
+      <section aria-label="Track participants" className="p-3">
         <p role="alert" className="text-xs text-destructive">{error}</p>
       </section>
     );
@@ -81,22 +93,32 @@ export function WorkspaceDetails({
   const urlFor = (participant: Participant) =>
     avatarUrlForDisplayName(participant.displayName, config, avatarRev);
 
-  // Online group starts at index 0; offline group starts after
   const offlineStartIndex = online.length + 1;
 
   return (
-    <section aria-label="Workspace details" className="flex flex-col gap-1 py-2">
+    <section aria-label="Track participants" className="flex flex-col gap-1 border-t border-sidebar-border py-2">
       <SidebarGroup className="py-1">
         <SidebarGroupLabel className="tabular-nums">
-          {total} {total === 1 ? 'Member' : 'Members'}
+          {total === 0
+            ? 'On this track'
+            : `${total} on this track`}
         </SidebarGroupLabel>
       </SidebarGroup>
+
+      {total === 0 ? (
+        <p className="px-3 text-xs text-muted-foreground">No participants yet.</p>
+      ) : null}
 
       {online.length > 0 ? (
         <SidebarGroup className="py-1">
           <div className="flex flex-col">
             {online.map((participant, i) => (
-              <MemberRow key={participant.id} participant={participant} avatarUrl={urlFor(participant)} index={i} />
+              <MemberRow
+                key={participant.id}
+                participant={participant}
+                avatarUrl={urlFor(participant)}
+                index={i}
+              />
             ))}
           </div>
         </SidebarGroup>
@@ -107,7 +129,12 @@ export function WorkspaceDetails({
           <SidebarGroupLabel>Offline</SidebarGroupLabel>
           <div className="flex flex-col">
             {offline.map((participant, i) => (
-              <MemberRow key={participant.id} participant={participant} avatarUrl={urlFor(participant)} index={offlineStartIndex + i} />
+              <MemberRow
+                key={participant.id}
+                participant={participant}
+                avatarUrl={urlFor(participant)}
+                index={offlineStartIndex + i}
+              />
             ))}
           </div>
         </SidebarGroup>

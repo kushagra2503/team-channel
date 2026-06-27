@@ -87,7 +87,7 @@ export function ProjectMemberSidebar({
 }: ProjectMemberSidebarProps) {
   if (error) {
     return (
-      <section aria-label="Team members" className="p-3">
+      <section aria-label="Project team" className="p-3">
         <p role="alert" className="text-xs text-destructive">{error}</p>
       </section>
     );
@@ -100,10 +100,10 @@ export function ProjectMemberSidebar({
   const offlineStartIndex = online.length + 1;
 
   return (
-    <section aria-label="Team members" className="flex flex-col py-2">
+    <section aria-label="Project team" className="flex flex-col py-2">
       <SidebarGroup className="py-1">
         <SidebarGroupLabel className="tabular-nums">
-          {total} {total === 1 ? 'Member' : 'Members'}
+          Project team · {total}
         </SidebarGroupLabel>
         {online.length > 0 ? (
           <div className="flex flex-col">

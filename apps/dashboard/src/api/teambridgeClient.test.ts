@@ -55,9 +55,12 @@ describe('teambridgeClient', () => {
   });
 
   it('falls back to env and default daemon URL', () => {
+    vi.stubEnv('VITE_TEAMBRIDGE_REPO_ROOT', '');
+    window.history.pushState({}, '', '/');
+
     expect(getDefaultClientConfig()).toEqual({
       daemonBaseUrl: 'http://127.0.0.1:9473',
-      repoRoot: undefined
+      repoRoot: ''
     });
 
     vi.stubEnv('VITE_TEAMBRIDGE_REPO_ROOT', '/env/repo');

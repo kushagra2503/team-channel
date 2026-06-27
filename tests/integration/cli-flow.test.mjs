@@ -29,6 +29,17 @@ test('CLI init → project create → track start → status against a live daem
   assert.equal(init.exitCode, 0, init.stderr || init.stdout);
   assert.match(init.stdout, /Initialized Teambridge for Ada Lovelace/);
 
+  const profileAfterInit = await apiGet('/user/profile', { repoRoot, baseUrl: daemon.baseUrl });
+  assert.equal(profileAfterInit.response.status, 200);
+  assert.equal(profileAfterInit.body.data.profile.displayName, 'Ada Lovelace');
+  assert.equal(profileAfterInit.body.data.profile.firstName, 'Ada');
+
+  const avatarUrl = new URL('/avatars/by-name/ada-lovelace', daemon.baseUrl);
+  avatarUrl.searchParams.set('repoRoot', repoRoot);
+  const avatarResponse = await fetch(avatarUrl);
+  assert.equal(avatarResponse.status, 200);
+  assert.match(avatarResponse.headers.get('content-type') ?? '', /^image\//);
+
   const initAgain = runCli(['init', '--first-name', 'Ignored', '--last-name', 'User'], {
     repoRoot,
     baseUrl: daemon.baseUrl
@@ -43,6 +54,9 @@ test('CLI init → project create → track start → status against a live daem
   assert.equal(create.exitCode, 0, create.stderr || create.stdout);
   assert.match(create.stdout, /Created project "Integration App"/);
   const projectId = parseCreatedProjectId(create.stdout);
+
+  const profileAfterCreate = await apiGet('/user/profile', { repoRoot, baseUrl: daemon.baseUrl });
+  assert.equal(profileAfterCreate.body.data.profile.defaultProjectId, projectId);
 
   const list = runCli(['project', 'list'], { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(list.exitCode, 0, list.stderr || list.stdout);
@@ -60,7 +74,17 @@ test('CLI init → project create → track start → status against a live daem
   assert.equal(status.exitCode, 0, status.stderr || status.stdout);
   assert.match(status.stdout, /You: Ada Lovelace/);
   assert.match(status.stdout, /Integration App \(proj_/);
+  assert.match(status.stdout, new RegExp(`Default project: ${projectId}`));
   assert.match(status.stdout, /billing-refactor → proj_/);
+
+  const projectTracks = await apiGet(`/projects/${projectId}/tracks`, {
+    repoRoot,
+    baseUrl: daemon.baseUrl
+  });
+  assert.equal(projectTracks.response.status, 200);
+  assert.equal(projectTracks.body.data.tracks.length, 1);
+  assert.equal(projectTracks.body.data.tracks[0].id, workspaceId);
+  assert.equal(projectTracks.body.data.tracks[0].projectId, projectId);
 
   const repoContext = await apiGet('/repo/context', { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(repoContext.response.status, 200);

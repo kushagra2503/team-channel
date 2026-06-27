@@ -10,8 +10,16 @@ Requires Node.js 22+ and pnpm.
 pnpm install
 pnpm build
 pnpm daemon          # API on http://127.0.0.1:9473
-pnpm seed            # Demo projects: Beacon, Silo, Forge
+pnpm seed            # Optional demo projects: Beacon, Silo, Forge
 pnpm dashboard       # UI on http://127.0.0.1:5173 (see Vite output)
+```
+
+**Your own data (no seed):**
+
+```bash
+pnpm teambridge init
+pnpm teambridge project create --name "My App"
+pnpm teambridge track start my-track
 ```
 
 Optional: add `PEXELS_API_KEY` to `.env` at the repo root for real flower profile photos.
@@ -25,9 +33,9 @@ Optional: add `PEXELS_API_KEY` to `.env` at the repo root for real flower profil
 | `packages/vault` | Event → markdown materialization |
 | `packages/mcp` | MCP server (stub / in progress) |
 | `apps/dashboard` | React dashboard (`pnpm dashboard`) |
-| `packages/cli` | Planned — not shipped yet |
+| `packages/cli` | Local CLI (`pnpm teambridge` or `pnpm cli`) |
 
-State and avatars live under `.teambridge/` in the git repo root (`state.sqlite`, `workspaces/`, `avatars/`).
+State and avatars live under `.teambridge/` in the git repo root (`state.sqlite`, `user.json`, `workspaces/`, `avatars/`).
 
 ## Documentation
 
@@ -47,6 +55,7 @@ When you add daemon routes or dashboard behavior, update **CONCEPTS** and **daem
 
 ```bash
 pnpm test
+pnpm test:integration   # CLI + daemon end-to-end (builds first)
 ```
 
 ## Repo name
