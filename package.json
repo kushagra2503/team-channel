@@ -2,6 +2,7 @@
   "name": "teambridge",
   "version": "0.0.0",
   "private": true,
+  "description": "Condominium — shared workspace for teams building with AI agents.",
   "scripts": {
     "build": "pnpm -r build",
     "dashboard": "pnpm --filter @teambridge/dashboard dev --host 127.0.0.1",

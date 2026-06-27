@@ -35,7 +35,7 @@ export function ProjectSelectionPage() {
       })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Unable to reach local Teambridge daemon.');
+          setError(err instanceof Error ? err.message : 'Unable to reach local Condominium daemon.');
         }
       });
 

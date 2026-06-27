@@ -1,1 +1,1 @@
-export const APP_NAME = 'Teambridge';
+export const APP_NAME = 'Condominium';

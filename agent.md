@@ -1,14 +1,14 @@
-# Teambridge Agent Guide
+# Condominium Agent Guide
 
-This repository is for **Teambridge**, a local-first coordination layer for human teams using AI coding agents.
+This repository is **Condominium** — a shared workspace for teams building with AI coding agents.
 
-Teambridge lets multiple developers work on the same coding task with separate branches/worktrees while sharing the same evolving context through a workspace vault, MCP tools, and event sync.
+Condominium lets multiple developers work on the same task with separate branches while sharing context through a vault, dashboard, and (eventually) agent tools.
 
 For team execution details, keep and use `report/team-implementation-plan.md`. This file is the product vision; the report file is the build plan for Nihal, Kushagra, and Ronish.
 
 ## Product Vision
 
-Teambridge is for teams where each developer has their own AI coding agent, but the agents need shared situational awareness.
+Condominium is for teams where each developer has their own AI agent, but everyone needs the same picture of what's going on.
 
 Example (target CLI — **not shipped yet**; today use `pnpm daemon`, `pnpm seed`, and `pnpm dashboard`):
 

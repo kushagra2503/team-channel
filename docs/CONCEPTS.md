@@ -1,6 +1,6 @@
-# Teambridge Concepts
+# Condominium Concepts
 
-Canonical vocabulary for the Teambridge codebase and dashboard. Use these terms in UI copy and new docs.
+Canonical vocabulary for the Condominium codebase and dashboard. Use these terms in UI copy and new docs.
 
 ## Hierarchy
 

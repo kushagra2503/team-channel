@@ -61,11 +61,11 @@ describe('ProjectSelectionPage', () => {
   });
 
   it('shows an error message when the API is unreachable', async () => {
-    api.listProjects.mockRejectedValue(new Error('Unable to reach local Teambridge daemon.'));
+    api.listProjects.mockRejectedValue(new Error('Unable to reach local Condominium daemon.'));
 
     renderAtRoute('/projects', <ProjectSelectionPage />);
 
-    expect(await screen.findByText('Unable to reach local Teambridge daemon.')).toBeTruthy();
+    expect(await screen.findByText('Unable to reach local Condominium daemon.')).toBeTruthy();
   });
 
   it('shows empty state when no projects exist', async () => {

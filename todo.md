@@ -1,6 +1,6 @@
-# Teambridge TODO
+# Condominium TODO
 
-This is the working checklist for building Teambridge. Anything not checked is still pending.
+Working checklist for building Condominium. Anything not checked is still pending.
 
 ## Done
 
