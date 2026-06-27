@@ -183,16 +183,12 @@ export function DashboardPage() {
       variant: 'dashboard',
       project,
       workspace: selectedTrack,
-      status: workspaceStatus,
-      context: vaultContext,
       teamPanelOpen,
       onToggleTeamPanel: toggleTeamPanel
     });
   }, [
     project,
     selectedTrack,
-    workspaceStatus,
-    vaultContext,
     teamPanelOpen,
     toggleTeamPanel,
     setHeader

@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { IconSettings, IconUsers } from '@tabler/icons-react';
-import type { Project, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, Workspace } from '@teambridge/core';
 
 import {
   Breadcrumb,
@@ -21,8 +21,6 @@ import { getWorkspaceDisplayName } from './workspaceDisplay';
 export type SiteHeaderProps = {
   project?: Project;
   workspace?: Workspace;
-  status?: WorkspaceStatusResponse;
-  context?: VaultContext;
   teamPanelOpen?: boolean;
   onToggleTeamPanel?: () => void;
   onOpenSettings?: () => void;
@@ -34,8 +32,6 @@ const ICON_SLOT = 36; // size-9
 export function SiteHeader({
   project,
   workspace,
-  status,
-  context,
   teamPanelOpen = false,
   onToggleTeamPanel,
   onOpenSettings
@@ -107,14 +103,6 @@ export function SiteHeader({
           <div className="hidden items-center gap-2 sm:flex">
             {!isProjectsPage && workspace ? (
               <Badge variant="secondary" className="text-xs">{workspace.baseRef}</Badge>
-            ) : null}
-            {!isProjectsPage && status ? (
-              <Badge variant="outline" className="text-xs">
-                {status.participants.length} teammate{status.participants.length === 1 ? '' : 's'}
-              </Badge>
-            ) : null}
-            {!isProjectsPage && context ? (
-              <Badge variant="outline" className="text-xs">note #{context.lastSeq ?? 0}</Badge>
             ) : null}
           </div>
 

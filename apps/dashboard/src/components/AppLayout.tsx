@@ -18,8 +18,6 @@ function AppLayoutFrame() {
         <SiteHeader
           project={header.project}
           workspace={header.workspace}
-          status={header.status}
-          context={header.context}
           teamPanelOpen={header.teamPanelOpen}
           onToggleTeamPanel={header.onToggleTeamPanel}
           onOpenSettings={() => setSettingsOpen(true)}

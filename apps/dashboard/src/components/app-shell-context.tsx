@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Project, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, Workspace } from '@teambridge/core';
 
 export type HeaderVariant = 'projects' | 'dashboard';
 
@@ -7,8 +7,6 @@ export type AppShellHeaderState = {
   variant: HeaderVariant;
   project?: Project;
   workspace?: Workspace;
-  status?: WorkspaceStatusResponse;
-  context?: VaultContext;
   projectCount?: number;
   teamPanelOpen?: boolean;
   onToggleTeamPanel?: () => void;
