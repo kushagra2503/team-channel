@@ -5,6 +5,7 @@ import { makeVaultContext, makeWorkspace, makeWorkspaceStatus } from './test/fac
 
 const api = vi.hoisted(() => ({
   getDefaultClientConfig: vi.fn(() => ({})),
+  DEFAULT_DAEMON_BASE_URL: 'http://127.0.0.1:9473',
   listWorkspaces: vi.fn(),
   getWorkspaceStatus: vi.fn(),
   getVaultContext: vi.fn()
@@ -15,6 +16,7 @@ vi.mock('./api/teambridgeClient', () => api);
 describe('App', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    sessionStorage.clear();
     api.getDefaultClientConfig.mockReturnValue({});
   });
 
@@ -69,13 +71,11 @@ describe('App', () => {
     const { rerender } = render(<App />);
 
     expect(await screen.findByText('Ronish')).toBeTruthy();
-    // The sidebar Refresh button is currently commented out, so we re-mount
-    // to simulate a follow-up refresh that returns an empty workspace list.
+    // Re-mount to simulate a follow-up refresh that returns an empty workspace list.
     rerender(<App key="second" />);
 
-    expect(await screen.findByText('No workspaces found.')).toBeTruthy();
     await waitFor(() => {
-      expect(screen.getByText('Select a workspace to inspect participants and branches.')).toBeTruthy();
+      expect(screen.queryByText('Ronish')).toBeNull();
     });
   });
 });

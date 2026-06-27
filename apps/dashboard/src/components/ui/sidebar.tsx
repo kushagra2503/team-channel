@@ -246,6 +246,7 @@ const SIDEBAR_EXPANDED_PX = 256
         className={cn(
           "relative bg-transparent group-data-[side=right]:rotate-180"
         )}
+        initial={false}
         animate={{ width: gapWidth }}
         transition={sidebarSpring}
       />
@@ -260,6 +261,7 @@ const SIDEBAR_EXPANDED_PX = 256
             : "group-data-[side=left]:border-r group-data-[side=right]:border-l",
           className
         )}
+        initial={false}
         animate={{
           width: containerWidth,
           ...(sideIsRight ? { right: -containerOffset } : { left: -containerOffset })
@@ -299,7 +301,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <IconLayoutSidebar />
+      <IconLayoutSidebar stroke={1.5} />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

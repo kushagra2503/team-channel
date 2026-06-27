@@ -4,10 +4,10 @@ import { makeVaultContext } from '../test/factories';
 import { VaultHighlights } from './VaultHighlights';
 
 describe('VaultHighlights', () => {
-  it('asks the user to select a workspace before context is loaded', () => {
-    render(<VaultHighlights />);
+  it('renders nothing when no context is provided', () => {
+    const { container } = render(<VaultHighlights />);
 
-    expect(screen.getByText('Select a workspace to inspect vault highlights.')).toBeTruthy();
+    expect(container.firstChild).toBeNull();
   });
 
   it('renders included paths, seq, truncated flag, and content preview', () => {

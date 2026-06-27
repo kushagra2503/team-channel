@@ -15,10 +15,10 @@ function renderWorkspaceList(element: ReactElement) {
 }
 
 describe('WorkspaceList', () => {
-  it('renders empty state when there are no workspaces', () => {
+  it('renders empty list without error text when there are no workspaces', () => {
     renderWorkspaceList(<WorkspaceList workspaces={[]} onSelect={vi.fn()} onRefresh={vi.fn()} />);
 
-    expect(screen.getByText('No workspaces found.')).toBeTruthy();
+    expect(screen.queryByText('No workspaces found.')).toBeNull();
   });
 
   it('renders workspace session and local indicator', () => {
@@ -32,6 +32,5 @@ describe('WorkspaceList', () => {
     renderWorkspaceList(<WorkspaceList workspaces={[]} error="Daemon unavailable." onSelect={vi.fn()} onRefresh={vi.fn()} />);
 
     expect(screen.getByText('Daemon unavailable.')).toBeTruthy();
-    expect(screen.queryByText('No workspaces found.')).toBeNull();
   });
 });

@@ -3,4 +3,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .teambridge/
+.env
+.env.*
+!.env.example
 

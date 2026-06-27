@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
+import { motion } from 'motion/react';
 import type { VaultContext } from '@teambridge/core';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export type VaultHighlightsProps = {
   context?: VaultContext;
-  loading?: boolean;
   error?: string;
 };
 
@@ -40,47 +40,39 @@ function parseVaultSections(content: string): VaultSection[] {
   return sections;
 }
 
-export function VaultHighlights({ context, loading = false, error }: VaultHighlightsProps) {
+const ENTER = { opacity: 1, y: 0 } as const;
+const HIDE = { opacity: 0, y: 6 } as const;
+export function VaultHighlights({ context, error }: VaultHighlightsProps) {
   const sections = useMemo(() => (context ? parseVaultSections(context.content) : []), [context?.content]);
-
-  if (loading) {
-    return (
-      <Card>
-        <section aria-label="Vault highlights">
-          <CardContent className="text-muted-foreground">Loading vault highlights...</CardContent>
-        </section>
-      </Card>
-    );
-  }
 
   if (error) {
     return (
       <Card>
         <section aria-label="Vault highlights">
           <CardContent>
-            <p role="alert" className="text-destructive">{error}</p>
+            <p role="alert" className="text-xs text-destructive">{error}</p>
           </CardContent>
         </section>
       </Card>
     );
   }
 
-  if (!context) {
-    return (
-      <Card>
-        <section aria-label="Vault highlights">
-          <CardContent className="text-muted-foreground">Select a workspace to inspect vault highlights.</CardContent>
-        </section>
-      </Card>
-    );
-  }
+  if (!context) return null;
 
   return (
     <Card>
       <section aria-labelledby="vault-highlights-title">
         <CardHeader>
-          <CardTitle id="vault-highlights-title">Context</CardTitle>
-          <CardDescription>Latest note #{context.lastSeq ?? 0}{context.truncated ? ' · preview truncated' : ''}</CardDescription>
+          <motion.div
+            initial={HIDE}
+            animate={ENTER}
+            transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
+          >
+            <CardTitle id="vault-highlights-title">Context</CardTitle>
+            <CardDescription>
+              Latest note #{context.lastSeq ?? 0}{context.truncated ? ' · preview truncated' : ''}
+            </CardDescription>
+          </motion.div>
         </CardHeader>
 
         <CardContent className="flex flex-col gap-4">
@@ -88,8 +80,14 @@ export function VaultHighlights({ context, loading = false, error }: VaultHighli
             <p className="text-muted-foreground">No published notes yet.</p>
           ) : (
             <div className="grid gap-3">
-              {sections.map((section) => (
-                <article key={section.path} className="rounded-2xl border border-border bg-muted/40 p-4">
+              {sections.map((section, i) => (
+                <motion.article
+                  key={section.path}
+                  initial={HIDE}
+                  animate={ENTER}
+                  transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1], delay: i * 0.05 }}
+                  className="rounded-2xl border border-border bg-muted/40 p-4"
+                >
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h3 className="text-sm font-medium capitalize">{section.title}</h3>
                     <Badge variant="outline">{section.path}</Badge>
@@ -99,7 +97,7 @@ export function VaultHighlights({ context, loading = false, error }: VaultHighli
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
-                </article>
+                </motion.article>
               ))}
             </div>
           )}

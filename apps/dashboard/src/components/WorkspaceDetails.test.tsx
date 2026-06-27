@@ -4,10 +4,10 @@ import { makeWorkspaceStatus } from '../test/factories';
 import { WorkspaceDetails } from './WorkspaceDetails';
 
 describe('WorkspaceDetails', () => {
-  it('asks the user to select a workspace before status is loaded', () => {
-    render(<WorkspaceDetails />);
+  it('renders nothing when no status is provided', () => {
+    const { container } = render(<WorkspaceDetails />);
 
-    expect(screen.getByText('Select a workspace to inspect participants and branches.')).toBeTruthy();
+    expect(container.firstChild).toBeNull();
   });
 
   it('renders member rows with a count and no Online label', () => {

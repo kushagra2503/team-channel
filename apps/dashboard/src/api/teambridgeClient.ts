@@ -87,3 +87,71 @@ export function getVaultContext(
     signal
   );
 }
+
+export function buildAvatarUrl(
+  workspaceId: string,
+  participantId: string,
+  config: TeambridgeClientConfig,
+  rev?: number
+): string {
+  return buildTeambridgeUrl(
+    `/workspaces/${encodeURIComponent(workspaceId)}/participants/${encodeURIComponent(participantId)}/avatar`,
+    config,
+    { v: rev }
+  );
+}
+
+export type PfpPreviewOptions = {
+  query?: string;
+  size?: number;
+  algorithm?: 'floyd-steinberg' | 'atkinson' | 'bayer';
+  bayerLevel?: number;
+  color?: { r: number; g: number; b: number };
+  seed?: string;
+};
+
+export type PfpPreviewResult = {
+  blob: Blob;
+  source: string;
+  sourceUrl: string;
+  imageUrl: string;
+  photographer: string;
+  alt: string;
+};
+
+export async function previewPfp(
+  config: TeambridgeClientConfig,
+  options: PfpPreviewOptions,
+  signal?: AbortSignal
+): Promise<PfpPreviewResult> {
+  const response = await fetch(buildTeambridgeUrl('/dev/pfp/preview', config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(options),
+    signal
+  });
+  if (!response.ok) {
+    throw new Error(`pfp preview failed: ${response.status}`);
+  }
+  return {
+    blob: await response.blob(),
+    source: response.headers.get('x-pfp-source') ?? '',
+    sourceUrl: response.headers.get('x-pfp-source-url') ?? '',
+    imageUrl: response.headers.get('x-pfp-image-url') ?? '',
+    photographer: response.headers.get('x-pfp-photographer') ?? '',
+    alt: response.headers.get('x-pfp-alt') ?? ''
+  };
+}
+
+export async function regeneratePfp(
+  config: TeambridgeClientConfig,
+  participantId: string,
+  options: PfpPreviewOptions
+): Promise<{ participantId: string; meta: unknown }> {
+  const response = await fetch(buildTeambridgeUrl('/dev/pfp/regenerate', config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ participantId, ...options })
+  });
+  return unwrapApiResult<{ participantId: string; meta: unknown }>(response);
+}

@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import 'dotenv/config';
 import { z } from 'zod';
 import type {
   ApiResult,
@@ -38,6 +39,13 @@ import {
   readVaultFile,
   rebuildPhaseOneVault
 } from '@teambridge/vault';
+import {
+  generatePfp,
+  getOrGenerateAvatar,
+  regenerateAvatar,
+  type DitherAlgorithm,
+  type PfpOptions
+} from './pfp';
 
 const DEFAULT_PORT = 9473;
 
@@ -62,6 +70,25 @@ const VaultRebuildRequestBodySchema = z.object({
 
 const ConfigRequestBodySchema = z.object({
   repoRoot: z.string().min(1).optional()
+});
+
+const PfpPreviewBodySchema = z.object({
+  query: z.string().optional(),
+  size: z.number().int().min(8).max(512).optional(),
+  algorithm: z.enum(['floyd-steinberg', 'atkinson', 'bayer']).optional(),
+  bayerLevel: z.number().int().min(0).max(4).optional(),
+  color: z.object({ r: z.number().int().min(0).max(255), g: z.number().int().min(0).max(255), b: z.number().int().min(0).max(255) }).optional(),
+  seed: z.string().optional()
+});
+
+const PfpRegenerateBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  participantId: z.string().min(1),
+  query: z.string().optional(),
+  size: z.number().int().min(8).max(512).optional(),
+  algorithm: z.enum(['floyd-steinberg', 'atkinson', 'bayer']).optional(),
+  bayerLevel: z.number().int().min(0).max(4).optional(),
+  color: z.object({ r: z.number().int().min(0).max(255), g: z.number().int().min(0).max(255), b: z.number().int().min(0).max(255) }).optional()
 });
 
 const DEFAULT_CONFIG: TeambridgeConfig = {
@@ -318,6 +345,26 @@ function sendCorsPreflight(response: ServerResponse): void {
     'access-control-allow-headers': 'content-type'
   });
   response.end();
+}
+
+function sendBinary(
+  response: ServerResponse,
+  status: number,
+  buffer: Buffer,
+  contentType: string,
+  extraHeaders?: Record<string, string>
+): void {
+  response.writeHead(status, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-expose-headers': 'x-pfp-source,x-pfp-source-url,x-pfp-image-url,x-pfp-photographer,x-pfp-alt',
+    'content-type': contentType,
+    'content-length': buffer.length,
+    'cache-control': 'no-store',
+    ...extraHeaders
+  });
+  response.end(buffer);
 }
 
 async function ensureTeambridgeDirs(repoRoot: string): Promise<void> {
@@ -835,6 +882,66 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       participants: listParticipants(repoRoot, workspace.id),
       lastSeq: sequence?.last_seq ?? 0
     }));
+    return;
+  }
+
+  const avatarMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/participants\/([^/]+)\/avatar$/);
+  if (method === 'GET' && avatarMatch) {
+    const workspaceIdentifier = decodeURIComponent(avatarMatch[1]);
+    const participantId = decodeURIComponent(avatarMatch[2]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const participants = listParticipants(repoRoot, workspace.id);
+    if (!participants.some((participant) => participant.id === participantId)) {
+      sendJson(response, 404, fail('NOT_FOUND', `Participant ${participantId} was not found`));
+      return;
+    }
+    const { png } = await getOrGenerateAvatar(repoRoot, participantId, {
+      query: url.searchParams.get('query') ?? undefined,
+      size: url.searchParams.get('size') ? Number(url.searchParams.get('size')) : undefined,
+      algorithm: (url.searchParams.get('algorithm') as DitherAlgorithm | null) ?? undefined,
+      bayerLevel: url.searchParams.get('bayerLevel') ? Number(url.searchParams.get('bayerLevel')) : undefined
+    });
+    sendBinary(response, 200, png, 'image/png');
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/dev/pfp/preview') {
+    const body = PfpPreviewBodySchema.parse(await readJsonBody<unknown>(request));
+    const options: PfpOptions = {
+      query: body.query,
+      size: body.size,
+      algorithm: body.algorithm,
+      bayerLevel: body.bayerLevel,
+      color: body.color,
+      seed: body.seed
+    };
+    const { png, meta } = await generatePfp(options);
+    sendBinary(response, 200, png, 'image/png', {
+      'x-pfp-source': meta.source,
+      'x-pfp-source-url': meta.sourceUrl ?? '',
+      'x-pfp-image-url': meta.imageUrl ?? '',
+      'x-pfp-photographer': meta.photographer ?? '',
+      'x-pfp-alt': meta.alt ?? ''
+    });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/dev/pfp/regenerate') {
+    const body = PfpRegenerateBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const { meta } = await regenerateAvatar(repoRoot, body.participantId, {
+      query: body.query,
+      size: body.size,
+      algorithm: body.algorithm,
+      bayerLevel: body.bayerLevel,
+      color: body.color
+    });
+    sendJson(response, 200, ok({ participantId: body.participantId, meta }));
     return;
   }
 
