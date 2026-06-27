@@ -21,3 +21,20 @@ export type BranchPolicy = {
   includeUserName: boolean;
 };
 
+/** Git + filesystem context for the dashboard track sidebar. */
+export type RepoContext = {
+  remoteUrl: string | null;
+  repoOwner: string | null;
+  repoName: string | null;
+  repoLabel: string | null;
+  repoWebUrl: string | null;
+  branch: string;
+  branchWebUrl: string | null;
+  localPath: string;
+  lastCommitAt: string | null;
+  /** Best-effort time of last push to upstream (ISO 8601). */
+  lastPushAt: string | null;
+  lastPushCommitSha: string | null;
+  lastPushCommitWebUrl: string | null;
+};
+

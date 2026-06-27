@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   ApiResultSchema,
+  apiFail,
+  apiOk,
   ParticipantSchema,
   PublishEventRequestSchema,
   PublishEventSchema,
@@ -10,6 +12,7 @@ const {
   VaultContextSchema,
   WorkspaceManifestSchema
 } = require('../dist');
+const contracts = require('@teambridge/core/contracts');
 
 const createdAt = '2026-06-22T00:00:00.000Z';
 
@@ -35,6 +38,7 @@ const manifest = {
   createdAt,
   status: 'active',
   relayMode: 'local',
+  projectId: null,
   schemaVersion: 1,
   participants: [participant]
 };
@@ -109,6 +113,26 @@ test('ApiResultSchema validates ok and fail envelopes', () => {
   assert.deepEqual(responseSchema.parse(ok), ok);
   assert.deepEqual(responseSchema.parse(fail), fail);
   assert.throws(() => responseSchema.parse({ ok: true, data: { manifest } }));
+});
+
+test('apiOk and apiFail preserve ApiResult envelope shape', () => {
+  assert.deepEqual(apiOk({ value: 1 }), {
+    ok: true,
+    data: { value: 1 }
+  });
+  assert.deepEqual(apiFail('INVALID_REQUEST', 'Bad request', { field: 'sessionName' }), {
+    ok: false,
+    error: {
+      code: 'INVALID_REQUEST',
+      message: 'Bad request',
+      details: { field: 'sessionName' }
+    }
+  });
+});
+
+test('core package keeps contracts subpath export available', () => {
+  assert.equal(contracts.MCP_RESOURCE_NAMES.includes('teambridge://workspace'), true);
+  assert.equal(typeof contracts.WorkspaceManifestSchema.parse, 'function');
 });
 
 test('TeambridgeConfigSchema keeps repo config defaults stable', () => {

@@ -45,3 +45,15 @@ export type VaultContext = {
   lastSeq?: number;
 };
 
+export type VaultItemAnnotation = {
+  path: string;
+  itemText: string;
+  color?: string | null;
+  assign?: string | null;
+};
+
+export type VaultAnnotateResponse = {
+  file: VaultFile;
+  context?: VaultContext;
+};
+

@@ -15,7 +15,12 @@ export type Workspace = {
   createdAt: string;
   status: WorkspaceStatus;
   relayMode: RelayMode;
+  /** Project this workspace (track) belongs to. Null for legacy workspaces. */
+  projectId: string | null;
 };
+
+/** Alias for Workspace reflecting the new terminology. */
+export type Track = Workspace;
 
 export type WorkspaceManifest = Workspace & {
   schemaVersion: 1;
@@ -28,6 +33,8 @@ export type StartWorkspaceRequest = {
   scope?: string[];
   displayName?: string;
   agent?: AgentKind;
+  /** Link the new track to a project; creator is upserted on the project roster when profile exists. */
+  projectId?: string;
 };
 
 export type JoinWorkspaceRequest = {

@@ -11,6 +11,8 @@
   "dependencies": {
     "@teambridge/core": "workspace:*",
     "@teambridge/vault": "workspace:*",
+    "dotenv": "^17.4.2",
+    "sharp": "^0.35.2",
     "zod": "^4.4.3"
   }
 }

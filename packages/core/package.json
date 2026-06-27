@@ -4,6 +4,28 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./daemon": {
+      "types": "./dist/daemon.d.ts",
+      "require": "./dist/daemon.js",
+      "default": "./dist/daemon.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "require": "./dist/contracts/index.js",
+      "default": "./dist/contracts/index.js"
+    },
+    "./contracts/*": {
+      "types": "./dist/contracts/*.d.ts",
+      "require": "./dist/contracts/*.js",
+      "default": "./dist/contracts/*.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "pnpm build && node --test test/*.test.cjs"

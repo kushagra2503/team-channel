@@ -11,6 +11,7 @@ export * from './inbox';
 export * from './mcp';
 export * from './participant';
 export * from './presence';
+export * from './project';
 export * from './schemas';
 export * from './vault';
 export * from './workspace';

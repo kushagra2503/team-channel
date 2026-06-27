@@ -2,21 +2,40 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { mkdirSync, existsSync } from 'node:fs';
+import { join, resolve, relative, isAbsolute } from 'node:path';
+import dotenv from 'dotenv';
+
+dotenv.config();
+dotenv.config({ path: join(__dirname, '../../../.env') });
+if (process.env.TEAMBRIDGE_REPO_ROOT) {
+  dotenv.config({ path: join(resolve(process.env.TEAMBRIDGE_REPO_ROOT), '.env') });
+}
 import { z } from 'zod';
 import type {
   ApiResult,
   EventListResponse,
   JoinWorkspaceRequest,
   JoinWorkspaceResponse,
+  LocalUserProfile,
+  LocalUserProfileResponse,
   Participant,
+  Project,
+  ProjectListResponse,
+  ProjectMember,
+  ProjectMemberListResponse,
+  CreateProjectResponse,
+  UpsertProjectMemberResponse,
   PublishEventPayload,
   PublishEventRequest,
+  RepoContext,
+  RepoContextResponse,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   TeambridgeConfig,
   TeambridgeErrorCode,
+  TrackListResponse,
+  VaultAnnotateResponseBody,
   VaultContextResponse,
   VaultReadResponse,
   Workspace,
@@ -28,9 +47,17 @@ import {
   JoinWorkspaceRequestSchema,
   PublishEventRequestSchema,
   StartWorkspaceRequestSchema,
-  TeambridgeConfigSchema
+  TeambridgeConfigSchema,
+  CreateProjectRequestSchema,
+  SaveLocalUserProfileRequestSchema,
+  UpsertProjectMemberRequestSchema,
+  LocalUserProfileSchema,
+  avatarStorageId,
+  avatarNameSlug,
+  formatDisplayName
 } from '@teambridge/core';
 import {
+  annotateVaultItem,
   createVaultContext,
   initializePhaseOneVault,
   materializePublishEvent,
@@ -38,11 +65,35 @@ import {
   readVaultFile,
   rebuildPhaseOneVault
 } from '@teambridge/vault';
+import {
+  generatePfp,
+  getOrGenerateAvatar,
+  regenerateAvatar,
+  type DitherAlgorithm,
+  type PfpOptions
+} from './pfp';
 
 const DEFAULT_PORT = 9473;
 
 const StartRequestBodySchema = StartWorkspaceRequestSchema.extend({
   repoRoot: z.string().min(1).optional()
+});
+
+const CreateProjectBodySchema = CreateProjectRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const SaveLocalUserBodySchema = SaveLocalUserProfileRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const UpsertProjectMemberBodySchema = UpsertProjectMemberRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const OpenPathBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  path: z.string().min(1)
 });
 
 const JoinRequestBodySchema = JoinWorkspaceRequestSchema.extend({
@@ -60,8 +111,35 @@ const VaultRebuildRequestBodySchema = z.object({
   repoRoot: z.string().min(1).optional()
 });
 
+const VaultAnnotateBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  path: z.string().min(1),
+  itemText: z.string().min(1),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  assign: z.string().regex(/^[\w-]+$/).nullable().optional()
+});
+
 const ConfigRequestBodySchema = z.object({
   repoRoot: z.string().min(1).optional()
+});
+
+const PfpPreviewBodySchema = z.object({
+  query: z.string().optional(),
+  size: z.number().int().min(8).max(512).optional(),
+  algorithm: z.enum(['floyd-steinberg', 'atkinson', 'bayer']).optional(),
+  bayerLevel: z.number().int().min(0).max(4).optional(),
+  color: z.object({ r: z.number().int().min(0).max(255), g: z.number().int().min(0).max(255), b: z.number().int().min(0).max(255) }).optional(),
+  seed: z.string().optional()
+});
+
+const PfpRegenerateBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  participantId: z.string().min(1),
+  query: z.string().optional(),
+  size: z.number().int().min(8).max(512).optional(),
+  algorithm: z.enum(['floyd-steinberg', 'atkinson', 'bayer']).optional(),
+  bayerLevel: z.number().int().min(0).max(4).optional(),
+  color: z.object({ r: z.number().int().min(0).max(255), g: z.number().int().min(0).max(255), b: z.number().int().min(0).max(255) }).optional()
 });
 
 const DEFAULT_CONFIG: TeambridgeConfig = {
@@ -106,9 +184,23 @@ function fail(code: TeambridgeErrorCode, message: string, details?: unknown): Ap
   };
 }
 
+function findGitRepoRoot(startDir: string): string {
+  let current = resolve(startDir);
+  while (true) {
+    if (existsSync(join(current, '.git'))) {
+      return current;
+    }
+    const parent = resolve(current, '..');
+    if (parent === current) {
+      return startDir;
+    }
+    current = parent;
+  }
+}
+
 function parseArgs(argv: string[]): { port: number; repoRoot: string } {
   let port = Number(process.env.TEAMBRIDGE_DAEMON_PORT ?? DEFAULT_PORT);
-  let repoRoot = process.env.TEAMBRIDGE_REPO_ROOT ?? process.cwd();
+  let repoRoot = process.env.TEAMBRIDGE_REPO_ROOT ?? findGitRepoRoot(process.cwd());
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -162,6 +254,173 @@ function getCurrentBranch(repoRoot: string): string {
   }
 }
 
+type ParsedRemote = {
+  owner: string;
+  name: string;
+  webBase: string;
+};
+
+function parseGitRemote(remote: string): ParsedRemote | null {
+  const sshMatch = remote.match(/^[^@]+@([^:]+):(.+?)(?:\.git)?$/);
+  if (sshMatch) {
+    const host = sshMatch[1];
+    const segments = sshMatch[2].replace(/\.git$/, '').split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      const owner = segments[0];
+      const name = segments.slice(1).join('/');
+      return { owner, name, webBase: `https://${host}/${owner}/${name}` };
+    }
+  }
+
+  try {
+    const normalized = remote.replace(/\.git$/, '');
+    const url = normalized.includes('://') ? new URL(normalized) : new URL(`https://${normalized}`);
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length >= 2) {
+      const owner = segments[0];
+      const name = segments[1];
+      return { owner, name, webBase: `${url.protocol}//${url.host}/${owner}/${name}` };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function branchWebUrl(webBase: string | null, branch: string): string | null {
+  if (!webBase || !branch || branch === 'HEAD') {
+    return null;
+  }
+  return `${webBase}/tree/${encodeURIComponent(branch)}`;
+}
+
+function commitWebUrl(webBase: string | null, commitSha: string | null): string | null {
+  if (!webBase || !commitSha) {
+    return null;
+  }
+  return `${webBase}/commit/${commitSha}`;
+}
+
+function getPrimaryWorktreePath(repoRoot: string, workspaceId: string): string {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<{ path: string }>(
+    dbPath,
+    `select path from worktrees where workspace_id = ${sqlValue(workspaceId)} order by rowid asc`
+  );
+  if (rows.length === 0) {
+    return repoRoot;
+  }
+
+  const resolvedRoot = resolve(repoRoot);
+  const alternate = rows.find((row) => resolve(String(row.path)) !== resolvedRoot);
+  return resolve(alternate?.path ?? rows[0].path);
+}
+
+function resolveLastPushRef(localPath: string, branch: string): string | null {
+  if (!branch || branch === 'HEAD') {
+    return null;
+  }
+
+  try {
+    const upstream = runGit(localPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+    if (upstream) {
+      const ahead = Number(runGit(localPath, ['rev-list', '--count', `${upstream}..HEAD`]) || '0');
+      return ahead > 0 ? upstream : 'HEAD';
+    }
+  } catch {
+    // fall through to origin/<branch>
+  }
+
+  try {
+    runGit(localPath, ['rev-parse', '--verify', `origin/${branch}`]);
+    return `origin/${branch}`;
+  } catch {
+    return 'HEAD';
+  }
+}
+
+function getLastPushInfo(
+  localPath: string,
+  branch: string
+): { lastPushAt: string | null; lastPushCommitSha: string | null } {
+  const ref = resolveLastPushRef(localPath, branch);
+  if (!ref) {
+    return { lastPushAt: null, lastPushCommitSha: null };
+  }
+
+  try {
+    const output = runGit(localPath, ['log', '-1', '--format=%cI%n%H', ref]);
+    const [lastPushAt, lastPushCommitSha] = output.split('\n');
+    return {
+      lastPushAt: lastPushAt || null,
+      lastPushCommitSha: lastPushCommitSha || null
+    };
+  } catch {
+    return { lastPushAt: null, lastPushCommitSha: null };
+  }
+}
+
+function buildRepoContext(repoRoot: string, workspaceId?: string): RepoContext {
+  const localPath = workspaceId ? getPrimaryWorktreePath(repoRoot, workspaceId) : repoRoot;
+  let remoteUrl: string | null = null;
+  let branch = 'HEAD';
+  let lastCommitAt: string | null = null;
+
+  try {
+    remoteUrl = runGit(localPath, ['config', '--get', 'remote.origin.url']) || null;
+  } catch {
+    try {
+      remoteUrl = runGit(repoRoot, ['config', '--get', 'remote.origin.url']) || null;
+    } catch {
+      remoteUrl = null;
+    }
+  }
+
+  try {
+    branch = runGit(localPath, ['branch', '--show-current']) || 'HEAD';
+  } catch {
+    branch = 'HEAD';
+  }
+
+  try {
+    lastCommitAt = runGit(localPath, ['log', '-1', '--format=%cI']) || null;
+  } catch {
+    lastCommitAt = null;
+  }
+
+  const parsed = remoteUrl ? parseGitRemote(remoteUrl) : null;
+  const { lastPushAt, lastPushCommitSha } = getLastPushInfo(localPath, branch);
+
+  return {
+    remoteUrl,
+    repoOwner: parsed?.owner ?? null,
+    repoName: parsed?.name ?? null,
+    repoLabel: parsed ? `${parsed.owner}/${parsed.name}` : null,
+    repoWebUrl: parsed?.webBase ?? null,
+    branch,
+    branchWebUrl: branchWebUrl(parsed?.webBase ?? null, branch),
+    localPath,
+    lastCommitAt,
+    lastPushAt,
+    lastPushCommitSha,
+    lastPushCommitWebUrl: commitWebUrl(parsed?.webBase ?? null, lastPushCommitSha)
+  };
+}
+
+function openPathOnDevice(targetPath: string): void {
+  const resolved = resolve(targetPath);
+  if (process.platform === 'darwin') {
+    execFileSync('open', [resolved], { stdio: 'ignore' });
+    return;
+  }
+  if (process.platform === 'win32') {
+    execFileSync('cmd', ['/c', 'start', '', resolved], { stdio: 'ignore' });
+    return;
+  }
+  execFileSync('xdg-open', [resolved], { stdio: 'ignore' });
+}
+
 function getRepoRootHash(repoRoot: string): string {
   return createHash('sha256').update(repoRoot).digest('hex');
 }
@@ -211,10 +470,47 @@ function initializeStateDb(repoRoot: string): string {
   mkdirSync(teambridgeDir, { recursive: true });
 
   const dbPath = join(teambridgeDir, 'state.sqlite');
+
+  // Migration: rename legacy workspaces table → tracks
+  const existingTables = querySql<{ name: string }>(
+    dbPath,
+    "select name from sqlite_master where type='table' and name in ('workspaces', 'tracks')"
+  );
+  const hasWorkspaces = existingTables.some((t) => t.name === 'workspaces');
+  const hasTracks = existingTables.some((t) => t.name === 'tracks');
+
+  if (hasWorkspaces && !hasTracks) {
+    runSql(dbPath, 'alter table workspaces rename to tracks;');
+  }
+
+  if (hasTracks || hasWorkspaces) {
+    const cols = querySql<{ name: string }>(dbPath, "pragma table_info('tracks')");
+    if (!cols.some((c) => c.name === 'project_id')) {
+      runSql(dbPath, 'alter table tracks add column project_id text;');
+    }
+  }
+
   runSql(dbPath, `
     pragma journal_mode = wal;
 
-    create table if not exists workspaces (
+    create table if not exists projects (
+      id text primary key,
+      name text not null unique,
+      description text not null default '',
+      status text not null check (status in ('active', 'archived')) default 'active',
+      created_at text not null
+    );
+
+    create table if not exists project_members (
+      id text primary key,
+      project_id text not null references projects(id),
+      display_name text not null,
+      status text not null check (status in ('active', 'idle', 'offline')) default 'offline',
+      last_seen_at text not null,
+      unique(project_id, display_name)
+    );
+
+    create table if not exists tracks (
       id text primary key,
       session_name text not null unique,
       repo_remote text,
@@ -225,12 +521,13 @@ function initializeStateDb(repoRoot: string): string {
       created_by text not null,
       created_at text not null,
       status text not null check (status in ('active', 'archived')),
-      relay_mode text not null check (relay_mode = 'local')
+      relay_mode text not null check (relay_mode = 'local'),
+      project_id text references projects(id)
     );
 
     create table if not exists participants (
       id text primary key,
-      workspace_id text not null references workspaces(id),
+      workspace_id text not null references tracks(id),
       display_name text not null,
       branch text not null,
       agent text check (agent in ('claude-code', 'cursor', 'codex', 'ghost', 'unknown') or agent is null),
@@ -241,7 +538,7 @@ function initializeStateDb(repoRoot: string): string {
     );
 
     create table if not exists worktrees (
-      workspace_id text not null references workspaces(id),
+      workspace_id text not null references tracks(id),
       user_id text not null references participants(id),
       path text not null,
       branch text not null,
@@ -254,7 +551,7 @@ function initializeStateDb(repoRoot: string): string {
     );
 
     create table if not exists local_sequences (
-      workspace_id text primary key references workspaces(id),
+      workspace_id text primary key references tracks(id),
       last_seq integer not null default 0
     );
   `);
@@ -274,7 +571,28 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     createdBy: String(row.created_by),
     createdAt: String(row.created_at),
     status: row.status === 'archived' ? 'archived' : 'active',
-    relayMode: 'local'
+    relayMode: 'local',
+    projectId: row.project_id ? String(row.project_id) : null
+  };
+}
+
+function rowToProject(row: Record<string, unknown>): Project {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    description: String(row.description ?? ''),
+    status: row.status === 'archived' ? 'archived' : 'active',
+    createdAt: String(row.created_at)
+  };
+}
+
+function rowToProjectMember(row: Record<string, unknown>): ProjectMember {
+  return {
+    id: String(row.id),
+    projectId: String(row.project_id),
+    displayName: String(row.display_name),
+    status: (row.status === 'idle' || row.status === 'offline') ? row.status : 'active',
+    lastSeenAt: String(row.last_seen_at)
   };
 }
 
@@ -302,8 +620,44 @@ async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
 }
 
 function sendJson<T>(response: ServerResponse, status: number, body: ApiResult<T>): void {
-  response.writeHead(status, { 'content-type': 'application/json' });
+  response.writeHead(status, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'content-type': 'application/json'
+  });
   response.end(JSON.stringify(body, null, 2));
+}
+
+function sendCorsPreflight(response: ServerResponse): void {
+  response.writeHead(204, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type'
+  });
+  response.end();
+}
+
+const AVATAR_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
+function sendBinary(
+  response: ServerResponse,
+  status: number,
+  buffer: Buffer,
+  contentType: string,
+  extraHeaders?: Record<string, string>
+): void {
+  response.writeHead(status, {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-headers': 'content-type',
+    'access-control-expose-headers': 'x-pfp-source,x-pfp-source-url,x-pfp-image-url,x-pfp-photographer,x-pfp-alt',
+    'content-type': contentType,
+    'content-length': buffer.length,
+    'cache-control': 'no-store',
+    ...extraHeaders
+  });
+  response.end(buffer);
 }
 
 async function ensureTeambridgeDirs(repoRoot: string): Promise<void> {
@@ -329,6 +683,156 @@ async function readRepoConfig(repoRoot: string): Promise<TeambridgeConfig> {
   }
 
   return TeambridgeConfigSchema.parse(JSON.parse(content));
+}
+
+function getUserProfilePath(repoRoot: string): string {
+  return join(repoRoot, '.teambridge', 'user.json');
+}
+
+async function readLocalUserProfile(repoRoot: string): Promise<LocalUserProfile | null> {
+  const profilePath = getUserProfilePath(repoRoot);
+  const content = await readFile(profilePath, 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  });
+  if (!content) {
+    return null;
+  }
+  return LocalUserProfileSchema.parse(JSON.parse(content));
+}
+
+async function writeLocalUserProfile(repoRoot: string, profile: LocalUserProfile): Promise<string> {
+  await ensureTeambridgeDirs(repoRoot);
+  const profilePath = getUserProfilePath(repoRoot);
+  await writeFile(profilePath, `${JSON.stringify(profile, null, 2)}\n`);
+  return profilePath;
+}
+
+async function saveLocalUserProfile(
+  repoRoot: string,
+  body: z.infer<typeof SaveLocalUserProfileRequestSchema>
+): Promise<{ profile: LocalUserProfile; path: string }> {
+  const displayName = formatDisplayName(body.firstName, body.lastName);
+  const profile: LocalUserProfile = {
+    schemaVersion: 1,
+    firstName: body.firstName.trim(),
+    lastName: body.lastName.trim(),
+    displayName,
+    defaultAgent: body.defaultAgent,
+    defaultProjectId: body.defaultProjectId ?? null
+  };
+  const path = await writeLocalUserProfile(repoRoot, profile);
+  await ensureAvatarForDisplayName(repoRoot, displayName);
+  return { profile, path };
+}
+
+async function ensureAvatarForDisplayName(repoRoot: string, displayName: string): Promise<void> {
+  const slug = avatarNameSlug(displayName);
+  const avatarId = avatarStorageId(displayName);
+  await getOrGenerateAvatar(repoRoot, avatarId, { query: displayName }, findLegacyAvatarIdsForSlug(repoRoot, slug));
+}
+
+function resolveParticipantDisplayName(repoRoot: string, bodyDisplayName: string | undefined, profile: LocalUserProfile | null): string {
+  if (bodyDisplayName?.trim()) {
+    return bodyDisplayName.trim();
+  }
+  if (profile?.displayName) {
+    return profile.displayName;
+  }
+  return process.env.USER?.trim() || 'local';
+}
+
+function branchForParticipant(sessionName: string, displayName: string): string {
+  return `teambridge/${sessionName}/${safeDisplayName(displayName)}`;
+}
+
+function upsertProjectMember(
+  repoRoot: string,
+  projectId: string,
+  displayName: string,
+  status: Participant['status'] = 'active'
+): ProjectMember {
+  const dbPath = initializeStateDb(repoRoot);
+  const now = new Date().toISOString();
+  const existing = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from project_members where project_id = ${sqlValue(projectId)} and display_name = ${sqlValue(displayName)} limit 1`
+  );
+  if (existing.length > 0) {
+    runSql(
+      dbPath,
+      `update project_members set status = ${sqlValue(status)}, last_seen_at = ${sqlValue(now)} where id = ${sqlValue(String(existing[0].id))}`
+    );
+    const [row] = querySql<Record<string, unknown>>(
+      dbPath,
+      `select * from project_members where id = ${sqlValue(String(existing[0].id))} limit 1`
+    );
+    return rowToProjectMember(row);
+  }
+
+  const memberId = `pm_${randomUUID()}`;
+  runSql(dbPath, `
+    insert into project_members (id, project_id, display_name, status, last_seen_at)
+    values (
+      ${sqlValue(memberId)},
+      ${sqlValue(projectId)},
+      ${sqlValue(displayName)},
+      ${sqlValue(status)},
+      ${sqlValue(now)}
+    );
+  `);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from project_members where id = ${sqlValue(memberId)} limit 1`
+  );
+  return rowToProjectMember(row);
+}
+
+async function createProject(
+  repoRoot: string,
+  body: z.infer<typeof CreateProjectRequestSchema>
+): Promise<CreateProjectResponse> {
+  const dbPath = initializeStateDb(repoRoot);
+  const name = body.name.trim();
+  const description = body.description?.trim() ?? '';
+  const duplicate = querySql<{ id: string }>(
+    dbPath,
+    `select id from projects where name = ${sqlValue(name)} limit 1`
+  );
+  if (duplicate.length > 0) {
+    throw new Error(`Project name already exists: ${name}`);
+  }
+
+  const projectId = `proj_${randomUUID().slice(0, 8)}`;
+  const now = new Date().toISOString();
+  runSql(dbPath, `
+    insert into projects (id, name, description, status, created_at)
+    values (
+      ${sqlValue(projectId)},
+      ${sqlValue(name)},
+      ${sqlValue(description)},
+      'active',
+      ${sqlValue(now)}
+    );
+  `);
+
+  const project = getProjectById(repoRoot, projectId);
+  if (!project) {
+    throw new Error('Failed to create project');
+  }
+
+  let member: ProjectMember | undefined;
+  if (body.addLocalUser !== false) {
+    const profile = await readLocalUserProfile(repoRoot);
+    if (profile) {
+      member = upsertProjectMember(repoRoot, projectId, profile.displayName, 'active');
+      await ensureAvatarForDisplayName(repoRoot, profile.displayName);
+    }
+  }
+
+  return { project, member };
 }
 
 async function initRepoConfig(repoRoot: string): Promise<{ config: TeambridgeConfig; path: string; created: boolean }> {
@@ -369,16 +873,25 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
 
   const dbPath = initializeStateDb(repoRoot);
   const sessionName = body.sessionName.trim();
-  const displayName = safeDisplayName(body.displayName ?? process.env.USER ?? 'local');
+  const profile = await readLocalUserProfile(repoRoot);
+  const displayName = resolveParticipantDisplayName(repoRoot, body.displayName, profile);
   const baseRef = body.baseRef?.trim() || 'HEAD';
   const baseCommit = resolveBaseCommit(repoRoot, baseRef);
   const now = new Date().toISOString();
   const workspaceId = `ws_${randomUUID()}`;
   const participantId = `user_${randomUUID()}`;
-  const branch = `teambridge/${sessionName}/${displayName}`;
+  const branch = branchForParticipant(sessionName, displayName);
   const repoRemote = getRepoRemote(repoRoot);
   const currentCommit = runGit(repoRoot, ['rev-parse', 'HEAD']);
   const currentBranch = getCurrentBranch(repoRoot);
+
+  const projectId = body.projectId?.trim() || profile?.defaultProjectId?.trim() || null;
+  if (projectId) {
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+  }
 
   const workspace: Workspace = {
     id: workspaceId,
@@ -391,7 +904,8 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
     createdBy: participantId,
     createdAt: now,
     status: 'active',
-    relayMode: 'local'
+    relayMode: 'local',
+    projectId
   };
 
   const participant: Participant = {
@@ -399,7 +913,7 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
     displayName,
     workspaceId,
     branch,
-    agent: body.agent,
+    agent: body.agent ?? profile?.defaultAgent,
     status: 'active',
     lastSeenAt: now
   };
@@ -416,9 +930,9 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
   runSql(dbPath, `
     begin;
 
-    insert into workspaces (
+    insert into tracks (
       id, session_name, repo_remote, repo_root_hash, base_ref, base_commit,
-      scope_json, created_by, created_at, status, relay_mode
+      scope_json, created_by, created_at, status, relay_mode, project_id
     ) values (
       ${sqlValue(workspace.id)},
       ${sqlValue(workspace.sessionName)},
@@ -430,7 +944,8 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
       ${sqlValue(workspace.createdBy)},
       ${sqlValue(workspace.createdAt)},
       ${sqlValue(workspace.status)},
-      ${sqlValue(workspace.relayMode)}
+      ${sqlValue(workspace.relayMode)},
+      ${sqlValue(workspace.projectId)}
     );
 
     insert into participants (
@@ -471,6 +986,11 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
 
   await writeFile(join(workspaceDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
+  if (projectId) {
+    upsertProjectMember(repoRoot, projectId, displayName, 'active');
+    await ensureAvatarForDisplayName(repoRoot, displayName);
+  }
+
   return {
     manifest,
     worktree: {
@@ -487,7 +1007,40 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
 
 function listWorkspaces(repoRoot: string): Workspace[] {
   const dbPath = initializeStateDb(repoRoot);
-  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from workspaces order by created_at desc');
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from tracks order by created_at desc');
+  return rows.map(rowToWorkspace);
+}
+
+function listProjects(repoRoot: string): Project[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from projects order by created_at desc');
+  return rows.map(rowToProject);
+}
+
+function getProjectById(repoRoot: string, projectId: string): Project | undefined {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from projects where id = ${sqlValue(projectId)} limit 1`
+  );
+  return row ? rowToProject(row) : undefined;
+}
+
+function listProjectMembers(repoRoot: string, projectId: string): ProjectMember[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from project_members where project_id = ${sqlValue(projectId)} order by display_name asc`
+  );
+  return rows.map(rowToProjectMember);
+}
+
+function listTracksByProject(repoRoot: string, projectId: string): Workspace[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from tracks where project_id = ${sqlValue(projectId)} order by created_at desc`
+  );
   return rows.map(rowToWorkspace);
 }
 
@@ -500,11 +1053,32 @@ function listParticipants(repoRoot: string, workspaceId: string): Participant[] 
   return rows.map(rowToParticipant);
 }
 
+function findLegacyAvatarIdsForSlug(repoRoot: string, slug: string): string[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select id, display_name from participants');
+  const ids: string[] = [];
+  for (const row of rows) {
+    if (avatarNameSlug(String(row.display_name)) === slug) {
+      ids.push(String(row.id));
+    }
+  }
+  return ids;
+}
+
+function avatarOptionsFromParams(params: URLSearchParams): PfpOptions {
+  return {
+    query: params.get('query') ?? undefined,
+    size: params.get('size') ? Number(params.get('size')) : undefined,
+    algorithm: (params.get('algorithm') as DitherAlgorithm | null) ?? undefined,
+    bayerLevel: params.get('bayerLevel') ? Number(params.get('bayerLevel')) : undefined
+  };
+}
+
 function getWorkspaceByIdentifier(repoRoot: string, identifier: string): Workspace | undefined {
   const dbPath = initializeStateDb(repoRoot);
   const [row] = querySql<Record<string, unknown>>(
     dbPath,
-    `select * from workspaces where id = ${sqlValue(identifier)} or session_name = ${sqlValue(identifier)} limit 1`
+    `select * from tracks where id = ${sqlValue(identifier)} or session_name = ${sqlValue(identifier)} limit 1`
   );
 
   return row ? rowToWorkspace(row) : undefined;
@@ -559,15 +1133,16 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
 
   const dbPath = initializeStateDb(repoRoot);
   const now = new Date().toISOString();
-  const displayName = safeDisplayName(body.displayName ?? process.env.USER ?? 'local');
+  const profile = await readLocalUserProfile(repoRoot);
+  const displayName = resolveParticipantDisplayName(repoRoot, body.displayName, profile);
   const participantId = `user_${randomUUID()}`;
-  const branch = `teambridge/${workspace.sessionName}/${displayName}`;
+  const branch = branchForParticipant(workspace.sessionName, displayName);
   const participant: Participant = {
     id: participantId,
     workspaceId: workspace.id,
     displayName,
     branch,
-    agent: body.agent,
+    agent: body.agent ?? profile?.defaultAgent,
     status: 'active',
     lastSeenAt: now
   };
@@ -606,6 +1181,11 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
   }
 
   const manifest = await writeWorkspaceManifest(repoRoot, workspace);
+
+  if (workspace.projectId) {
+    upsertProjectMember(repoRoot, workspace.projectId, displayName, 'active');
+    await ensureAvatarForDisplayName(repoRoot, displayName);
+  }
 
   return {
     manifest,
@@ -672,6 +1252,11 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   const method = request.method ?? 'GET';
   const url = new URL(request.url ?? '/', 'http://localhost');
 
+  if (method === 'OPTIONS') {
+    sendCorsPreflight(response);
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/health') {
     sendJson(response, 200, ok({ status: 'ok' }));
     return;
@@ -695,6 +1280,178 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && url.pathname === '/workspaces') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     sendJson<WorkspaceListResponse>(response, 200, ok({ workspaces: listWorkspaces(repoRoot) }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/tracks') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    sendJson<TrackListResponse>(response, 200, ok({ tracks: listWorkspaces(repoRoot) }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/projects') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    sendJson<ProjectListResponse>(response, 200, ok({ projects: listProjects(repoRoot) }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/projects') {
+    try {
+      const body = CreateProjectBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      const result = await createProject(repoRoot, body);
+      sendJson<CreateProjectResponse>(response, 201, ok(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create project';
+      const status = message.includes('already exists') ? 409 : 400;
+      sendJson(response, status, fail(status === 409 ? 'CONFLICT' : 'INVALID_REQUEST', message));
+    }
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/user/profile') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const profile = await readLocalUserProfile(repoRoot);
+    sendJson<LocalUserProfileResponse>(response, 200, ok({ profile, path: getUserProfilePath(repoRoot) }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/repo/context') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspaceId = url.searchParams.get('workspaceId') ?? undefined;
+    let resolvedWorkspaceId = workspaceId;
+    if (workspaceId && !getWorkspaceByIdentifier(repoRoot, workspaceId)) {
+      resolvedWorkspaceId = undefined;
+    }
+    sendJson<RepoContextResponse>(response, 200, ok({ context: buildRepoContext(repoRoot, resolvedWorkspaceId) }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/repo/open-path') {
+    try {
+      const body = OpenPathBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      const target = resolve(body.path);
+      const rel = relative(resolve(repoRoot), target);
+      if (rel.startsWith('..') || isAbsolute(rel)) {
+        sendJson(response, 400, fail('INVALID_REQUEST', 'Path must be inside the repository'));
+        return;
+      }
+      openPathOnDevice(target);
+      sendJson(response, 200, ok({ opened: target }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open path';
+      sendJson(response, 400, fail('INVALID_REQUEST', message));
+    }
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/user/profile') {
+    try {
+      const body = SaveLocalUserBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      await initRepoConfig(repoRoot);
+      const result = await saveLocalUserProfile(repoRoot, body);
+      sendJson(response, 200, ok(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save user profile';
+      sendJson(response, 400, fail('INVALID_REQUEST', message));
+    }
+    return;
+  }
+
+  const avatarByNameMatch = url.pathname.match(/^\/avatars\/by-name\/([^/]+)$/);
+  if (method === 'GET' && avatarByNameMatch) {
+    const slug = decodeURIComponent(avatarByNameMatch[1]);
+    if (!slug || !/^[\w-]+$/.test(slug)) {
+      sendJson(response, 400, fail('INVALID_REQUEST', `Invalid avatar slug ${slug}`));
+      return;
+    }
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const avatarId = `name_${slug}`;
+    const legacyIds = findLegacyAvatarIdsForSlug(repoRoot, slug);
+    const { png } = await getOrGenerateAvatar(
+      repoRoot,
+      avatarId,
+      avatarOptionsFromParams(url.searchParams),
+      legacyIds
+    );
+    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    return;
+  }
+
+  const projectMembersMatch = url.pathname.match(/^\/projects\/([^/]+)\/members$/);
+  if (method === 'GET' && projectMembersMatch) {
+    const projectId = decodeURIComponent(projectMembersMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+      return;
+    }
+    sendJson<ProjectMemberListResponse>(response, 200, ok({ members: listProjectMembers(repoRoot, projectId) }));
+    return;
+  }
+
+  if (method === 'POST' && projectMembersMatch) {
+    try {
+      const projectId = decodeURIComponent(projectMembersMatch[1]);
+      const body = UpsertProjectMemberBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      const project = getProjectById(repoRoot, projectId);
+      if (!project) {
+        sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+        return;
+      }
+      const member = upsertProjectMember(repoRoot, projectId, body.displayName.trim(), body.status ?? 'active');
+      await ensureAvatarForDisplayName(repoRoot, member.displayName);
+      sendJson<UpsertProjectMemberResponse>(response, 201, ok({ member }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to upsert project member';
+      sendJson(response, 400, fail('INVALID_REQUEST', message));
+    }
+    return;
+  }
+
+  const projectMemberAvatarMatch = url.pathname.match(/^\/projects\/([^/]+)\/members\/([^/]+)\/avatar$/);
+  if (method === 'GET' && projectMemberAvatarMatch) {
+    const projectId = decodeURIComponent(projectMemberAvatarMatch[1]);
+    const memberId = decodeURIComponent(projectMemberAvatarMatch[2]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+      return;
+    }
+    const members = listProjectMembers(repoRoot, projectId);
+    const member = members.find((entry) => entry.id === memberId);
+    if (!member) {
+      sendJson(response, 404, fail('NOT_FOUND', `Project member ${memberId} was not found`));
+      return;
+    }
+    const avatarId = avatarStorageId(member.displayName);
+    const slug = avatarNameSlug(member.displayName);
+    const legacyIds = findLegacyAvatarIdsForSlug(repoRoot, slug);
+    const { png } = await getOrGenerateAvatar(
+      repoRoot,
+      avatarId,
+      avatarOptionsFromParams(url.searchParams),
+      legacyIds
+    );
+    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    return;
+  }
+
+  const projectTracksMatch = url.pathname.match(/^\/projects\/([^/]+)\/tracks$/);
+  if (method === 'GET' && projectTracksMatch) {
+    const projectId = decodeURIComponent(projectTracksMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+      return;
+    }
+    sendJson<TrackListResponse>(response, 200, ok({ tracks: listTracksByProject(repoRoot, projectId) }));
     return;
   }
 
@@ -777,6 +1534,39 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  const vaultAnnotateMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/annotate$/);
+  if (method === 'POST' && vaultAnnotateMatch) {
+    const workspaceIdentifier = decodeURIComponent(vaultAnnotateMatch[1]);
+    const body = VaultAnnotateBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    try {
+      const { vaultDir } = getWorkspacePaths(repoRoot, workspace);
+      const file = await annotateVaultItem(vaultDir, {
+        path: body.path,
+        itemText: body.itemText,
+        color: body.color,
+        assign: body.assign
+      });
+      const repoConfig = await readRepoConfig(repoRoot);
+      const context = await createVaultContext(
+        workspace.id,
+        vaultDir,
+        getLastSeq(repoRoot, workspace.id),
+        repoConfig.vault.contextMaxBytes
+      );
+      sendJson<VaultAnnotateResponseBody>(response, 200, ok({ file, context }));
+    } catch (error) {
+      sendJson(response, 400, fail('INVALID_REQUEST', error instanceof Error ? error.message : 'Unable to annotate vault item'));
+    }
+    return;
+  }
+
   const vaultRebuildMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/rebuild$/);
   if (method === 'POST' && vaultRebuildMatch) {
     const workspaceIdentifier = decodeURIComponent(vaultRebuildMatch[1]);
@@ -796,29 +1586,90 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   const statusMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/status$/);
   if (method === 'GET' && statusMatch) {
-    const workspaceId = statusMatch[1];
+    const workspaceIdentifier = decodeURIComponent(statusMatch[1]);
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
     const dbPath = initializeStateDb(repoRoot);
-    const [row] = querySql<Record<string, unknown>>(
-      dbPath,
-      `select * from workspaces where id = ${sqlValue(workspaceId)}`
-    );
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
 
-    if (!row) {
-      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceId} was not found`));
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
       return;
     }
 
     const [sequence] = querySql<{ last_seq?: number }>(
       dbPath,
-      `select last_seq from local_sequences where workspace_id = ${sqlValue(workspaceId)}`
+      `select last_seq from local_sequences where workspace_id = ${sqlValue(workspace.id)}`
     );
 
     sendJson(response, 200, ok({
-      workspace: rowToWorkspace(row),
-      participants: listParticipants(repoRoot, workspaceId),
+      workspace,
+      participants: listParticipants(repoRoot, workspace.id),
       lastSeq: sequence?.last_seq ?? 0
     }));
+    return;
+  }
+
+  const avatarMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/participants\/([^/]+)\/avatar$/);
+  if (method === 'GET' && avatarMatch) {
+    const workspaceIdentifier = decodeURIComponent(avatarMatch[1]);
+    const participantId = decodeURIComponent(avatarMatch[2]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const participants = listParticipants(repoRoot, workspace.id);
+    const participant = participants.find((entry) => entry.id === participantId);
+    if (!participant) {
+      sendJson(response, 404, fail('NOT_FOUND', `Participant ${participantId} was not found`));
+      return;
+    }
+    const avatarId = avatarStorageId(participant.displayName);
+    const slug = avatarNameSlug(participant.displayName);
+    const legacyIds = [participantId, ...findLegacyAvatarIdsForSlug(repoRoot, slug).filter((id) => id !== participantId)];
+    const { png } = await getOrGenerateAvatar(
+      repoRoot,
+      avatarId,
+      avatarOptionsFromParams(url.searchParams),
+      legacyIds
+    );
+    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/dev/pfp/preview') {
+    const body = PfpPreviewBodySchema.parse(await readJsonBody<unknown>(request));
+    const options: PfpOptions = {
+      query: body.query,
+      size: body.size,
+      algorithm: body.algorithm,
+      bayerLevel: body.bayerLevel,
+      color: body.color,
+      seed: body.seed
+    };
+    const { png, meta } = await generatePfp(options);
+    sendBinary(response, 200, png, 'image/png', {
+      'x-pfp-source': meta.source,
+      'x-pfp-source-url': meta.sourceUrl ?? '',
+      'x-pfp-image-url': meta.imageUrl ?? '',
+      'x-pfp-photographer': meta.photographer ?? '',
+      'x-pfp-alt': meta.alt ?? ''
+    });
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/dev/pfp/regenerate') {
+    const body = PfpRegenerateBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const { meta } = await regenerateAvatar(repoRoot, body.participantId, {
+      query: body.query,
+      size: body.size,
+      algorithm: body.algorithm,
+      bayerLevel: body.bayerLevel,
+      color: body.color
+    });
+    sendJson(response, 200, ok({ participantId: body.participantId, meta }));
     return;
   }
 

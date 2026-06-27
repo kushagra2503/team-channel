@@ -39,7 +39,8 @@ export const WorkspaceSchema = z.object({
   createdBy: z.string().min(1),
   createdAt: z.string().datetime(),
   status: WorkspaceStatusSchema,
-  relayMode: RelayModeSchema
+  relayMode: RelayModeSchema,
+  projectId: z.string().min(1).nullable()
 });
 
 export const WorkspaceManifestSchema = WorkspaceSchema.extend({
@@ -52,7 +53,35 @@ export const StartWorkspaceRequestSchema = z.object({
   baseRef: z.string().min(1).optional(),
   scope: z.array(z.string()).optional(),
   displayName: z.string().min(1).optional(),
-  agent: AgentKindSchema.optional()
+  agent: AgentKindSchema.optional(),
+  projectId: z.string().min(1).optional()
+});
+
+export const LocalUserProfileSchema = z.object({
+  schemaVersion: z.literal(1),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  displayName: z.string().min(1),
+  defaultAgent: AgentKindSchema.optional(),
+  defaultProjectId: z.string().min(1).nullable().optional()
+});
+
+export const SaveLocalUserProfileRequestSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  defaultAgent: AgentKindSchema.optional(),
+  defaultProjectId: z.string().min(1).nullable().optional()
+});
+
+export const CreateProjectRequestSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+  addLocalUser: z.boolean().optional()
+});
+
+export const UpsertProjectMemberRequestSchema = z.object({
+  displayName: z.string().min(1),
+  status: ParticipantStatusSchema.optional()
 });
 
 export const JoinWorkspaceRequestSchema = z.object({
@@ -123,6 +152,7 @@ export const VaultContextSchema = z.object({
 export const TeambridgeErrorCodeSchema = z.enum([
   'WORKSPACE_NOT_FOUND',
   'WORKTREE_NOT_FOUND',
+  'PROJECT_NOT_FOUND',
   'UNAUTHENTICATED',
   'FORBIDDEN',
   'CONFLICT',

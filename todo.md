@@ -35,8 +35,8 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 - [ ] Step 1, everyone: agree on the current contract shapes in `packages/core/src/contracts/`.
 - [ ] Step 2, everyone in parallel:
   - [x] Nihal: add `packages/core`, `packages/daemon`, and `packages/vault`.
-  - Kushagra: add `packages/cli` and CLI command parser skeleton.
-  - Ronish: add `packages/mcp` and `apps/dashboard` skeletons.
+  - [x] Kushagra: add `packages/cli` and CLI command parser skeleton.
+  - [x] Ronish: add `packages/mcp` and `apps/dashboard` skeletons.
 - [ ] Step 3, Nihal first:
   - [x] Add TypeScript build setup for core/backend packages.
   - [x] Convert contract types into runtime-validated schemas where needed.
@@ -46,20 +46,23 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Implement local SQLite state using a Phase 1 SQLite adapter.
   - [x] Implement local workspace store.
 - [ ] Step 4, Kushagra after daemon health/config exist:
-  - Implement `teambridge init`.
-  - Implement `teambridge status`.
-  - Implement `teambridge ws show <session_name>`.
-  - Implement `teambridge ws who <session_name>`.
-  - Implement `teambridge ws branches <session_name>`.
-  - Wire CLI calls to the local daemon.
-  - Make CLI requests repo-aware: resolve the current working directory to the current git repo root and send that `repoRoot` to the daemon.
-  - Keep daemon startup generic; normal users should not have to start the daemon with `--repo`.
+  - [x] Implement `teambridge init` (profile + avatar via daemon).
+  - [x] Implement `teambridge status`.
+  - [x] Implement `teambridge project create` and `teambridge project list`.
+  - [x] Wire CLI calls to the local daemon.
+  - [x] Make CLI requests repo-aware: resolve the current working directory to the current git repo root and send that `repoRoot` to the daemon.
+  - [x] Daemon discovers git repo root from cwd when started via `pnpm daemon` (walk up to `.git`).
+  - [ ] Implement `teambridge ws show <session_name>`.
+  - [ ] Implement `teambridge ws who <session_name>`.
+  - [ ] Implement `teambridge ws branches <session_name>`.
+  - [ ] Keep daemon startup generic; normal users should not have to start the daemon with `--repo` (auto-detect shipped; background service / IDE launch still pending).
 - [x] Step 5, Nihal backend workspace APIs:
   - [x] Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
 - [ ] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
-  - Kushagra: implement `teambridge start <session_name> [base_ref]`, sending the current repo root as `repoRoot`, resolving `base_ref` to immutable `base_commit`, and creating the creator worktree/branch.
-  - Kushagra: implement `teambridge join <session_name>`, use recorded `base_commit`, and create participant worktree/branch.
-  - Kushagra: implement `teambridge enter <session_name>`.
+  - [x] Ronish/Kushagra: implement `teambridge track start [NAME]` (wraps `/workspaces/start`, links `projectId`, uses local profile).
+  - [ ] Kushagra: implement `teambridge start <session_name> [base_ref]` (north-star alias / full worktree+branch flow).
+  - [ ] Kushagra: implement `teambridge join <session_name>`, use recorded `base_commit`, and create participant worktree/branch.
+  - [ ] Kushagra: implement `teambridge enter <session_name>`.
 - [x] Step 7, Nihal backend event and vault APIs:
   - [x] Nihal: implement local event append to `events.jsonl`.
   - [x] Nihal: implement the single local user event type: `publish`.
@@ -73,14 +76,52 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Kushagra: implement `teambridge vault search <query>`.
   - Kushagra: implement `teambridge vault context`.
 - [ ] Step 9, Ronish after daemon read endpoints exist:
-  - Stub MCP resource names from contracts.
-  - Stub dashboard API client against daemon response contracts.
-  - Show local workspace list.
-  - Show local participants/branches.
-  - Show vault file highlights.
+  - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`).
+  - [x] Stub dashboard API client against daemon response contracts.
+  - [x] Show local workspace list (project picker + track sidebar).
+  - [x] Show local participants/branches (project members sidebar).
+  - [x] Show vault file highlights (with color/assign annotations).
+  - [x] CLI scaffold aligned with dashboard (`teambridge init`, `project create`, `track start` → same daemon data).
+  - [x] Sidebar repo context panel (`GET /repo/context`, `POST /repo/open-path` — remote, branch, local path, last push + commit link).
+  - [x] Local user profile APIs (`GET/POST /user/profile`, flower avatar on init).
+  - [x] `POST /projects` + roster member upsert; start/join link tracks to projects.
+  - [x] Vault chip first-name display (`participantFirstName`).
+  - [x] Root ergonomics: `pnpm teambridge`, `pnpm dashboard:preview`, `VITE_TEAMBRIDGE_REPO_ROOT` baked at dashboard build.
+  - [x] CLI integration tests in `tests/integration/` (`pnpm test:integration`).
 - [ ] Step 10, everyone: prove the local pass example below.
 
+### Dashboard milestone (Jun 2026)
+
+Shipped on `feat/ronish-mcp-dashboard`:
+
+- [x] Project → Track hierarchy in daemon (`GET /projects`, `/projects/:id/tracks`, `/tracks`)
+- [x] Seed script (`pnpm seed`) — Beacon, Silo, Forge demo projects
+- [x] React Router dashboard (`/` → project picker, `/projects/:projectId` → track view)
+- [x] Name-based avatars (`GET /avatars/by-name/:slug`, member avatar routes)
+- [x] Vault row annotations (`POST .../vault/annotate`, `[tb color= assign=]` in markdown)
+- [x] Sidebar repo context panel (path, branch, remote, last push — full-width hover rows)
+- [x] CLI ↔ dashboard parity (`init`, `project create`, `track start`, `status` — no seed required)
+- [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
+- [x] Topbar cleanup (removed teammate count + note # chips)
+
+Still pending: MCP HTTP server, inbox UI, conflicts UI, presence/branches polish, CLI publish/join/enter/vault commands, packaged installer / auto-start daemon.
+
+CLI + dashboard dogfood (no seed):
+
+```bash
+pnpm build
+pnpm daemon
+pnpm teambridge init
+pnpm teambridge project create --name "My App" --description "Local dogfood"
+pnpm teambridge track start auth-redesign --project <project-id>
+pnpm dashboard          # dev
+# or: pnpm dashboard:preview   # production build
+pnpm test:integration   # verify CLI + daemon end-to-end
+```
+
 ### Phase 1 Pass Example
+
+> **Runnable today (without full north-star CLI):** `pnpm build`, `pnpm daemon`, then either `pnpm seed` + `pnpm dashboard` **or** the dogfood CLI flow above. Integration tests: `pnpm test:integration`. Publish/join/enter/vault CLI commands are still pending.
 
 ```bash
 # Nihal starts the workspace from main.
@@ -108,6 +149,12 @@ Pass when:
 - [ ] `vault context` returns a concatenated flat-vault context with `includedPaths`, `lastSeq`, and `truncated`.
 - [ ] The vault can be deleted and rebuilt from `events.jsonl`.
 - [ ] No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
+
+Partial progress:
+
+- [x] Single-participant CLI bootstrap + track start against live daemon (covered by `tests/integration/cli-flow.test.mjs`).
+- [x] Dashboard reads vault context and annotations for seeded or CLI-created tracks.
+- [x] Daemon implements publish materialization + vault rebuild APIs (CLI publish command still pending).
 
 ## Phase 2: Supabase Relay and Cross-Device Sync
 
@@ -202,14 +249,17 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - Kushagra: implement `teambridge reply`.
   - Kushagra: add CLI affordances for unread inbox count and pending questions.
 - [ ] Step 4, Ronish after dashboard APIs are stable:
-  - Implement dashboard shell.
-  - Show workspace list, participants, branches, presence, inbox, conflicts, and vault highlights.
-  - Add dashboard actions for approving replies and resolving conflicts.
-  - Show recent teammate deltas and latest vault highlights.
+  - [x] Implement dashboard shell (React Router, project picker, track sidebar).
+  - [x] Show project members and vault highlights (color/assign annotations).
+  - [x] Sidebar repo context for active track (git remote, branch, local path, last push).
+  - [ ] Show workspace list, participants, branches, presence, inbox, conflicts, and vault highlights.
+  - [ ] Add dashboard actions for approving replies and resolving conflicts.
+  - [ ] Show recent teammate deltas and latest vault highlights.
 - [ ] Step 5, Nihal while integrations land:
-  - Add end-to-end tests for two local participants.
-  - Add end-to-end tests for offline/reconnect sync.
-  - Add end-to-end tests for new joiner bootstrap.
+  - [x] Add end-to-end tests for CLI init → project → track → status (`tests/integration/`).
+  - [ ] Add end-to-end tests for two local participants.
+  - [ ] Add end-to-end tests for offline/reconnect sync.
+  - [ ] Add end-to-end tests for new joiner bootstrap.
 - [ ] Step 6, Kushagra + everyone:
   - Kushagra: document the first real dogfood workflow for Nihal, Kushagra, and Ronish.
   - Everyone: dogfood one real Teambridge session and fix gaps.

@@ -1,10 +1,12 @@
 import type { VaultCheckpoint } from './checkpoints';
 import type { TeambridgeError } from './errors';
 import type { WorkspaceEvent } from './events';
-import type { WorktreeInfo } from './git';
+import type { WorktreeInfo, RepoContext } from './git';
 import type { InboxMessage } from './inbox';
 import type { Participant } from './participant';
-import type { VaultContext, VaultFile, VaultSearchResult } from './vault';
+import type { LocalUserProfile } from './config';
+import type { Project, ProjectMember } from './project';
+import type { VaultContext, VaultFile, VaultSearchResult, VaultAnnotateResponse } from './vault';
 import type { Workspace, WorkspaceManifest } from './workspace';
 
 export type ApiOk<T> = {
@@ -19,8 +21,45 @@ export type ApiFail = {
 
 export type ApiResult<T> = ApiOk<T> | ApiFail;
 
+export function apiOk<T>(data: T): ApiOk<T> {
+  return { ok: true, data };
+}
+
+export function apiFail(code: TeambridgeError['code'], message: string, details?: unknown): ApiFail {
+  return {
+    ok: false,
+    error: { code, message, details }
+  };
+}
+
 export type WorkspaceListResponse = {
   workspaces: Workspace[];
+};
+
+export type TrackListResponse = {
+  tracks: Workspace[];
+};
+
+export type ProjectListResponse = {
+  projects: Project[];
+};
+
+export type ProjectMemberListResponse = {
+  members: ProjectMember[];
+};
+
+export type CreateProjectResponse = {
+  project: Project;
+  member?: ProjectMember;
+};
+
+export type UpsertProjectMemberResponse = {
+  member: ProjectMember;
+};
+
+export type LocalUserProfileResponse = {
+  profile: LocalUserProfile | null;
+  path: string;
 };
 
 export type StartWorkspaceResponse = {
@@ -56,10 +95,16 @@ export type VaultContextResponse = {
   context: VaultContext;
 };
 
+export type VaultAnnotateResponseBody = VaultAnnotateResponse;
+
 export type HookContextResponse = VaultContextResponse;
 
 export type JoinWorkspaceResponse = {
   manifest: WorkspaceManifest;
   worktree: WorktreeInfo;
+};
+
+export type RepoContextResponse = {
+  context: RepoContext;
 };
 
