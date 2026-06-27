@@ -18,3 +18,8 @@ export function avatarNameSlug(displayName: string): string {
 export function avatarStorageId(displayName: string): string {
   return `name_${avatarNameSlug(displayName)}`;
 }
+
+/** Human-readable display name from first and last name (dashboard + project roster). */
+export function formatDisplayName(firstName: string, lastName: string): string {
+  return `${firstName.trim()} ${lastName.trim()}`.replace(/\s+/g, ' ').trim();
+}

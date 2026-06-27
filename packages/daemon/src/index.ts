@@ -17,11 +17,15 @@ import type {
   EventListResponse,
   JoinWorkspaceRequest,
   JoinWorkspaceResponse,
+  LocalUserProfile,
+  LocalUserProfileResponse,
   Participant,
   Project,
   ProjectListResponse,
   ProjectMember,
   ProjectMemberListResponse,
+  CreateProjectResponse,
+  UpsertProjectMemberResponse,
   PublishEventPayload,
   PublishEventRequest,
   StartWorkspaceRequest,
@@ -42,8 +46,13 @@ import {
   PublishEventRequestSchema,
   StartWorkspaceRequestSchema,
   TeambridgeConfigSchema,
+  CreateProjectRequestSchema,
+  SaveLocalUserProfileRequestSchema,
+  UpsertProjectMemberRequestSchema,
+  LocalUserProfileSchema,
   avatarStorageId,
-  avatarNameSlug
+  avatarNameSlug,
+  formatDisplayName
 } from '@teambridge/core';
 import {
   annotateVaultItem,
@@ -65,6 +74,18 @@ import {
 const DEFAULT_PORT = 9473;
 
 const StartRequestBodySchema = StartWorkspaceRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const CreateProjectBodySchema = CreateProjectRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const SaveLocalUserBodySchema = SaveLocalUserProfileRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const UpsertProjectMemberBodySchema = UpsertProjectMemberRequestSchema.extend({
   repoRoot: z.string().min(1).optional()
 });
 
@@ -476,6 +497,156 @@ async function readRepoConfig(repoRoot: string): Promise<TeambridgeConfig> {
   return TeambridgeConfigSchema.parse(JSON.parse(content));
 }
 
+function getUserProfilePath(repoRoot: string): string {
+  return join(repoRoot, '.teambridge', 'user.json');
+}
+
+async function readLocalUserProfile(repoRoot: string): Promise<LocalUserProfile | null> {
+  const profilePath = getUserProfilePath(repoRoot);
+  const content = await readFile(profilePath, 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  });
+  if (!content) {
+    return null;
+  }
+  return LocalUserProfileSchema.parse(JSON.parse(content));
+}
+
+async function writeLocalUserProfile(repoRoot: string, profile: LocalUserProfile): Promise<string> {
+  await ensureTeambridgeDirs(repoRoot);
+  const profilePath = getUserProfilePath(repoRoot);
+  await writeFile(profilePath, `${JSON.stringify(profile, null, 2)}\n`);
+  return profilePath;
+}
+
+async function saveLocalUserProfile(
+  repoRoot: string,
+  body: z.infer<typeof SaveLocalUserProfileRequestSchema>
+): Promise<{ profile: LocalUserProfile; path: string }> {
+  const displayName = formatDisplayName(body.firstName, body.lastName);
+  const profile: LocalUserProfile = {
+    schemaVersion: 1,
+    firstName: body.firstName.trim(),
+    lastName: body.lastName.trim(),
+    displayName,
+    defaultAgent: body.defaultAgent,
+    defaultProjectId: body.defaultProjectId ?? null
+  };
+  const path = await writeLocalUserProfile(repoRoot, profile);
+  await ensureAvatarForDisplayName(repoRoot, displayName);
+  return { profile, path };
+}
+
+async function ensureAvatarForDisplayName(repoRoot: string, displayName: string): Promise<void> {
+  const slug = avatarNameSlug(displayName);
+  const avatarId = avatarStorageId(displayName);
+  await getOrGenerateAvatar(repoRoot, avatarId, { query: displayName }, findLegacyAvatarIdsForSlug(repoRoot, slug));
+}
+
+function resolveParticipantDisplayName(repoRoot: string, bodyDisplayName: string | undefined, profile: LocalUserProfile | null): string {
+  if (bodyDisplayName?.trim()) {
+    return bodyDisplayName.trim();
+  }
+  if (profile?.displayName) {
+    return profile.displayName;
+  }
+  return process.env.USER?.trim() || 'local';
+}
+
+function branchForParticipant(sessionName: string, displayName: string): string {
+  return `teambridge/${sessionName}/${safeDisplayName(displayName)}`;
+}
+
+function upsertProjectMember(
+  repoRoot: string,
+  projectId: string,
+  displayName: string,
+  status: Participant['status'] = 'active'
+): ProjectMember {
+  const dbPath = initializeStateDb(repoRoot);
+  const now = new Date().toISOString();
+  const existing = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from project_members where project_id = ${sqlValue(projectId)} and display_name = ${sqlValue(displayName)} limit 1`
+  );
+  if (existing.length > 0) {
+    runSql(
+      dbPath,
+      `update project_members set status = ${sqlValue(status)}, last_seen_at = ${sqlValue(now)} where id = ${sqlValue(String(existing[0].id))}`
+    );
+    const [row] = querySql<Record<string, unknown>>(
+      dbPath,
+      `select * from project_members where id = ${sqlValue(String(existing[0].id))} limit 1`
+    );
+    return rowToProjectMember(row);
+  }
+
+  const memberId = `pm_${randomUUID()}`;
+  runSql(dbPath, `
+    insert into project_members (id, project_id, display_name, status, last_seen_at)
+    values (
+      ${sqlValue(memberId)},
+      ${sqlValue(projectId)},
+      ${sqlValue(displayName)},
+      ${sqlValue(status)},
+      ${sqlValue(now)}
+    );
+  `);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from project_members where id = ${sqlValue(memberId)} limit 1`
+  );
+  return rowToProjectMember(row);
+}
+
+async function createProject(
+  repoRoot: string,
+  body: z.infer<typeof CreateProjectRequestSchema>
+): Promise<CreateProjectResponse> {
+  const dbPath = initializeStateDb(repoRoot);
+  const name = body.name.trim();
+  const description = body.description?.trim() ?? '';
+  const duplicate = querySql<{ id: string }>(
+    dbPath,
+    `select id from projects where name = ${sqlValue(name)} limit 1`
+  );
+  if (duplicate.length > 0) {
+    throw new Error(`Project name already exists: ${name}`);
+  }
+
+  const projectId = `proj_${randomUUID().slice(0, 8)}`;
+  const now = new Date().toISOString();
+  runSql(dbPath, `
+    insert into projects (id, name, description, status, created_at)
+    values (
+      ${sqlValue(projectId)},
+      ${sqlValue(name)},
+      ${sqlValue(description)},
+      'active',
+      ${sqlValue(now)}
+    );
+  `);
+
+  const project = getProjectById(repoRoot, projectId);
+  if (!project) {
+    throw new Error('Failed to create project');
+  }
+
+  let member: ProjectMember | undefined;
+  if (body.addLocalUser !== false) {
+    const profile = await readLocalUserProfile(repoRoot);
+    if (profile) {
+      member = upsertProjectMember(repoRoot, projectId, profile.displayName, 'active');
+      await ensureAvatarForDisplayName(repoRoot, profile.displayName);
+    }
+  }
+
+  return { project, member };
+}
+
 async function initRepoConfig(repoRoot: string): Promise<{ config: TeambridgeConfig; path: string; created: boolean }> {
   await ensureTeambridgeDirs(repoRoot);
 
@@ -514,16 +685,25 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
 
   const dbPath = initializeStateDb(repoRoot);
   const sessionName = body.sessionName.trim();
-  const displayName = safeDisplayName(body.displayName ?? process.env.USER ?? 'local');
+  const profile = await readLocalUserProfile(repoRoot);
+  const displayName = resolveParticipantDisplayName(repoRoot, body.displayName, profile);
   const baseRef = body.baseRef?.trim() || 'HEAD';
   const baseCommit = resolveBaseCommit(repoRoot, baseRef);
   const now = new Date().toISOString();
   const workspaceId = `ws_${randomUUID()}`;
   const participantId = `user_${randomUUID()}`;
-  const branch = `teambridge/${sessionName}/${displayName}`;
+  const branch = branchForParticipant(sessionName, displayName);
   const repoRemote = getRepoRemote(repoRoot);
   const currentCommit = runGit(repoRoot, ['rev-parse', 'HEAD']);
   const currentBranch = getCurrentBranch(repoRoot);
+
+  const projectId = body.projectId?.trim() || profile?.defaultProjectId?.trim() || null;
+  if (projectId) {
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+  }
 
   const workspace: Workspace = {
     id: workspaceId,
@@ -537,7 +717,7 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
     createdAt: now,
     status: 'active',
     relayMode: 'local',
-    projectId: null
+    projectId
   };
 
   const participant: Participant = {
@@ -545,7 +725,7 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
     displayName,
     workspaceId,
     branch,
-    agent: body.agent,
+    agent: body.agent ?? profile?.defaultAgent,
     status: 'active',
     lastSeenAt: now
   };
@@ -617,6 +797,11 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
   };
 
   await writeFile(join(workspaceDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+  if (projectId) {
+    upsertProjectMember(repoRoot, projectId, displayName, 'active');
+    await ensureAvatarForDisplayName(repoRoot, displayName);
+  }
 
   return {
     manifest,
@@ -760,15 +945,16 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
 
   const dbPath = initializeStateDb(repoRoot);
   const now = new Date().toISOString();
-  const displayName = safeDisplayName(body.displayName ?? process.env.USER ?? 'local');
+  const profile = await readLocalUserProfile(repoRoot);
+  const displayName = resolveParticipantDisplayName(repoRoot, body.displayName, profile);
   const participantId = `user_${randomUUID()}`;
-  const branch = `teambridge/${workspace.sessionName}/${displayName}`;
+  const branch = branchForParticipant(workspace.sessionName, displayName);
   const participant: Participant = {
     id: participantId,
     workspaceId: workspace.id,
     displayName,
     branch,
-    agent: body.agent,
+    agent: body.agent ?? profile?.defaultAgent,
     status: 'active',
     lastSeenAt: now
   };
@@ -807,6 +993,11 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
   }
 
   const manifest = await writeWorkspaceManifest(repoRoot, workspace);
+
+  if (workspace.projectId) {
+    upsertProjectMember(repoRoot, workspace.projectId, displayName, 'active');
+    await ensureAvatarForDisplayName(repoRoot, displayName);
+  }
 
   return {
     manifest,
@@ -916,6 +1107,41 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  if (method === 'POST' && url.pathname === '/projects') {
+    try {
+      const body = CreateProjectBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      const result = await createProject(repoRoot, body);
+      sendJson<CreateProjectResponse>(response, 201, ok(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create project';
+      const status = message.includes('already exists') ? 409 : 400;
+      sendJson(response, status, fail(status === 409 ? 'CONFLICT' : 'INVALID_REQUEST', message));
+    }
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/user/profile') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const profile = await readLocalUserProfile(repoRoot);
+    sendJson<LocalUserProfileResponse>(response, 200, ok({ profile, path: getUserProfilePath(repoRoot) }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/user/profile') {
+    try {
+      const body = SaveLocalUserBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      await initRepoConfig(repoRoot);
+      const result = await saveLocalUserProfile(repoRoot, body);
+      sendJson(response, 200, ok(result));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save user profile';
+      sendJson(response, 400, fail('INVALID_REQUEST', message));
+    }
+    return;
+  }
+
   const avatarByNameMatch = url.pathname.match(/^\/avatars\/by-name\/([^/]+)$/);
   if (method === 'GET' && avatarByNameMatch) {
     const slug = decodeURIComponent(avatarByNameMatch[1]);
@@ -946,6 +1172,26 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       return;
     }
     sendJson<ProjectMemberListResponse>(response, 200, ok({ members: listProjectMembers(repoRoot, projectId) }));
+    return;
+  }
+
+  if (method === 'POST' && projectMembersMatch) {
+    try {
+      const projectId = decodeURIComponent(projectMembersMatch[1]);
+      const body = UpsertProjectMemberBodySchema.parse(await readJsonBody<unknown>(request));
+      const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      const project = getProjectById(repoRoot, projectId);
+      if (!project) {
+        sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+        return;
+      }
+      const member = upsertProjectMember(repoRoot, projectId, body.displayName.trim(), body.status ?? 'active');
+      await ensureAvatarForDisplayName(repoRoot, member.displayName);
+      sendJson<UpsertProjectMemberResponse>(response, 201, ok({ member }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to upsert project member';
+      sendJson(response, 400, fail('INVALID_REQUEST', message));
+    }
     return;
   }
 

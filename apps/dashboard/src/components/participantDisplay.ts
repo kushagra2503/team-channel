@@ -44,6 +44,26 @@ export function prettyParticipantName(raw: string): string {
     .join(' ');
 }
 
+/** First name only for compact chips — handles slug-style display names (ronish-patel → Ronish). */
+export function participantFirstName(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return '?';
+  }
+
+  if (/\s/.test(trimmed)) {
+    const first = trimmed.split(/\s+/)[0];
+    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  }
+
+  const segment = trimmed.split(/[-_]+/)[0];
+  if (!segment) {
+    return '?';
+  }
+
+  return segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase();
+}
+
 export function participantInitials(raw: string): string {
   const words = prettyParticipantName(raw).split(' ');
   const first = words[0]?.charAt(0) ?? '';

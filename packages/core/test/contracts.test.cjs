@@ -38,6 +38,7 @@ const manifest = {
   createdAt,
   status: 'active',
   relayMode: 'local',
+  projectId: null,
   schemaVersion: 1,
   participants: [participant]
 };

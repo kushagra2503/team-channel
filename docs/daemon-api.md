@@ -20,12 +20,39 @@ POST bodies may include `repoRoot` when the route accepts a JSON body.
 | GET | `/config?repoRoot=` | Read repo config |
 | POST | `/config/init` | Create `.teambridge/config.json` |
 
-## Projects and tracks (read)
+| POST | `/config/init` | Create `.teambridge/config.json` |
+
+## Local user profile (CLI + dashboard)
+
+Written by `teambridge init`; stored at `.teambridge/user.json`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/user/profile?repoRoot=` | Read local user (`firstName`, `lastName`, `displayName`, optional `defaultProjectId`) |
+| POST | `/user/profile` | Save profile and generate flower-dither avatar (`name_{slug}` on disk) |
+
+POST body:
+
+```json
+{
+  "repoRoot": "/path/to/repo",
+  "firstName": "Ronish",
+  "lastName": "Patel",
+  "defaultAgent": "cursor",
+  "defaultProjectId": "proj_abc123"
+}
+```
+
+The dashboard reads the same `displayName` for project roster avatars via `/avatars/by-name/:slug`.
+
+## Projects and tracks
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/projects?repoRoot=` | List projects |
+| POST | `/projects` | Create project; adds local user to roster when profile exists |
 | GET | `/projects/:projectId/members?repoRoot=` | Project member roster |
+| POST | `/projects/:projectId/members` | Upsert member by `displayName` (+ avatar generation) |
 | GET | `/projects/:projectId/tracks?repoRoot=` | Tracks belonging to project |
 | GET | `/projects/:projectId/members/:memberId/avatar?repoRoot=` | Avatar PNG for member display name |
 | GET | `/tracks?repoRoot=` | List all tracks (alias of workspace list) |
@@ -37,7 +64,7 @@ POST bodies may include `repoRoot` when the route accepts a JSON body.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/workspaces/start` | Create track, manifest, vault, creator participant |
+| POST | `/workspaces/start` | Create track; optional `projectId` links dashboard sidebar; uses local profile for display name |
 | POST | `/workspaces/join` | Join track; optional `worktreePath` |
 | GET | `/workspaces/:id/status?repoRoot=` | Workspace + participants + `lastSeq` |
 | GET | `/workspaces/:id/events?repoRoot=` | Event log |

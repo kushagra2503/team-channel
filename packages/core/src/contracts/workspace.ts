@@ -33,6 +33,8 @@ export type StartWorkspaceRequest = {
   scope?: string[];
   displayName?: string;
   agent?: AgentKind;
+  /** Link the new track to a project; creator is upserted on the project roster when profile exists. */
+  projectId?: string;
 };
 
 export type JoinWorkspaceRequest = {

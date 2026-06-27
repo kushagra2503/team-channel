@@ -6,6 +6,7 @@
     "build": "pnpm -r build",
     "dashboard": "pnpm --filter @teambridge/dashboard dev --host 127.0.0.1",
     "daemon": "pnpm --filter @teambridge/daemon start",
+    "cli": "pnpm --filter @teambridge/cli start",
     "seed": "node scripts/seed-demo.mjs",
     "test": "pnpm -r --if-present test"
   },

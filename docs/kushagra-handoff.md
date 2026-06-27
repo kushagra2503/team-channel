@@ -12,7 +12,8 @@ The repo is a pnpm workspace:
 packages/core   shared contracts, types, and zod schemas
 packages/vault  vault helpers, materializer, context, and rebuild logic
 packages/daemon local backend HTTP server
-packages/mcp    MCP package (stub / in progress)
+packages/cli    teambridge CLI (init, project create, track start — Ronish scaffold)
+packages/mcp    MCP resource/tool name stubs (HTTP server pending)
 apps/dashboard  React dashboard (project picker, tracks, vault highlights)
 scripts/seed-demo.mjs   demo data — run via pnpm seed
 ```
@@ -44,7 +45,8 @@ Right now we test with `curl` or the dashboard. The CLI will hide those HTTP cal
 ## Terminology
 
 - **Track** = workspace session (same row in `tracks` table, directory under `.teambridge/workspaces/`).
-- **Project** groups tracks and project members; seeded tracks have a `projectId`. CLI-created tracks may have `projectId: null` until project APIs grow.
+- **Project** groups tracks and project members; CLI sets `projectId` on tracks via `teambridge track start --project`.
+- **Local user** — `.teambridge/user.json` from `teambridge init`; dashboard avatars/roster use the same `displayName`.
 
 ## Repo Config
 

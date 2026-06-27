@@ -4,6 +4,7 @@ import type { WorkspaceEvent } from './events';
 import type { WorktreeInfo } from './git';
 import type { InboxMessage } from './inbox';
 import type { Participant } from './participant';
+import type { LocalUserProfile } from './config';
 import type { Project, ProjectMember } from './project';
 import type { VaultContext, VaultFile, VaultSearchResult, VaultAnnotateResponse } from './vault';
 import type { Workspace, WorkspaceManifest } from './workspace';
@@ -45,6 +46,20 @@ export type ProjectListResponse = {
 
 export type ProjectMemberListResponse = {
   members: ProjectMember[];
+};
+
+export type CreateProjectResponse = {
+  project: Project;
+  member?: ProjectMember;
+};
+
+export type UpsertProjectMemberResponse = {
+  member: ProjectMember;
+};
+
+export type LocalUserProfileResponse = {
+  profile: LocalUserProfile | null;
+  path: string;
 };
 
 export type StartWorkspaceResponse = {

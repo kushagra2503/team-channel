@@ -73,11 +73,12 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Kushagra: implement `teambridge vault search <query>`.
   - Kushagra: implement `teambridge vault context`.
 - [ ] Step 9, Ronish after daemon read endpoints exist:
-  - Stub MCP resource names from contracts.
+  - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`).
   - [x] Stub dashboard API client against daemon response contracts.
   - [x] Show local workspace list (project picker + track sidebar).
   - [x] Show local participants/branches (project members sidebar).
   - [x] Show vault file highlights (with color/assign annotations).
+  - [x] CLI scaffold aligned with dashboard (`teambridge init`, `project create`, `track start` → same daemon data).
 - [ ] Step 10, everyone: prove the local pass example below.
 
 ### Dashboard milestone (Jun 2026)
@@ -90,9 +91,17 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Name-based avatars (`GET /avatars/by-name/:slug`, member avatar routes)
 - [x] Vault row annotations (`POST .../vault/annotate`, `[tb color= assign=]` in markdown)
 
-Still pending: MCP server, inbox UI, conflicts UI, presence/branches polish, CLI.
+Still pending: MCP HTTP server, inbox UI, conflicts UI, presence/branches polish, CLI publish/join/enter/vault commands.
 
-See `docs/dashboard.md`, `docs/daemon-api.md`, and `docs/CONCEPTS.md`.
+CLI + dashboard dogfood (no seed):
+
+```bash
+pnpm daemon
+pnpm cli init
+pnpm cli project create --name "My App" --description "Local dogfood"
+pnpm cli track start auth-redesign --project <project-id>
+pnpm dashboard
+```
 
 ### Phase 1 Pass Example
 

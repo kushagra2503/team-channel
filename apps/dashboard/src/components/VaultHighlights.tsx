@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
-import { prettyParticipantName } from './participantDisplay';
+import { participantFirstName, prettyParticipantName } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 import { avatarNameSlug } from '@/lib/avatar-identity';
 import { parseVaultListLine } from '@/lib/vault-item-meta';
@@ -109,7 +109,7 @@ function VaultParticipantAvatar({ participant, config, avatarRev, size = 20 }: {
 function AuthorChip({ participant, config, avatarRev }: {
   participant: Participant; config: TeambridgeClientConfig; avatarRev?: number;
 }) {
-  const firstName = prettyParticipantName(participant.displayName).split(' ')[0];
+  const firstName = participantFirstName(participant.displayName);
   return (
     <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-muted/80 pl-0.5 pr-2">
       <VaultParticipantAvatar participant={participant} config={config} avatarRev={avatarRev} size={20} />
@@ -121,7 +121,7 @@ function AuthorChip({ participant, config, avatarRev }: {
 function AssignedChip({ participant, config, avatarRev }: {
   participant: Participant; config: TeambridgeClientConfig; avatarRev?: number;
 }) {
-  const firstName = prettyParticipantName(participant.displayName).split(' ')[0];
+  const firstName = participantFirstName(participant.displayName);
   return (
     <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted/60 py-0.5 pl-1 pr-2.5 text-xs text-muted-foreground select-none">
       <VaultParticipantAvatar participant={participant} config={config} avatarRev={avatarRev} size={16} />

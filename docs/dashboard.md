@@ -4,15 +4,26 @@ Local web UI for browsing projects, tracks, team members, and vault highlights.
 
 ## Run locally
 
-From the repo root (requires daemon + seed for demo data):
+From the repo root:
 
 ```bash
 pnpm install
 pnpm build
 pnpm daemon          # http://127.0.0.1:9473
-pnpm seed            # Beacon, Silo, Forge demo data
 pnpm dashboard       # Vite dev server (default host 127.0.0.1)
 ```
+
+**Demo data:** `pnpm seed` loads Beacon, Silo, Forge.
+
+**Your own data (CLI, same backend the dashboard reads):**
+
+```bash
+pnpm cli init
+pnpm cli project create --name "My App" --description "Optional"
+pnpm cli track start my-track --project <project-id-from-create-output>
+```
+
+Then open the dashboard — your project, track name, roster avatar, and vault shell appear without seed.
 
 Open the URL Vite prints (typically `http://127.0.0.1:5173`).
 

@@ -53,13 +53,21 @@ Optional metadata on vault list items, stored **in the markdown file** (not in t
 
 Written via `POST /workspaces/:id/vault/annotate`. Survives vault rebuild (extracted before replay, reapplied after). See `docs/daemon-api.md` and `packages/core/src/vault-annotations.ts`.
 
+## Local user profile
+
+- Stored at `.teambridge/user.json` after `teambridge init` (first name, last name, computed `displayName`).
+- Same `displayName` is used for project roster rows and track participants when using the CLI.
+- Avatar PNG is generated immediately via the daemon (`name_{slug}`); dashboard loads it through `/avatars/by-name/:slug`.
+- Optional `defaultProjectId` — CLI sets this when you create a project so `teambridge track start` links tracks to the right project sidebar.
+
 ## Phase 1 vs later
 
 | Shipped locally | Planned |
 |-----------------|---------|
-| Daemon HTTP API, flat vault, `publish` events | `teambridge` CLI (Kushagra) |
-| Dashboard: projects, tracks, vault highlights | MCP tools/resources (Ronish) |
-| Seed script (`pnpm seed`) | Supabase relay, inbox, conflicts UI |
-| Name-based avatars, vault annotations | Full `/tracks/*` API rename |
+| Daemon HTTP API, flat vault, `publish` events | Full CLI (publish, join, enter, vault search) |
+| Dashboard: projects, tracks, vault highlights | MCP HTTP server wiring (resource/tool stubs exist) |
+| CLI: `init`, `project create`, `track start`, `status` | Supabase relay, inbox, conflicts UI |
+| Seed script (`pnpm seed`) | Full `/tracks/*` API rename |
+| Name-based avatars, vault annotations | |
 
 Phase 1 event/vault rules remain in `docs/phase-1-design-choices.md`.
