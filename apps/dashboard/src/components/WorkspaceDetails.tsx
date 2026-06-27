@@ -1,12 +1,10 @@
-import { useState } from 'react';
 import { motion } from 'motion/react';
 import type { Participant, WorkspaceStatusResponse } from '@teambridge/core';
-import { buildAvatarUrl } from '@/api/teambridgeClient';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
+import { ParticipantAvatar } from '@/components/participant-avatar';
+import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import {
-  avatarColor,
   participantActivity,
-  participantInitials,
   prettyParticipantName
 } from './participantDisplay';
 
@@ -30,7 +28,6 @@ const HIDE = { opacity: 0, y: 5 } as const;
 function MemberRow({ participant, avatarUrl, index }: { participant: Participant; avatarUrl?: string; index: number }) {
   const activity = participantActivity(participant);
   const showDot = activity.tone === 'active' || activity.tone === 'idle';
-  const [imgLoaded, setImgLoaded] = useState(false);
 
   return (
     <motion.div
@@ -40,25 +37,11 @@ function MemberRow({ participant, avatarUrl, index }: { participant: Participant
       className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
     >
       <div className="relative shrink-0">
-        {/* Initials always mount as a base — acts as placeholder while image loads */}
-        <div
-          className="flex size-9 items-center justify-center rounded-full text-xs font-medium text-white"
-          style={{ backgroundColor: avatarColor(participant.id) }}
-        >
-          {participantInitials(participant.displayName)}
-        </div>
-        {avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            width={36}
-            height={36}
-            loading="lazy"
-            onLoad={() => setImgLoaded(true)}
-            className="absolute inset-0 size-9 rounded-full [image-rendering:pixelated] transition-opacity duration-200"
-            style={{ opacity: imgLoaded ? 1 : 0 }}
-          />
-        ) : null}
+        <ParticipantAvatar
+          avatarUrl={avatarUrl}
+          displayName={participant.displayName}
+          size={36}
+        />
         {showDot ? (
           <span
             className={`absolute right-0 bottom-0 size-2.5 rounded-full ring-2 ring-sidebar ${PRESENCE_DOT[activity.tone]}`}
@@ -96,9 +79,7 @@ export function WorkspaceDetails({
   const config = { daemonBaseUrl, repoRoot };
 
   const urlFor = (participant: Participant) =>
-    daemonBaseUrl
-      ? buildAvatarUrl(status.workspace.id, participant.id, config, avatarRev)
-      : undefined;
+    avatarUrlForDisplayName(participant.displayName, config, avatarRev);
 
   // Online group starts at index 0; offline group starts after
   const offlineStartIndex = online.length + 1;

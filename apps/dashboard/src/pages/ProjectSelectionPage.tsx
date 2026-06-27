@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
 import type { Project } from '@teambridge/core';
 import { listProjects, getDefaultClientConfig, DEFAULT_DAEMON_BASE_URL } from '@/api/teambridgeClient';
-import { useGridColumnCount } from '@/components/column-enter';
 import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
-import { COLUMN_DURATION, COLUMN_EASE, COLUMN_ENTER, COLUMN_HIDE, gridStaggerDelay } from '@/lib/motion';
 
 const LAST_PROJECT_KEY = 'tb_last_project';
 
@@ -17,7 +14,6 @@ function setLastProjectId(id: string): void {
 export function ProjectSelectionPage() {
   const navigate = useNavigate();
   const { setHeader, resetHeader } = useAppShell();
-  const gridColumns = useGridColumnCount();
   const config = useMemo(() => getDefaultClientConfig(), []);
   const cache = useMemo(() => createCache(config.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL), [config.daemonBaseUrl]);
 
@@ -54,14 +50,9 @@ export function ProjectSelectionPage() {
   return (
     <main className="flex-1 px-6 py-8">
       <div className="w-full max-w-4xl">
-        <motion.h1
-          initial={COLUMN_HIDE}
-          animate={COLUMN_ENTER}
-          transition={{ duration: COLUMN_DURATION, ease: COLUMN_EASE }}
-          className="mb-6 text-xl font-semibold tracking-tight"
-        >
+        <h1 className="mb-6 text-xl font-semibold tracking-tight">
           Select a project
-        </motion.h1>
+        </h1>
 
         {error ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -75,25 +66,18 @@ export function ProjectSelectionPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project, i) => (
-              <motion.button
+            {projects.map((project) => (
+              <button
                 key={project.id}
                 type="button"
-                initial={COLUMN_HIDE}
-                animate={COLUMN_ENTER}
-                transition={{
-                  duration: COLUMN_DURATION,
-                  delay: gridStaggerDelay(i, gridColumns),
-                  ease: COLUMN_EASE
-                }}
                 onClick={() => handleSelect(project)}
-                className="w-full cursor-pointer rounded-lg border border-border bg-card px-4 py-3.5 text-left transition-[background-color] duration-150 hover:bg-muted/60"
+                className="flex h-full w-full cursor-pointer flex-col items-start justify-start rounded-lg border border-border bg-card px-4 py-3.5 text-left transition-[background-color] duration-150 hover:bg-muted/60"
               >
                 <span className="text-sm font-medium leading-none">{project.name}</span>
                 {project.description ? (
                   <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
                 ) : null}
-              </motion.button>
+              </button>
             ))}
           </div>
         )}

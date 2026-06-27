@@ -1,4 +1,5 @@
 import type { Participant } from '@teambridge/core';
+import { normalizeDisplayName } from '@/lib/avatar-identity';
 
 export type ActivityTone = 'active' | 'idle' | 'offline';
 
@@ -28,8 +29,12 @@ function hashString(value: string): number {
   return hash;
 }
 
+export function normalizeParticipantName(name: string): string {
+  return normalizeDisplayName(name);
+}
+
 export function prettyParticipantName(raw: string): string {
-  const words = raw.replace(/[-_]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const words = normalizeParticipantName(raw).split(' ').filter(Boolean);
   if (words.length === 0) {
     return raw;
   }

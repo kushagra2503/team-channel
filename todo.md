@@ -36,7 +36,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 - [ ] Step 2, everyone in parallel:
   - [x] Nihal: add `packages/core`, `packages/daemon`, and `packages/vault`.
   - Kushagra: add `packages/cli` and CLI command parser skeleton.
-  - Ronish: add `packages/mcp` and `apps/dashboard` skeletons.
+  - [x] Ronish: add `packages/mcp` and `apps/dashboard` skeletons.
 - [ ] Step 3, Nihal first:
   - [x] Add TypeScript build setup for core/backend packages.
   - [x] Convert contract types into runtime-validated schemas where needed.
@@ -74,13 +74,29 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - Kushagra: implement `teambridge vault context`.
 - [ ] Step 9, Ronish after daemon read endpoints exist:
   - Stub MCP resource names from contracts.
-  - Stub dashboard API client against daemon response contracts.
-  - Show local workspace list.
-  - Show local participants/branches.
-  - Show vault file highlights.
+  - [x] Stub dashboard API client against daemon response contracts.
+  - [x] Show local workspace list (project picker + track sidebar).
+  - [x] Show local participants/branches (project members sidebar).
+  - [x] Show vault file highlights (with color/assign annotations).
 - [ ] Step 10, everyone: prove the local pass example below.
 
+### Dashboard milestone (Jun 2026)
+
+Shipped on `feat/ronish-mcp-dashboard`:
+
+- [x] Project → Track hierarchy in daemon (`GET /projects`, `/projects/:id/tracks`, `/tracks`)
+- [x] Seed script (`pnpm seed`) — Beacon, Silo, Forge demo projects
+- [x] React Router dashboard (`/` → project picker, `/projects/:projectId` → track view)
+- [x] Name-based avatars (`GET /avatars/by-name/:slug`, member avatar routes)
+- [x] Vault row annotations (`POST .../vault/annotate`, `[tb color= assign=]` in markdown)
+
+Still pending: MCP server, inbox UI, conflicts UI, presence/branches polish, CLI.
+
+See `docs/dashboard.md`, `docs/daemon-api.md`, and `docs/CONCEPTS.md`.
+
 ### Phase 1 Pass Example
+
+> **Runnable today (without CLI):** `pnpm daemon`, `pnpm seed`, `pnpm dashboard` — browse projects, tracks, vault highlights, and annotations. The CLI flow below is still the Phase 1 north star.
 
 ```bash
 # Nihal starts the workspace from main.
@@ -202,10 +218,11 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - Kushagra: implement `teambridge reply`.
   - Kushagra: add CLI affordances for unread inbox count and pending questions.
 - [ ] Step 4, Ronish after dashboard APIs are stable:
-  - Implement dashboard shell.
-  - Show workspace list, participants, branches, presence, inbox, conflicts, and vault highlights.
-  - Add dashboard actions for approving replies and resolving conflicts.
-  - Show recent teammate deltas and latest vault highlights.
+  - [x] Implement dashboard shell (React Router, project picker, track sidebar).
+  - [x] Show project members and vault highlights (color/assign annotations).
+  - [ ] Show workspace list, participants, branches, presence, inbox, conflicts, and vault highlights.
+  - [ ] Add dashboard actions for approving replies and resolving conflicts.
+  - [ ] Show recent teammate deltas and latest vault highlights.
 - [ ] Step 5, Nihal while integrations land:
   - Add end-to-end tests for two local participants.
   - Add end-to-end tests for offline/reconnect sync.

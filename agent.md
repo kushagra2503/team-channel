@@ -10,7 +10,7 @@ For team execution details, keep and use `report/team-implementation-plan.md`. T
 
 Teambridge is for teams where each developer has their own AI coding agent, but the agents need shared situational awareness.
 
-Example:
+Example (target CLI — **not shipped yet**; today use `pnpm daemon`, `pnpm seed`, and `pnpm dashboard`):
 
 ```bash
 teambridge start billing-v2 main
@@ -21,19 +21,33 @@ cd "$(teambridge enter billing-v2)" && claude
 Each teammate gets:
 
 - A separate git worktree and branch from the same recorded `base_commit`
-- A local materialized workspace vault at `.teambridge/workspaces/{session_name}/vault/`
+- A local materialized **track vault** at `.teambridge/workspaces/{session_name}/vault/`
 - Shared context updates from teammate events
-- MCP tools for agents to read, publish, ask, and inspect workspace state
-- CLI/dashboard visibility into participants, branches, presence, inbox, and vault highlights
+- MCP tools for agents to read, publish, ask, and inspect workspace state (planned)
+- Daemon HTTP API + **dashboard** for humans; CLI visibility (planned)
+
+## Project → Track hierarchy
+
+```text
+Project  (e.g. Beacon, Silo, Forge)
+  └── Track  (workspace session — one scoped effort, own vault + participants)
+        └── Vault files (decisions, observations, blockers, …)
+```
+
+- **Project members** — roster at project level (team sidebar, avatars, status).
+- **Participants** — per-track agents/people with branches; still named `Participant` / `workspaceId` in contracts.
+
+See `docs/CONCEPTS.md` for the full naming map (UI says "track"; many APIs still say `workspace`).
 
 ## Core Mental Model
 
 ```text
-Supabase = canonical ordered event stream + checkpoints + presence + auth
+Supabase = canonical ordered event stream + checkpoints + presence + auth  (Phase 2)
 Local daemon = local runtime authority
 Local vault = materialized readable copy of shared context
-MCP = agent-facing API
-Hooks = passive auto-injection for Claude Code
+MCP = agent-facing API  (in progress)
+Dashboard = human-facing UI  (shipped: projects, tracks, vault highlights)
+Hooks = passive auto-injection for Claude Code  (planned)
 Git = code and branches
 ```
 
@@ -52,7 +66,9 @@ Events notify everyone, then materialize locally, then all agents can use the up
 
 ## Commands
 
-Primary user-facing commands:
+### Planned CLI (packages/cli — not shipped)
+
+Primary user-facing commands (north-star UX):
 
 ```bash
 teambridge init
@@ -73,6 +89,16 @@ teambridge vault debug-snapshot
 teambridge dashboard
 ```
 
+### Available today (local dogfood)
+
+```bash
+pnpm daemon          # HTTP API :9473
+pnpm seed            # Demo projects/tracks/vault content
+pnpm dashboard       # React UI
+```
+
+HTTP details: `docs/daemon-api.md`. Dashboard: `docs/dashboard.md`.
+
 `start` resolves `base_ref` to immutable `base_commit`. `join` always uses the recorded `base_commit`; it must not re-resolve `main` or any moving branch.
 
 For local simulation and dogfooding, `start` and `join` may accept a display-name option such as `--as kushagra`. This is participant metadata only, not path locking.
@@ -81,16 +107,16 @@ For local simulation and dogfooding, `start` and `join` may accept a display-nam
 
 ```text
 Developer machine
-  -> teambridge daemon
-     -> local HTTP API
-     -> HTTP MCP server :9474
+  -> teambridge daemon (:9473)
+     -> local HTTP API (projects, tracks/workspaces, vault, avatars)
+     -> HTTP MCP server :9474  (planned)
      -> workspace vault materializer
-     -> checkpoint builder / relay client
-     -> local SQLite state
-  -> CLI
-  -> dashboard
-  -> agent hooks
-  -> agents through MCP
+     -> checkpoint builder / relay client  (Phase 2)
+     -> local SQLite state (.teambridge/state.sqlite)
+  -> CLI  (planned)
+  -> dashboard (React + Vite — shipped)
+  -> agent hooks  (planned)
+  -> agents through MCP  (planned)
 ```
 
 Optional hosted relay:
@@ -104,9 +130,9 @@ Supabase
   -> auth / team membership
 ```
 
-## Workspace Vault
+## Track vault
 
-There is only one Teambridge vault type in the first product: the **workspace vault**.
+There is only one Teambridge vault type in the first product: the **track vault** (still stored under `workspaces/` on disk).
 
 Phase 1 keeps the vault flat and easy to change:
 
@@ -123,6 +149,16 @@ Phase 1 keeps the vault flat and easy to change:
 The vault is shared logically, but each teammate reads from a local materialized copy.
 
 The vault layout is a projection, not the source of truth. Keep the materializer behind a routing table so the flat files can later become a nested vault without changing the event log.
+
+### Row annotations (dashboard)
+
+Vault list items may carry optional metadata inline:
+
+```markdown
+- [tb color=#ef4444 assign=flynn-o-brien] Need backend decision on token refresh.
+```
+
+Persisted via `POST /workspaces/:trackId/vault/annotate`. Not stored in `events.jsonl`; survives vault rebuild. See `docs/CONCEPTS.md` and `packages/core/src/vault-annotations.ts`.
 
 ## Event Flow
 
@@ -232,7 +268,7 @@ Blocked:
 
 - **Nihal:** backend/core, daemon, Supabase relay, event ordering, checkpoint builder, vault materialization, `better-sqlite3`, conflict primitives.
 - **Kushagra:** CLI, Claude hook UX, ask/inbox CLI, vault debug/search/read, terminal workflows.
-- **Ronish:** MCP tools/resources, dashboard, inbox approval UI, workspace visibility, vault highlights.
+- **Ronish:** MCP tools/resources (in progress), **dashboard shipped** (project picker, track sidebar, team sidebar, vault highlights with color/assign persistence), inbox approval UI and full workspace visibility (pending).
 
-All feature work should import shared contracts from `packages/core/src/contracts/`.
+All feature work should import shared contracts from `packages/core/src/contracts/` (including `project.ts`, `avatar.ts`, `vault-annotations.ts`).
 

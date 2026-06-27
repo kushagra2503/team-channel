@@ -4,7 +4,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+dotenv.config();
+dotenv.config({ path: join(__dirname, '../../../.env') });
+if (process.env.TEAMBRIDGE_REPO_ROOT) {
+  dotenv.config({ path: join(resolve(process.env.TEAMBRIDGE_REPO_ROOT), '.env') });
+}
 import { z } from 'zod';
 import type {
   ApiResult,
@@ -23,6 +29,7 @@ import type {
   TeambridgeConfig,
   TeambridgeErrorCode,
   TrackListResponse,
+  VaultAnnotateResponseBody,
   VaultContextResponse,
   VaultReadResponse,
   Workspace,
@@ -34,9 +41,12 @@ import {
   JoinWorkspaceRequestSchema,
   PublishEventRequestSchema,
   StartWorkspaceRequestSchema,
-  TeambridgeConfigSchema
+  TeambridgeConfigSchema,
+  avatarStorageId,
+  avatarNameSlug
 } from '@teambridge/core';
 import {
+  annotateVaultItem,
   createVaultContext,
   initializePhaseOneVault,
   materializePublishEvent,
@@ -71,6 +81,14 @@ const PublishRequestBodySchema = PublishEventRequestSchema.extend({
 
 const VaultRebuildRequestBodySchema = z.object({
   repoRoot: z.string().min(1).optional()
+});
+
+const VaultAnnotateBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  path: z.string().min(1),
+  itemText: z.string().min(1),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  assign: z.string().regex(/^[\w-]+$/).nullable().optional()
 });
 
 const ConfigRequestBodySchema = z.object({
@@ -411,6 +429,8 @@ function sendCorsPreflight(response: ServerResponse): void {
   response.end();
 }
 
+const AVATAR_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
 function sendBinary(
   response: ServerResponse,
   status: number,
@@ -660,6 +680,27 @@ function listParticipants(repoRoot: string, workspaceId: string): Participant[] 
   return rows.map(rowToParticipant);
 }
 
+function findLegacyAvatarIdsForSlug(repoRoot: string, slug: string): string[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select id, display_name from participants');
+  const ids: string[] = [];
+  for (const row of rows) {
+    if (avatarNameSlug(String(row.display_name)) === slug) {
+      ids.push(String(row.id));
+    }
+  }
+  return ids;
+}
+
+function avatarOptionsFromParams(params: URLSearchParams): PfpOptions {
+  return {
+    query: params.get('query') ?? undefined,
+    size: params.get('size') ? Number(params.get('size')) : undefined,
+    algorithm: (params.get('algorithm') as DitherAlgorithm | null) ?? undefined,
+    bayerLevel: params.get('bayerLevel') ? Number(params.get('bayerLevel')) : undefined
+  };
+}
+
 function getWorkspaceByIdentifier(repoRoot: string, identifier: string): Workspace | undefined {
   const dbPath = initializeStateDb(repoRoot);
   const [row] = querySql<Record<string, unknown>>(
@@ -875,6 +916,26 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  const avatarByNameMatch = url.pathname.match(/^\/avatars\/by-name\/([^/]+)$/);
+  if (method === 'GET' && avatarByNameMatch) {
+    const slug = decodeURIComponent(avatarByNameMatch[1]);
+    if (!slug || !/^[\w-]+$/.test(slug)) {
+      sendJson(response, 400, fail('INVALID_REQUEST', `Invalid avatar slug ${slug}`));
+      return;
+    }
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const avatarId = `name_${slug}`;
+    const legacyIds = findLegacyAvatarIdsForSlug(repoRoot, slug);
+    const { png } = await getOrGenerateAvatar(
+      repoRoot,
+      avatarId,
+      avatarOptionsFromParams(url.searchParams),
+      legacyIds
+    );
+    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
+    return;
+  }
+
   const projectMembersMatch = url.pathname.match(/^\/projects\/([^/]+)\/members$/);
   if (method === 'GET' && projectMembersMatch) {
     const projectId = decodeURIComponent(projectMembersMatch[1]);
@@ -885,6 +946,35 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       return;
     }
     sendJson<ProjectMemberListResponse>(response, 200, ok({ members: listProjectMembers(repoRoot, projectId) }));
+    return;
+  }
+
+  const projectMemberAvatarMatch = url.pathname.match(/^\/projects\/([^/]+)\/members\/([^/]+)\/avatar$/);
+  if (method === 'GET' && projectMemberAvatarMatch) {
+    const projectId = decodeURIComponent(projectMemberAvatarMatch[1]);
+    const memberId = decodeURIComponent(projectMemberAvatarMatch[2]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const project = getProjectById(repoRoot, projectId);
+    if (!project) {
+      sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
+      return;
+    }
+    const members = listProjectMembers(repoRoot, projectId);
+    const member = members.find((entry) => entry.id === memberId);
+    if (!member) {
+      sendJson(response, 404, fail('NOT_FOUND', `Project member ${memberId} was not found`));
+      return;
+    }
+    const avatarId = avatarStorageId(member.displayName);
+    const slug = avatarNameSlug(member.displayName);
+    const legacyIds = findLegacyAvatarIdsForSlug(repoRoot, slug);
+    const { png } = await getOrGenerateAvatar(
+      repoRoot,
+      avatarId,
+      avatarOptionsFromParams(url.searchParams),
+      legacyIds
+    );
+    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
     return;
   }
 
@@ -980,6 +1070,39 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  const vaultAnnotateMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/annotate$/);
+  if (method === 'POST' && vaultAnnotateMatch) {
+    const workspaceIdentifier = decodeURIComponent(vaultAnnotateMatch[1]);
+    const body = VaultAnnotateBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    try {
+      const { vaultDir } = getWorkspacePaths(repoRoot, workspace);
+      const file = await annotateVaultItem(vaultDir, {
+        path: body.path,
+        itemText: body.itemText,
+        color: body.color,
+        assign: body.assign
+      });
+      const repoConfig = await readRepoConfig(repoRoot);
+      const context = await createVaultContext(
+        workspace.id,
+        vaultDir,
+        getLastSeq(repoRoot, workspace.id),
+        repoConfig.vault.contextMaxBytes
+      );
+      sendJson<VaultAnnotateResponseBody>(response, 200, ok({ file, context }));
+    } catch (error) {
+      sendJson(response, 400, fail('INVALID_REQUEST', error instanceof Error ? error.message : 'Unable to annotate vault item'));
+    }
+    return;
+  }
+
   const vaultRebuildMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/rebuild$/);
   if (method === 'POST' && vaultRebuildMatch) {
     const workspaceIdentifier = decodeURIComponent(vaultRebuildMatch[1]);
@@ -1033,17 +1156,21 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       return;
     }
     const participants = listParticipants(repoRoot, workspace.id);
-    if (!participants.some((participant) => participant.id === participantId)) {
+    const participant = participants.find((entry) => entry.id === participantId);
+    if (!participant) {
       sendJson(response, 404, fail('NOT_FOUND', `Participant ${participantId} was not found`));
       return;
     }
-    const { png } = await getOrGenerateAvatar(repoRoot, participantId, {
-      query: url.searchParams.get('query') ?? undefined,
-      size: url.searchParams.get('size') ? Number(url.searchParams.get('size')) : undefined,
-      algorithm: (url.searchParams.get('algorithm') as DitherAlgorithm | null) ?? undefined,
-      bayerLevel: url.searchParams.get('bayerLevel') ? Number(url.searchParams.get('bayerLevel')) : undefined
-    });
-    sendBinary(response, 200, png, 'image/png');
+    const avatarId = avatarStorageId(participant.displayName);
+    const slug = avatarNameSlug(participant.displayName);
+    const legacyIds = [participantId, ...findLegacyAvatarIdsForSlug(repoRoot, slug).filter((id) => id !== participantId)];
+    const { png } = await getOrGenerateAvatar(
+      repoRoot,
+      avatarId,
+      avatarOptionsFromParams(url.searchParams),
+      legacyIds
+    );
+    sendBinary(response, 200, png, 'image/png', { 'cache-control': AVATAR_CACHE_CONTROL });
     return;
   }
 

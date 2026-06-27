@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Project, ProjectMember, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, ProjectMember, VaultContext, VaultItemAnnotation, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
 import {
+  annotateVaultItem,
   getDefaultClientConfig,
   getProjectMembers,
   getProjectTracks,
@@ -17,6 +18,8 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { TeamSidebar } from '@/components/team-sidebar';
 import { SidebarInset } from '@/components/ui/sidebar';
 import { VaultHighlights } from '@/components/VaultHighlights';
+import { buildDisplayNameAvatarUrl } from '@/api/teambridgeClient';
+import { preloadAvatars } from '@/lib/avatar-cache';
 
 const LAST_PROJECT_KEY = 'tb_last_project';
 
@@ -197,6 +200,25 @@ export function DashboardPage() {
 
   useEffect(() => () => resetHeader(), [resetHeader]);
 
+  useEffect(() => {
+    if (!clientConfig.daemonBaseUrl) return;
+    const names = new Set<string>();
+    for (const member of members) names.add(member.displayName);
+    for (const participant of workspaceStatus?.participants ?? []) names.add(participant.displayName);
+    preloadAvatars(
+      [...names].map((displayName) => buildDisplayNameAvatarUrl(displayName, clientConfig, avatarRev))
+    );
+  }, [members, workspaceStatus?.participants, clientConfig, avatarRev]);
+
+  const handleVaultAnnotate = useCallback(async (annotation: VaultItemAnnotation) => {
+    if (!selectedTrackId) return;
+    const response = await annotateVaultItem(selectedTrackId, clientConfig, annotation);
+    if (response.context) {
+      cache.setVault(selectedTrackId, response.context);
+      setVaultContext(response.context);
+    }
+  }, [selectedTrackId, clientConfig, cache]);
+
   return (
     <>
       <div className="flex shrink-0">
@@ -218,10 +240,10 @@ export function DashboardPage() {
               context={vaultContext}
               error={vaultError}
               participants={workspaceStatus?.participants}
-              workspaceId={workspaceStatus?.workspace.id}
               daemonBaseUrl={clientConfig.daemonBaseUrl}
               repoRoot={clientConfig.repoRoot}
               avatarRev={avatarRev}
+              onAnnotate={handleVaultAnnotate}
             />
           </div>
         </SidebarInset>
@@ -236,7 +258,6 @@ export function DashboardPage() {
           daemonBaseUrl={clientConfig.daemonBaseUrl}
           repoRoot={clientConfig.repoRoot}
           avatarRev={avatarRev}
-          trackId={selectedTrackId}
           onAvatarRev={() => setAvatarRev((rev) => rev + 1)}
         />
       </div>

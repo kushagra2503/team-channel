@@ -73,9 +73,26 @@ Responsible for:
 - Participants/branches/presence views
 - Inbox and conflict UI
 
+**Delivered (Jun 2026):**
+
+- Dashboard app with React Router: project picker, track sidebar, project member sidebar, vault highlights
+- Daemon client wired to projects/tracks/members/avatars/vault annotate APIs
+- Vault row annotation UI (color + assign persisted in markdown)
+- Name-based avatar display (Pexels when configured, procedural fallback)
+- Demo seed dogfood path (`pnpm seed` + `pnpm dashboard`)
+
+**Still pending:**
+
+- MCP HTTP server and tools/resources
+- Inbox and conflict UI
+- Presence, branches, and event feed views
+- Hook/delta integration surfaces
+
 Primary output:
 
 - Agents can use Teambridge through MCP, and humans can inspect workspace state through a local dashboard.
+
+See also: [docs/CONCEPTS.md](../docs/CONCEPTS.md), [docs/daemon-api.md](../docs/daemon-api.md), [docs/dashboard.md](../docs/dashboard.md).
 
 ## Contract-First Rule
 
@@ -87,6 +104,7 @@ Contracts live here:
 packages/core/src/contracts/
 ├── api.ts
 ├── auth.ts
+├── avatar.ts
 ├── checkpoints.ts
 ├── config.ts
 ├── conflicts.ts
@@ -98,6 +116,8 @@ packages/core/src/contracts/
 ├── mcp.ts
 ├── participant.ts
 ├── presence.ts
+├── project.ts
+├── vault-annotations.ts
 ├── vault.ts
 ├── workspace.ts
 └── index.ts
@@ -268,21 +288,40 @@ Blocked:
 
 ## Local Daemon API
 
-The daemon should expose local HTTP endpoints for CLI, dashboard, hooks, and MCP package internals.
+The daemon exposes local HTTP endpoints for CLI, dashboard, hooks, and MCP package internals.
 
-Initial endpoint shape:
+**Shipped today** (see [docs/daemon-api.md](../docs/daemon-api.md) for full reference):
 
 ```text
 GET  /health
-GET  /workspaces
+POST /config/init
+GET  /config?repoRoot=
+
+GET  /projects?repoRoot=
+GET  /projects/:projectId/members?repoRoot=
+GET  /projects/:projectId/tracks?repoRoot=
+GET  /projects/:projectId/members/:memberId/avatar?repoRoot=
+GET  /tracks?repoRoot=
+
+GET  /avatars/by-name/:slug?repoRoot=
+
 POST /workspaces/start
 POST /workspaces/join
-GET  /workspaces/:workspaceId/status
-GET  /workspaces/:workspaceId/participants
-GET  /workspaces/:workspaceId/events
+GET  /workspaces?repoRoot=
+GET  /workspaces/:workspaceId/status?repoRoot=
+GET  /workspaces/:workspaceId/participants/:participantId/avatar?repoRoot=
+
+GET  /workspaces/:workspaceId/events?repoRoot=
 POST /workspaces/:workspaceId/events
-GET  /workspaces/:workspaceId/vault/context
-GET  /workspaces/:workspaceId/vault/read
+GET  /workspaces/:workspaceId/vault/context?repoRoot=
+GET  /workspaces/:workspaceId/vault/read?repoRoot=
+POST /workspaces/:workspaceId/vault/annotate
+POST /workspaces/:workspaceId/vault/rebuild
+```
+
+**Planned** (not yet implemented):
+
+```text
 GET  /workspaces/:workspaceId/vault/search
 GET  /workspaces/:workspaceId/inbox
 POST /workspaces/:workspaceId/inbox/ask
@@ -291,7 +330,23 @@ GET  /workspaces/:workspaceId/conflicts
 POST /workspaces/:workspaceId/conflicts/resolve
 ```
 
+**Naming note:** reads use `/projects` and `/tracks`; mutations and vault/events remain on `/workspaces/*` (Track = workspace session). See [docs/CONCEPTS.md](../docs/CONCEPTS.md).
+
 All responses should use `ApiResult<T>` from contracts.
+
+## Dashboard milestone (Jun 2026)
+
+The local dashboard is runnable without CLI:
+
+```bash
+pnpm daemon   # :9473
+pnpm seed     # Beacon, Silo, Forge demo data
+pnpm dashboard
+```
+
+Routes: `/` → project picker, `/projects/:projectId` → tracks + vault highlights + team sidebar.
+
+Cross-links: [docs/dashboard.md](../docs/dashboard.md), [docs/CONCEPTS.md](../docs/CONCEPTS.md), [docs/daemon-api.md](../docs/daemon-api.md).
 
 ## MCP Contract
 

@@ -1,4 +1,4 @@
-import type { ProjectMember } from '@teambridge/core';
+import type { Participant, ProjectMember } from '@teambridge/core';
 import { motion } from 'motion/react';
 import { SidebarContent } from '@/components/ui/sidebar';
 import { ProjectMemberSidebar } from './ProjectMemberSidebar';
@@ -10,8 +10,6 @@ export type TeamSidebarProps = {
   daemonBaseUrl?: string;
   repoRoot?: string;
   avatarRev?: number;
-  /** Workspace ID of the currently selected track for avatar lookups */
-  trackId?: string;
   onAvatarRev?: () => void;
   columnIndex?: number;
   staggerKey?: string;
@@ -27,7 +25,6 @@ export function TeamSidebar({
   daemonBaseUrl,
   repoRoot,
   avatarRev,
-  trackId,
   columnIndex,
   staggerKey
 }: TeamSidebarProps) {
@@ -47,7 +44,6 @@ export function TeamSidebar({
             daemonBaseUrl={daemonBaseUrl}
             repoRoot={repoRoot}
             avatarRev={avatarRev}
-            trackId={trackId}
             columnIndex={columnIndex}
             staggerKey={staggerKey}
           />

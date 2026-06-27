@@ -2,6 +2,8 @@
 
 This is a simple handoff for the CLI work. Nihal has implemented the Phase 1 local backend pieces that the CLI can now call through the local daemon.
 
+**Dogfood today:** use `pnpm daemon`, `pnpm seed`, and `pnpm dashboard` — not only curl. Full HTTP reference: `docs/daemon-api.md`.
+
 ## What Exists Now
 
 The repo is a pnpm workspace:
@@ -10,6 +12,9 @@ The repo is a pnpm workspace:
 packages/core   shared contracts, types, and zod schemas
 packages/vault  vault helpers, materializer, context, and rebuild logic
 packages/daemon local backend HTTP server
+packages/mcp    MCP package (stub / in progress)
+apps/dashboard  React dashboard (project picker, tracks, vault highlights)
+scripts/seed-demo.mjs   demo data — run via pnpm seed
 ```
 
 `core` is not the CLI. It is the shared contract layer. CLI should import public shapes from `@teambridge/core`, not from daemon internals.
@@ -34,7 +39,12 @@ The daemon listens at:
 http://127.0.0.1:9473
 ```
 
-Right now we test with `curl`. Later the CLI hides those HTTP calls.
+Right now we test with `curl` or the dashboard. The CLI will hide those HTTP calls.
+
+## Terminology
+
+- **Track** = workspace session (same row in `tracks` table, directory under `.teambridge/workspaces/`).
+- **Project** groups tracks and project members; seeded tracks have a `projectId`. CLI-created tracks may have `projectId: null` until project APIs grow.
 
 ## Repo Config
 
@@ -101,26 +111,40 @@ For now, curl examples include `repoRoot` manually because CLI does not exist ye
 
 ## Implemented Daemon Endpoints
 
-Health:
+See **`docs/daemon-api.md`** for the full reference. Summary:
+
+Health and config:
 
 ```text
 GET /health
-```
-
-Config:
-
-```text
 POST /config/init
 GET /config?repoRoot=/path/to/repo
 ```
 
-Workspaces:
+Projects and tracks (read):
+
+```text
+GET /projects?repoRoot=
+GET /projects/:projectId/members?repoRoot=
+GET /projects/:projectId/tracks?repoRoot=
+GET /projects/:projectId/members/:memberId/avatar?repoRoot=
+GET /tracks?repoRoot=
+GET /workspaces?repoRoot=
+```
+
+Workspaces / tracks (mutations and session):
 
 ```text
 POST /workspaces/start
 POST /workspaces/join
-GET /workspaces?repoRoot=/path/to/repo
 GET /workspaces/:workspaceId/status?repoRoot=/path/to/repo
+```
+
+Avatars:
+
+```text
+GET /avatars/by-name/:slug?repoRoot=
+GET /workspaces/:workspaceId/participants/:participantId/avatar?repoRoot=
 ```
 
 Events:
@@ -135,6 +159,7 @@ Vault:
 ```text
 GET /workspaces/:workspaceId/vault/read?repoRoot=/path/to/repo&path=decisions.md
 GET /workspaces/:workspaceId/vault/context?repoRoot=/path/to/repo
+POST /workspaces/:workspaceId/vault/annotate
 POST /workspaces/:workspaceId/vault/rebuild
 ```
 

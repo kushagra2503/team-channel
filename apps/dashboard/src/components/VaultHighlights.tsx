@@ -1,10 +1,14 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Participant, VaultContext } from '@teambridge/core';
+import type { Participant, VaultContext, VaultItemAnnotation } from '@teambridge/core';
 import { Badge } from '@/components/ui/badge';
-import { buildAvatarUrl, type TeambridgeClientConfig } from '@/api/teambridgeClient';
-import { avatarColor, participantInitials, prettyParticipantName } from './participantDisplay';
+import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import { ParticipantAvatar } from '@/components/participant-avatar';
+import { avatarUrlForDisplayName } from '@/components/member-avatar';
+import { prettyParticipantName } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
+import { avatarNameSlug } from '@/lib/avatar-identity';
+import { parseVaultListLine } from '@/lib/vault-item-meta';
 
 export type VaultHighlightsProps = {
   context?: VaultContext;
@@ -16,10 +20,12 @@ export type VaultHighlightsProps = {
   avatarRev?: number;
   columnIndex?: number;
   staggerKey?: string;
+  onAnnotate?: (annotation: VaultItemAnnotation) => Promise<void>;
 };
 
-type VaultSection = { path: string; title: string; items: string[] };
-type RowState = { color?: string; assignedId?: string };
+type VaultEntry = { text: string; color?: string; assignSlug?: string };
+type VaultSection = { path: string; title: string; items: VaultEntry[] };
+type RowState = { color?: string; assignSlug?: string };
 type OpenMenus = { key: string; color: boolean; assign: boolean };
 
 const MARK_COLORS = [
@@ -37,17 +43,48 @@ function parseVaultSections(content: string): VaultSection[] {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(content)) !== null) {
     const path = match[1].trim();
-    const useful = match[2].trim().split('\n')
-      .filter((l) => l.trim() && !l.trim().startsWith('#') && l.trim().startsWith('-'));
-    if (useful.length > 0) {
+    const items: VaultEntry[] = [];
+    for (const line of match[2].split('\n')) {
+      const parsed = parseVaultListLine(line);
+      if (!parsed) continue;
+      items.push({
+        text: parsed.text,
+        color: parsed.meta.color,
+        assignSlug: parsed.meta.assign
+      });
+    }
+    if (items.length > 0) {
       sections.push({
         path,
         title: path.replace(/\.md$/, '').replace(/-/g, ' '),
-        items: useful.map((l) => l.replace(/^-\s*/, ''))
+        items
       });
     }
   }
   return sections;
+}
+
+function rowKey(sectionPath: string, itemText: string): string {
+  return `${sectionPath}::${itemText}`;
+}
+
+function buildRowStates(sections: VaultSection[]): Record<string, RowState> {
+  const states: Record<string, RowState> = {};
+  for (const section of sections) {
+    for (const item of section.items) {
+      if (!item.color && !item.assignSlug) continue;
+      states[rowKey(section.path, item.text)] = {
+        color: item.color,
+        assignSlug: item.assignSlug
+      };
+    }
+  }
+  return states;
+}
+
+function participantForAssignSlug(slug: string | undefined, participants: Participant[]): Participant | undefined {
+  if (!slug) return undefined;
+  return participants.find((participant) => avatarNameSlug(participant.displayName) === slug);
 }
 
 function hashString(value: string): number {
@@ -56,53 +93,38 @@ function hashString(value: string): number {
   return hash;
 }
 
-function ParticipantAvatar({ participant, workspaceId, config, avatarRev, size = 20 }: {
-  participant: Participant; workspaceId?: string; config: TeambridgeClientConfig; avatarRev?: number; size?: number;
+function VaultParticipantAvatar({ participant, config, avatarRev, size = 20 }: {
+  participant: Participant; config: TeambridgeClientConfig; avatarRev?: number; size?: number;
 }) {
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const avatarUrl = config.daemonBaseUrl && workspaceId
-    ? buildAvatarUrl(workspaceId, participant.id, config, avatarRev)
-    : undefined;
-  const sz = `${size}px`;
+  const avatarUrl = avatarUrlForDisplayName(participant.displayName, config, avatarRev);
   return (
-    <span className="relative shrink-0" style={{ width: sz, height: sz }}>
-      <span
-        className="absolute inset-0 flex items-center justify-center rounded-full text-[9px] font-semibold text-white"
-        style={{ backgroundColor: avatarColor(participant.id) }}
-      >
-        {participantInitials(participant.displayName)}
-      </span>
-      {avatarUrl ? (
-        <img
-          src={avatarUrl} alt="" width={size} height={size} loading="lazy"
-          onLoad={() => setImgLoaded(true)}
-          className="absolute inset-0 rounded-full [image-rendering:pixelated] transition-opacity duration-200"
-          style={{ opacity: imgLoaded ? 1 : 0, width: sz, height: sz }}
-        />
-      ) : null}
-    </span>
+    <ParticipantAvatar
+      avatarUrl={avatarUrl}
+      displayName={participant.displayName}
+      size={size}
+    />
   );
 }
 
-function AuthorChip({ participant, workspaceId, config, avatarRev }: {
-  participant: Participant; workspaceId?: string; config: TeambridgeClientConfig; avatarRev?: number;
+function AuthorChip({ participant, config, avatarRev }: {
+  participant: Participant; config: TeambridgeClientConfig; avatarRev?: number;
 }) {
   const firstName = prettyParticipantName(participant.displayName).split(' ')[0];
   return (
     <span className="flex h-6 shrink-0 items-center gap-1.5 rounded-full bg-muted/80 pl-0.5 pr-2">
-      <ParticipantAvatar participant={participant} workspaceId={workspaceId} config={config} avatarRev={avatarRev} size={20} />
+      <VaultParticipantAvatar participant={participant} config={config} avatarRev={avatarRev} size={20} />
       <span className="select-none whitespace-nowrap text-xs">{firstName}</span>
     </span>
   );
 }
 
-function AssignedChip({ participant, workspaceId, config, avatarRev }: {
-  participant: Participant; workspaceId?: string; config: TeambridgeClientConfig; avatarRev?: number;
+function AssignedChip({ participant, config, avatarRev }: {
+  participant: Participant; config: TeambridgeClientConfig; avatarRev?: number;
 }) {
   const firstName = prettyParticipantName(participant.displayName).split(' ')[0];
   return (
     <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-muted/60 py-0.5 pl-1 pr-2.5 text-xs text-muted-foreground select-none">
-      <ParticipantAvatar participant={participant} workspaceId={workspaceId} config={config} avatarRev={avatarRev} size={16} />
+      <VaultParticipantAvatar participant={participant} config={config} avatarRev={avatarRev} size={16} />
       <span className="text-muted-foreground/60">Assigned to</span>
       <span className="text-foreground">{firstName}</span>
     </span>
@@ -122,18 +144,15 @@ const ICON_CHECK = (
 );
 
 
-function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, participants, workspaceId, config, avatarRev, openMenus, onToggleMenu, onCloseAll }: {
-  item: string; participant?: Participant; rowState: RowState;
-  onColor: (c: string | undefined) => void; onAssign: (id: string | undefined) => void; onCopy: () => void;
-  participants: Participant[]; workspaceId?: string; config: TeambridgeClientConfig; avatarRev?: number;
+function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, participants, config, avatarRev, openMenus, onToggleMenu }: {
+  item: VaultEntry; participant?: Participant; rowState: RowState;
+  onColor: (c: string | undefined) => void; onAssign: (slug: string | undefined) => void; onCopy: () => void;
+  participants: Participant[]; config: TeambridgeClientConfig; avatarRev?: number;
   openMenus: OpenMenus | null; onToggleMenu: (t: 'color' | 'assign') => void; onCloseAll: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  // No ref/useOutsideClick — backdrop handles outside clicks instead
 
-  const assignedParticipant = rowState.assignedId
-    ? participants.find((p) => p.id === rowState.assignedId)
-    : undefined;
+  const assignedParticipant = participantForAssignSlug(rowState.assignSlug, participants);
 
   const handleCopy = () => {
     onCopy();
@@ -152,10 +171,10 @@ function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, part
       className="-mx-4 flex min-h-[2rem] items-center gap-1.5 px-4 py-1.5 transition-[background-color] duration-150 ease-out hover:bg-muted/60"
       style={rowStyle}
     >
-      <span className="text-sm">{item}</span>
+      <span className="text-sm">{item.text}</span>
 
       {participant ? (
-        <AuthorChip participant={participant} workspaceId={workspaceId} config={config} avatarRev={avatarRev} />
+        <AuthorChip participant={participant} config={config} avatarRev={avatarRev} />
       ) : null}
 
       <span className={`relative flex shrink-0 items-center gap-0 transition-opacity duration-150 [li:hover_&]:opacity-100 ${anyOpen ? 'opacity-100' : 'opacity-0'}`}>
@@ -281,10 +300,10 @@ function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, part
                 {participants.map((p) => (
                   <button
                     key={p.id} type="button"
-                    onClick={() => onAssign(p.id)}
+                    onClick={() => onAssign(avatarNameSlug(p.displayName))}
                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-muted"
                   >
-                    <ParticipantAvatar participant={p} workspaceId={workspaceId} config={config} avatarRev={avatarRev} size={18} />
+                    <VaultParticipantAvatar participant={p} config={config} avatarRev={avatarRev} size={18} />
                     <span>{prettyParticipantName(p.displayName)}</span>
                   </button>
                 ))}
@@ -296,7 +315,7 @@ function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, part
 
       {assignedParticipant ? (
         <span className="ml-auto">
-          <AssignedChip participant={assignedParticipant} workspaceId={workspaceId} config={config} avatarRev={avatarRev} />
+          <AssignedChip participant={assignedParticipant} config={config} avatarRev={avatarRev} />
         </span>
       ) : null}
     </li>
@@ -310,26 +329,51 @@ export function VaultHighlights({
   context,
   error,
   participants = [],
-  workspaceId,
   daemonBaseUrl,
   repoRoot,
   avatarRev,
   columnIndex = 1,
-  staggerKey
+  staggerKey,
+  onAnnotate
 }: VaultHighlightsProps) {
   const sections = useMemo(() => (context ? parseVaultSections(context.content) : []), [context?.content]);
+  const persistedStates = useMemo(() => buildRowStates(sections), [sections]);
   const config = useMemo<TeambridgeClientConfig>(() => ({ daemonBaseUrl, repoRoot }), [daemonBaseUrl, repoRoot]);
 
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [openMenus, setOpenMenus] = useState<OpenMenus | null>(null);
 
-  const setColor = useCallback((key: string, color: string | undefined) => {
-    setRowStates((s) => ({ ...s, [key]: { ...s[key], color } }));
-  }, []);
+  useEffect(() => {
+    setRowStates(persistedStates);
+  }, [persistedStates]);
 
-  const setAssigned = useCallback((key: string, assignedId: string | undefined) => {
-    setRowStates((s) => ({ ...s, [key]: { ...s[key], assignedId } }));
-  }, []);
+  const persistRowState = useCallback(async (
+    sectionPath: string,
+    itemText: string,
+    next: RowState,
+    patch: Pick<VaultItemAnnotation, 'color' | 'assign'>
+  ) => {
+    const key = rowKey(sectionPath, itemText);
+    setRowStates((current) => ({ ...current, [key]: next }));
+    if (!onAnnotate) return;
+    try {
+      await onAnnotate({ path: sectionPath, itemText, ...patch });
+    } catch {
+      setRowStates(persistedStates);
+    }
+  }, [onAnnotate, persistedStates]);
+
+  const setColor = useCallback((sectionPath: string, itemText: string, color: string | undefined) => {
+    const key = rowKey(sectionPath, itemText);
+    const current = rowStates[key] ?? persistedStates[key] ?? {};
+    void persistRowState(sectionPath, itemText, { ...current, color }, { color: color ?? null });
+  }, [persistRowState, persistedStates, rowStates]);
+
+  const setAssigned = useCallback((sectionPath: string, itemText: string, assignSlug: string | undefined) => {
+    const key = rowKey(sectionPath, itemText);
+    const current = rowStates[key] ?? persistedStates[key] ?? {};
+    void persistRowState(sectionPath, itemText, { ...current, assignSlug }, { assign: assignSlug ?? null });
+  }, [persistRowState, persistedStates, rowStates]);
 
   const copyItem = useCallback((text: string) => {
     void navigator.clipboard.writeText(text);
@@ -360,19 +404,22 @@ export function VaultHighlights({
             </div>
             <ul className="flex flex-col text-sm leading-relaxed text-foreground">
               {section.items.map((item) => {
-                const key = `${section.path}::${item}`;
+                const key = rowKey(section.path, item.text);
                 const author = participants.length > 0
-                  ? participants[hashString(item) % participants.length]
+                  ? participants[hashString(item.text) % participants.length]
                   : undefined;
                 return (
                   <EntryRow
-                    key={key} item={item} participant={author}
+                    key={key}
+                    item={item}
+                    participant={author}
                     rowState={rowStates[key] ?? {}}
-                    onColor={(c) => setColor(key, c)}
-                    onAssign={(id) => setAssigned(key, id)}
-                    onCopy={() => copyItem(item)}
+                    onColor={(c) => setColor(section.path, item.text, c)}
+                    onAssign={(slug) => setAssigned(section.path, item.text, slug)}
+                    onCopy={() => copyItem(item.text)}
                     participants={participants}
-                    workspaceId={workspaceId} config={config} avatarRev={avatarRev}
+                    config={config}
+                    avatarRev={avatarRev}
                     openMenus={openMenus?.key === key ? openMenus : null}
                     onToggleMenu={(type) => setOpenMenus((prev) => {
                       const base = prev?.key === key ? prev : { key, color: false, assign: false };

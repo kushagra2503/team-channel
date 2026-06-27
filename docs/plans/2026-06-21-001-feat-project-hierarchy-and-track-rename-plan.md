@@ -1,6 +1,6 @@
 ---
 title: "feat: Introduce Project hierarchy, rename Workspace → Track"
-status: active
+status: completed-with-gaps
 created: 2026-06-21
 depth: deep
 ---
@@ -248,7 +248,7 @@ Update all `querySql` strings: `from workspaces` → `from tracks`, `workspace_i
 - Daemon starts against a repo with old `workspaces` table; migration runs without error, data is preserved in `tracks`
 - `tracks.project_id` accepts null for legacy rows (migration adds column nullable)
 
-**Verification:** Daemon process starts, `sqlite3 .teambridge/teambridge.db ".tables"` shows `projects`, `tracks`, `participants`, `project_members`, `checkpoints`, `local_sequences`.
+**Verification:** Daemon process starts, `sqlite3 .teambridge/state.sqlite ".tables"` shows `projects`, `tracks`, `participants`, `project_members`, `checkpoints`, `local_sequences`.
 
 ---
 
@@ -545,7 +545,7 @@ createBrowserRouter([
 | Question | Status | Notes |
 |---|---|---|
 | Should `/tracks/start` and `/tracks/join` require a `projectId` in the request body? | Deferred | For now, tracks can be project-less (null projectId) to maintain backward compat with CLI tooling. Enforcement is a follow-up. |
-| Avatar endpoint for project members: `/projects/:id/members/:memberId/avatar`? | Deferred to follow-up | Project members reuse the same dither PFP system. Endpoint shape is clear; wiring is a follow-up. |
+| Avatar endpoint for project members: `/projects/:id/members/:memberId/avatar`? | **Partially done** | Route exists; Pexels + procedural avatars via name slug (`/avatars/by-name/:slug`). See `docs/daemon-api.md`. |
 | Should the project selection page support creating a new project? | Out of scope | Seed-only for now. |
 
 ---
@@ -582,3 +582,35 @@ createBrowserRouter([
 - `apps/dashboard/src/App.tsx` — current state management and cache integration
 - `apps/dashboard/src/lib/cache.ts` — cache key scheme (`tb_cache_v1_${daemonUrl}`)
 - React Router v7 `createBrowserRouter` API — no external research needed; team uses react-router per ShadCN preset
+
+---
+
+## Completion log (2026-06-27)
+
+Summary: Project → Track hierarchy, dashboard routing, seed data, and avatars shipped on `feat/ronish-mcp-dashboard`. Several plan items intentionally diverged (hybrid API paths, seed names, cache key). Features beyond the original plan: vault row annotations, team sidebar collapse, Pexels avatar migration.
+
+| Unit | Status | Notes |
+|------|--------|-------|
+| **U1** Core types | **Done** | `Project`, `ProjectMember`, `Track` contracts in `@teambridge/core`. `Workspace` aliases retained for API compat. |
+| **U2** SQLite schema | **Done** | `tracks`, `projects`, `project_members` tables. DB file is `.teambridge/state.sqlite` (not `teambridge.db`). |
+| **U3** Daemon API | **Partial** | Added `/projects`, `/tracks`, avatar routes. **Deviation:** mutations/events/vault stay on `/workspaces/*`, not renamed to `/tracks/*`. |
+| **U4** Vault + MCP rename | **Partial** | Vault uses track terminology internally. MCP package still largely stub; mechanical rename incomplete. |
+| **U5** React Router | **Done** | `createBrowserRouter`; `/` → `ProjectSelectionPage`, `/projects/:projectId` → `DashboardPage`. |
+| **U6** Project picker | **Done** | `ProjectSelectionPage` lists seeded projects. Create-project UI out of scope (seed-only). |
+| **U7** Dashboard refactor | **Partial** | Project topbar, track sidebar, `ProjectMemberSidebar` shipped. **Deviation:** cache key not fully keyed by `projectId` (see KTD4 follow-up). Dead `WorkspaceList.tsx` / `WorkspaceDetails.tsx` remain. |
+| **U8** Seed script | **Done** | `scripts/seed-demo.mjs` via `pnpm seed`. **Deviation:** projects are **Beacon, Silo, Forge** (not Aurora/DevOps/Portal from this plan). |
+| **U9** Dashboard tests | **Partial** | Tests pass for routing, avatars, vault highlights. Some legacy `Workspace*` test files not fully renamed. |
+
+### Features beyond original plan
+
+- Vault row annotations (`[tb color=#hex assign=slug]`, `POST .../vault/annotate`, rebuild preservation)
+- Team sidebar collapse / layout polish
+- Pexels avatar generation with procedural fallback and legacy cache migration
+- Apostrophe normalization in avatar slugs (`O'Brien` → `o-brien`)
+
+### Follow-up (not blocking close)
+
+- Full `/workspaces/*` → `/tracks/*` API rename
+- Per-project `sessionStorage` cache key (`tb_cache_v2_${daemonUrl}_${projectId}`)
+- Remove dead dashboard components; finish MCP package rename
+- CLI + MCP agent surfaces (see `todo.md`)

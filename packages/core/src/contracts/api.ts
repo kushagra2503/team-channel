@@ -5,7 +5,7 @@ import type { WorktreeInfo } from './git';
 import type { InboxMessage } from './inbox';
 import type { Participant } from './participant';
 import type { Project, ProjectMember } from './project';
-import type { VaultContext, VaultFile, VaultSearchResult } from './vault';
+import type { VaultContext, VaultFile, VaultSearchResult, VaultAnnotateResponse } from './vault';
 import type { Workspace, WorkspaceManifest } from './workspace';
 
 export type ApiOk<T> = {
@@ -79,6 +79,8 @@ export type VaultSearchResponse = {
 export type VaultContextResponse = {
   context: VaultContext;
 };
+
+export type VaultAnnotateResponseBody = VaultAnnotateResponse;
 
 export type HookContextResponse = VaultContextResponse;
 

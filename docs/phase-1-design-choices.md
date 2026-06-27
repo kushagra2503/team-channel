@@ -4,6 +4,8 @@ This document records the current Phase 1 design choices so future contributors 
 
 Phase 1 is intentionally local-only and simple. The goal is to prove the core loop before adding remote sync, richer vault structure, MCP behavior, hooks, or dashboard workflows.
 
+**Note (2026-06):** The dashboard now uses **Project → Track** terminology. Phase 1 event and vault rules below are unchanged; tracks are the same sessions previously called workspaces. See `docs/CONCEPTS.md`.
+
 ## 1. Relay Mode Is Local-Only
 
 Current contract:
@@ -225,7 +227,9 @@ Current package boundaries:
 packages/core   = shared contracts and types
 packages/vault  = vault helpers and materialization logic
 packages/daemon = local backend server
-packages/cli    = future command-line UI
+packages/mcp    = HTTP MCP server (stub / in progress)
+apps/dashboard  = local React dashboard (shipped)
+packages/cli    = future command-line UI (not present yet)
 ```
 
 Why:
@@ -239,7 +243,7 @@ Do not make CLI code import directly from `packages/daemon`. Public shapes shoul
 
 ## 9. Phase 1 Success Criteria
 
-The first version passes when this local flow works:
+The first version passes when this local flow works (via **CLI when shipped**, or equivalent daemon HTTP + dashboard today):
 
 ```bash
 teambridge init
@@ -252,6 +256,8 @@ teambridge vault context
 teambridge vault search "invoice state"
 ```
 
+**Alternate local proof (shipped):** `pnpm seed` + `pnpm dashboard` — pick a project, select a track, view vault highlights from `GET .../vault/context`.
+
 And all of this is true:
 
 - Workspace manifest exists.
@@ -262,4 +268,19 @@ And all of this is true:
 - `vault context` returns flat vault content with truncation metadata.
 - Vault can be rebuilt from `events.jsonl`.
 - No Supabase is required.
+
+## 10. Vault Row Annotations (Dashboard Extension)
+
+Phase 1 events still use only `publish`. The dashboard may add **row-level metadata** directly in vault markdown:
+
+```markdown
+- [tb color=#ef4444 assign=marcus-webb] Observation text here.
+```
+
+- `color` — `#RRGGBB` highlight color.
+- `assign` — stable display-name slug (see `packages/core/src/avatar.ts`).
+
+These tags are **not** events. They are updated via `POST /workspaces/:id/vault/annotate` and preserved across `rebuildPhaseOneVault` (extract before wipe, reapply after replay). Implementation: `packages/core/src/vault-annotations.ts`, `packages/vault/src/index.ts`.
+
+Do not move annotations into `events.jsonl` without an explicit product decision — that would change the Phase 1 source-of-truth model.
 

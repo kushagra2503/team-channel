@@ -315,29 +315,81 @@ function metaPath(repoRoot: string, participantId: string): string {
   return join(avatarsDir(repoRoot), `${participantId}.meta.json`);
 }
 
+export async function avatarExists(repoRoot: string, participantId: string): Promise<boolean> {
+  try {
+    await readFile(avatarPath(repoRoot, participantId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readAvatarMeta(repoRoot: string, avatarId: string): Promise<PfpMeta> {
+  return readFile(metaPath(repoRoot, avatarId))
+    .then((buffer) => JSON.parse(buffer.toString('utf8')) as PfpMeta)
+    .catch(() => ({
+      algorithm: DEFAULT_ALGORITHM,
+      size: DEFAULT_SIZE,
+      color: randomColor(avatarId),
+      source: 'procedural' as const
+    }));
+}
+
+async function writeAvatar(repoRoot: string, avatarId: string, png: Buffer, meta: PfpMeta): Promise<void> {
+  await mkdir(avatarsDir(repoRoot), { recursive: true });
+  await writeFile(avatarPath(repoRoot, avatarId), png);
+  await writeFile(metaPath(repoRoot, avatarId), `${JSON.stringify(meta, null, 2)}\n`);
+}
+
+async function migrateLegacyPexelsAvatar(
+  repoRoot: string,
+  avatarId: string,
+  legacyAvatarIds: string[]
+): Promise<{ png: Buffer; meta: PfpMeta } | null> {
+  for (const legacyId of legacyAvatarIds) {
+    if (!(await avatarExists(repoRoot, legacyId))) continue;
+    const meta = await readAvatarMeta(repoRoot, legacyId);
+    if (meta.source !== 'pexels') continue;
+    const png = await readFile(avatarPath(repoRoot, legacyId));
+    await writeAvatar(repoRoot, avatarId, png, meta);
+    return { png, meta };
+  }
+  return null;
+}
+
+function canUsePexels(): boolean {
+  return Boolean(process.env.PEXELS_API_KEY);
+}
+
 export async function getOrGenerateAvatar(
   repoRoot: string,
-  participantId: string,
-  options: PfpOptions = {}
+  avatarId: string,
+  options: PfpOptions = {},
+  legacyAvatarIds: string[] = []
 ): Promise<{ png: Buffer; meta: PfpMeta }> {
-  const path = avatarPath(repoRoot, participantId);
-  const existing = await readFile(path).then((buffer) => buffer).catch(() => null);
+  const existing = await readFile(avatarPath(repoRoot, avatarId)).then((buffer) => buffer).catch(() => null);
   if (existing) {
-    const meta = await readFile(metaPath(repoRoot, participantId))
-      .then((buffer) => JSON.parse(buffer.toString('utf8')) as PfpMeta)
-      .catch(() => ({
-        algorithm: DEFAULT_ALGORITHM,
-        size: DEFAULT_SIZE,
-        color: randomColor(participantId),
-        source: 'procedural' as const
-      }));
-    return { png: existing, meta };
+    const meta = await readAvatarMeta(repoRoot, avatarId);
+    if (meta.source === 'pexels') {
+      return { png: existing, meta };
+    }
+
+    const migrated = await migrateLegacyPexelsAvatar(repoRoot, avatarId, legacyAvatarIds);
+    if (migrated) return migrated;
+
+    if (meta.source === 'procedural' && canUsePexels()) {
+      await rm(avatarPath(repoRoot, avatarId), { force: true });
+      await rm(metaPath(repoRoot, avatarId), { force: true });
+    } else {
+      return { png: existing, meta };
+    }
+  } else {
+    const migrated = await migrateLegacyPexelsAvatar(repoRoot, avatarId, legacyAvatarIds);
+    if (migrated) return migrated;
   }
 
-  const { png, meta } = await generatePfp({ seed: participantId, ...options });
-  await mkdir(avatarsDir(repoRoot), { recursive: true });
-  await writeFile(path, png);
-  await writeFile(metaPath(repoRoot, participantId), `${JSON.stringify(meta, null, 2)}\n`);
+  const { png, meta } = await generatePfp({ seed: avatarId, ...options });
+  await writeAvatar(repoRoot, avatarId, png, meta);
   return { png, meta };
 }
 

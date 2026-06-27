@@ -1,6 +1,12 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, WorkspaceEvent } from '@teambridge/core';
+import type { PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@teambridge/core';
+import {
+  extractVaultAnnotations,
+  parseVaultListLine,
+  reapplyVaultAnnotations,
+  updateVaultFileItemMeta
+} from '@teambridge/core';
 
 export const PHASE_ONE_VAULT_FILES: PhaseOneVaultFile[] = [
   'README.md',
@@ -89,6 +95,13 @@ export async function readEventsJsonl(eventsPath: string): Promise<WorkspaceEven
 }
 
 export async function rebuildPhaseOneVault(vaultDir: string, eventsPath: string): Promise<{ lastSeq: number }> {
+  const preserved = new Map<string, Map<string, VaultItemMeta>>();
+  for (const file of PHASE_ONE_VAULT_FILES) {
+    const content = await readFile(join(vaultDir, file), 'utf8').catch(() => '');
+    const annotations = extractVaultAnnotations(content);
+    if (annotations.size > 0) preserved.set(file, annotations);
+  }
+
   await rm(vaultDir, { recursive: true, force: true });
   await initializePhaseOneVault(vaultDir);
 
@@ -99,7 +112,39 @@ export async function rebuildPhaseOneVault(vaultDir: string, eventsPath: string)
     }
   }
 
+  for (const file of PHASE_ONE_VAULT_FILES) {
+    const annotations = preserved.get(file);
+    if (!annotations?.size) continue;
+    const filePath = join(vaultDir, file);
+    const content = await readFile(filePath, 'utf8');
+    await writeFile(filePath, reapplyVaultAnnotations(content, annotations));
+  }
+
   return { lastSeq: events.at(-1)?.seq ?? 0 };
+}
+
+export async function annotateVaultItem(
+  vaultDir: string,
+  annotation: VaultItemAnnotation
+): Promise<VaultFile> {
+  const targetFile = assertPhaseOneTargetFile(annotation.path);
+  const filePath = join(vaultDir, targetFile);
+  const content = await readFile(filePath, 'utf8');
+  let current: VaultItemMeta = {};
+  for (const line of content.split('\n')) {
+    const parsed = parseVaultListLine(line);
+    if (parsed?.text === annotation.itemText) {
+      current = parsed.meta;
+      break;
+    }
+  }
+  const meta: VaultItemMeta = {
+    color: annotation.color === null ? undefined : (annotation.color ?? current.color),
+    assign: annotation.assign === null ? undefined : (annotation.assign ?? current.assign)
+  };
+  const next = updateVaultFileItemMeta(content, annotation.itemText, meta);
+  await writeFile(filePath, next);
+  return { path: targetFile, content: next };
 }
 
 export async function readVaultFile(vaultDir: string, path: string): Promise<VaultFile> {

@@ -3,10 +3,13 @@ import type {
   ProjectListResponse,
   ProjectMemberListResponse,
   TrackListResponse,
+  VaultAnnotateResponseBody,
   VaultContextResponse,
+  VaultItemAnnotation,
   WorkspaceListResponse,
   WorkspaceStatusResponse
 } from '@teambridge/core';
+import { avatarNameSlug } from '@/lib/avatar-identity';
 
 export const DEFAULT_DAEMON_BASE_URL = 'http://127.0.0.1:9473';
 
@@ -111,14 +114,27 @@ export function getVaultContext(
   );
 }
 
-export function buildAvatarUrl(
+export function annotateVaultItem(
   workspaceId: string,
-  participantId: string,
+  config: TeambridgeClientConfig,
+  annotation: VaultItemAnnotation,
+  signal?: AbortSignal
+): Promise<VaultAnnotateResponseBody> {
+  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/annotate`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...annotation, repoRoot: config.repoRoot }),
+    signal
+  }).then((response) => unwrapApiResult<VaultAnnotateResponseBody>(response));
+}
+
+export function buildDisplayNameAvatarUrl(
+  displayName: string,
   config: TeambridgeClientConfig,
   rev?: number
 ): string {
   return buildTeambridgeUrl(
-    `/workspaces/${encodeURIComponent(workspaceId)}/participants/${encodeURIComponent(participantId)}/avatar`,
+    `/avatars/by-name/${encodeURIComponent(avatarNameSlug(displayName))}`,
     config,
     { v: rev }
   );
