@@ -83,7 +83,7 @@ export function VaultHighlights({ context, loading = false, error }: VaultHighli
           <CardDescription>Latest note #{context.lastSeq ?? 0}{context.truncated ? ' · preview truncated' : ''}</CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
+        <CardContent className="flex flex-col gap-4">
           {sections.length === 0 ? (
             <p className="text-muted-foreground">No published notes yet.</p>
           ) : (
@@ -94,7 +94,7 @@ export function VaultHighlights({ context, loading = false, error }: VaultHighli
                     <h3 className="text-sm font-medium capitalize">{section.title}</h3>
                     <Badge variant="outline">{section.path}</Badge>
                   </div>
-                  <ul className="space-y-2 text-sm leading-relaxed text-foreground">
+                  <ul className="flex flex-col gap-2 text-sm leading-relaxed text-foreground">
                     {section.items.map((item) => (
                       <li key={item}>{item}</li>
                     ))}

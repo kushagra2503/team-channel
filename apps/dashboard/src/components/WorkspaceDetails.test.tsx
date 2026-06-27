@@ -10,13 +10,12 @@ describe('WorkspaceDetails', () => {
     expect(screen.getByText('Select a workspace to inspect participants and branches.')).toBeTruthy();
   });
 
-  it('renders participants, branches, agent, and status', () => {
+  it('renders member rows with a count and no Online label', () => {
     render(<WorkspaceDetails status={makeWorkspaceStatus()} />);
 
-    expect(screen.getByText('Team')).toBeTruthy();
-    expect(screen.getByText('ronish')).toBeTruthy();
-    expect(screen.getByText('teambridge/billing-refactor/ronish')).toBeTruthy();
-    expect(screen.getByText('cursor')).toBeTruthy();
-    expect(screen.getByText('active')).toBeTruthy();
+    expect(screen.getByText('1 Member')).toBeTruthy();
+    expect(screen.queryByText('Online')).toBeNull();
+    expect(screen.queryByText('Offline')).toBeNull();
+    expect(screen.getByText('Ronish')).toBeTruthy();
   });
 });

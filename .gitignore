@@ -2,4 +2,5 @@ self/
 node_modules/
 dist/
 *.tsbuildinfo
+.teambridge/
 

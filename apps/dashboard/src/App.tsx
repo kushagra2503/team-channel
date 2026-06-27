@@ -7,10 +7,12 @@ import {
   listWorkspaces,
   type TeambridgeClientConfig
 } from './api/teambridgeClient';
-import { Badge } from '@/components/ui/badge';
+import { AppSidebar } from './components/app-sidebar';
+import { SiteHeader } from './components/site-header';
+import { TeamSidebar } from './components/team-sidebar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { VaultHighlights } from './components/VaultHighlights';
-import { WorkspaceDetails } from './components/WorkspaceDetails';
-import { WorkspaceList } from './components/WorkspaceList';
 
 export function App() {
   const clientConfig = useMemo<TeambridgeClientConfig>(() => getDefaultClientConfig(), []);
@@ -23,6 +25,7 @@ export function App() {
   const [workspacesError, setWorkspacesError] = useState<string>();
   const [detailsError, setDetailsError] = useState<string>();
   const [vaultError, setVaultError] = useState<string>();
+  const [teamPanelOpen, setTeamPanelOpen] = useState(true);
   const workspacesAbortRef = useRef<AbortController | undefined>(undefined);
 
   const loadWorkspaces = useCallback(async () => {
@@ -102,70 +105,41 @@ export function App() {
   const selectedWorkspace = workspaceStatus?.workspace ?? workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
 
   return (
-    <main className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[18rem_1fr]">
-      <aside className="flex flex-col gap-8 border-b border-border/80 bg-card/40 px-4 py-5 lg:min-h-screen lg:border-b-0 lg:border-r">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-2xl bg-primary text-sm font-semibold text-primary-foreground">
-              tb
-            </div>
-            <div>
-              <div className="font-heading text-base font-medium">Teambridge</div>
-              <div className="text-xs text-muted-foreground">local workspace</div>
-            </div>
+    <TooltipProvider>
+      <div className="[--header-height:calc(--spacing(14))] select-none">
+        <SidebarProvider className="flex min-h-screen flex-col">
+          <SiteHeader
+            workspace={selectedWorkspace}
+            status={workspaceStatus}
+            context={vaultContext}
+            teamPanelOpen={teamPanelOpen}
+            onToggleTeamPanel={() => setTeamPanelOpen((open) => !open)}
+          />
+          <div className="flex flex-1">
+            <AppSidebar
+              workspaces={workspaces}
+              selectedWorkspaceId={selectedWorkspaceId}
+              loading={workspacesLoading}
+              error={workspacesError}
+              daemonBaseUrl={clientConfig.daemonBaseUrl}
+              repoRoot={clientConfig.repoRoot}
+              onSelectWorkspace={setSelectedWorkspaceId}
+              onRefreshWorkspaces={loadWorkspaces}
+            />
+            <SidebarInset>
+              <div className="flex flex-1 flex-col gap-5 p-4 select-text sm:p-6">
+                <VaultHighlights context={vaultContext} loading={detailsLoading} error={vaultError} />
+              </div>
+            </SidebarInset>
+            <TeamSidebar
+              open={teamPanelOpen}
+              status={workspaceStatus}
+              loading={detailsLoading}
+              error={detailsError}
+            />
           </div>
-          <Badge variant="outline">local</Badge>
-        </div>
-
-        <WorkspaceList
-          workspaces={workspaces}
-          selectedWorkspaceId={selectedWorkspaceId}
-          loading={workspacesLoading}
-          error={workspacesError}
-          onSelect={setSelectedWorkspaceId}
-          onRefresh={loadWorkspaces}
-        />
-
-        <details className="mt-auto text-xs text-muted-foreground">
-          <summary className="cursor-pointer text-foreground">Connection</summary>
-          <div className="mt-3 space-y-2 break-all">
-            <p>
-              <span className="block text-foreground">Daemon</span>
-              <code>{clientConfig.daemonBaseUrl}</code>
-            </p>
-            {clientConfig.repoRoot ? (
-              <p>
-                <span className="block text-foreground">Repo</span>
-                <code>{clientConfig.repoRoot}</code>
-              </p>
-            ) : null}
-          </div>
-        </details>
-      </aside>
-
-      <section className="min-w-0 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-3xl font-medium tracking-tight">
-              {selectedWorkspace?.sessionName ?? 'No workspace'}
-            </h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {selectedWorkspace ? <Badge variant="secondary">{selectedWorkspace.baseRef}</Badge> : null}
-              {workspaceStatus ? (
-                <Badge variant="outline">
-                  {workspaceStatus.participants.length} teammate{workspaceStatus.participants.length === 1 ? '' : 's'}
-                </Badge>
-              ) : null}
-              {vaultContext ? <Badge variant="outline">note #{vaultContext.lastSeq ?? 0}</Badge> : null}
-            </div>
-          </div>
-        </header>
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
-          <VaultHighlights context={vaultContext} loading={detailsLoading} error={vaultError} />
-          <WorkspaceDetails status={workspaceStatus} loading={detailsLoading} error={detailsError} />
-        </div>
-      </section>
-    </main>
+        </SidebarProvider>
+      </div>
+    </TooltipProvider>
   );
 }

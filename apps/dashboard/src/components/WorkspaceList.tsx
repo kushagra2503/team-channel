@@ -1,7 +1,15 @@
 import { memo } from 'react';
 import type { Workspace } from '@teambridge/core';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { IconDeviceDesktop } from '@tabler/icons-react';
+import {
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton
+} from '@/components/ui/sidebar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { getWorkspaceDisplayName } from './workspaceDisplay';
 
 export type WorkspaceListProps = {
   workspaces: Workspace[];
@@ -9,7 +17,7 @@ export type WorkspaceListProps = {
   loading?: boolean;
   error?: string;
   onSelect: (workspaceId: string) => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
 };
 
 function WorkspaceListComponent({
@@ -17,47 +25,60 @@ function WorkspaceListComponent({
   selectedWorkspaceId,
   loading = false,
   error,
-  onSelect,
-  onRefresh
+  onSelect
 }: WorkspaceListProps) {
   return (
-    <section aria-labelledby="workspace-list-title" className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 id="workspace-list-title" className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          Sessions
-        </h2>
-        <Button type="button" variant="ghost" size="sm" onClick={onRefresh} disabled={loading}>
+    <SidebarGroup className="pt-2">
+      <span className="sr-only" id="workspace-list-title">
+        Workspaces
+      </span>
+      {/* Refresh affordance commented out for now — keep onRefresh in the API surface.
+      <div className="flex items-center justify-between gap-2 px-2">
+        <Button type="button" variant="ghost" size="xs" onClick={onRefresh} disabled={loading}>
           Refresh
         </Button>
       </div>
+      */}
 
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-      {loading ? <p className="text-sm text-muted-foreground">Loading sessions...</p> : null}
+      {loading ? <SidebarMenuSkeleton showIcon /> : null}
 
       {!error && !loading && workspaces.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No workspaces found.</p>
+        <p className="px-3 text-sm text-muted-foreground">No workspaces found.</p>
       ) : null}
 
-      <div className="grid gap-2">
+      <SidebarMenu aria-labelledby="workspace-list-title">
         {workspaces.map((workspace) => (
-          <Button
-            key={workspace.id}
-            type="button"
-            variant={workspace.id === selectedWorkspaceId ? 'secondary' : 'ghost'}
-            aria-pressed={workspace.id === selectedWorkspaceId}
-            className="h-auto w-full justify-start rounded-2xl px-3 py-3 text-left"
-            onClick={() => onSelect(workspace.id)}
-          >
-            <span className="flex w-full items-center justify-between gap-3">
-              <span className="min-w-0">
-                <strong className="block truncate text-sm">{workspace.sessionName}</strong>
+          <SidebarMenuItem key={workspace.id}>
+            <SidebarMenuButton
+              type="button"
+              isActive={workspace.id === selectedWorkspaceId}
+              tooltip={getWorkspaceDisplayName(workspace)}
+              render={<button type="button" />}
+              onClick={() => onSelect(workspace.id)}
+            >
+              <span className="grid min-w-0 flex-1 text-left leading-tight">
+                <span className="truncate font-medium">{getWorkspaceDisplayName(workspace)}</span>
               </span>
-              <Badge variant="outline">{workspace.relayMode}</Badge>
-            </span>
-          </Button>
+            </SidebarMenuButton>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    aria-label="This session is local"
+                    tabIndex={0}
+                    className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center text-sidebar-foreground/40 transition-colors hover:text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden"
+                  />
+                }
+              >
+                <IconDeviceDesktop className="size-4" />
+              </TooltipTrigger>
+              <TooltipContent side="right">This session is local</TooltipContent>
+            </Tooltip>
+          </SidebarMenuItem>
         ))}
-      </div>
-    </section>
+      </SidebarMenu>
+    </SidebarGroup>
   );
 }
 
