@@ -57,9 +57,9 @@ Two identity layers: **project team** (roster) vs **track participants** (who is
 | Top bar | Project name, breadcrumbs |
 | Left sidebar (top) | Repo context — local path (opens in Finder), branch, remote, last push (links to commit when known) |
 | Left sidebar (middle) | Tracks in this project |
-| Left sidebar (footer) | Track participants — agents on the selected track with branch names |
 | Center | Vault highlights — sections from vault context, per-row color/assign/copy |
-| Right sidebar | Project team roster, collapsible |
+| Right sidebar (top) | **All Members** / **This Track** toggle with animated indicator |
+| Right sidebar (body) | Project roster or track participants (branch per row), collapsible |
 
 Vault assign chips use **first name only**; track participant rows show full name + branch.
 

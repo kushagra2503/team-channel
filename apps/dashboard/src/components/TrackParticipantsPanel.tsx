@@ -7,6 +7,7 @@ import {
   participantActivity,
   prettyParticipantName
 } from './participantDisplay';
+import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
 export type TrackParticipantsPanelProps = {
   status?: WorkspaceStatusResponse;
@@ -14,6 +15,7 @@ export type TrackParticipantsPanelProps = {
   daemonBaseUrl?: string;
   repoRoot?: string;
   avatarRev?: number;
+  columnIndex?: number;
 };
 
 const PRESENCE_DOT: Record<'active' | 'idle' | 'offline', string> = {
@@ -22,17 +24,19 @@ const PRESENCE_DOT: Record<'active' | 'idle' | 'offline', string> = {
   offline: 'bg-muted-foreground/40'
 };
 
-const ENTER = { opacity: 1, y: 0 } as const;
-const HIDE = { opacity: 0, y: 5 } as const;
+const ENTER = COLUMN_ENTER;
+const HIDE = COLUMN_HIDE;
 
 function MemberRow({
   participant,
   avatarUrl,
-  index
+  index,
+  columnIndex
 }: {
   participant: Participant;
   avatarUrl?: string;
   index: number;
+  columnIndex: number;
 }) {
   const activity = participantActivity(participant);
   const showDot = activity.tone === 'active' || activity.tone === 'idle';
@@ -41,7 +45,7 @@ function MemberRow({
     <motion.div
       initial={HIDE}
       animate={ENTER}
-      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1], delay: index * 0.04 }}
+      transition={columnEnterTransition(columnIndex, index)}
       className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
     >
       <div className="relative shrink-0">
@@ -73,7 +77,8 @@ export function TrackParticipantsPanel({
   error,
   daemonBaseUrl,
   repoRoot,
-  avatarRev
+  avatarRev,
+  columnIndex = 2
 }: TrackParticipantsPanelProps) {
   if (error) {
     return (
@@ -83,11 +88,18 @@ export function TrackParticipantsPanel({
     );
   }
 
-  if (!status) return null;
+  if (!status) {
+    return (
+      <section aria-label="Track participants" className="py-2">
+        <p className="px-3 text-xs text-muted-foreground">Select a track to see participants.</p>
+      </section>
+    );
+  }
 
   const online = status.participants.filter((p) => p.status !== 'offline');
   const offline = status.participants.filter((p) => p.status === 'offline');
   const total = status.participants.length;
+  const trackId = status.workspace.id;
   const config = { daemonBaseUrl, repoRoot };
 
   const urlFor = (participant: Participant) =>
@@ -96,17 +108,9 @@ export function TrackParticipantsPanel({
   const offlineStartIndex = online.length + 1;
 
   return (
-    <section aria-label="Track participants" className="flex flex-col gap-1 border-t border-sidebar-border py-2">
-      <SidebarGroup className="py-1">
-        <SidebarGroupLabel className="tabular-nums">
-          {total === 0
-            ? 'On this track'
-            : `${total} on this track`}
-        </SidebarGroupLabel>
-      </SidebarGroup>
-
+    <section aria-label="Track participants" className="flex flex-col gap-1 py-2">
       {total === 0 ? (
-        <p className="px-3 text-xs text-muted-foreground">No participants yet.</p>
+        <p className="px-3 text-xs text-muted-foreground">No participants on this track yet.</p>
       ) : null}
 
       {online.length > 0 ? (
@@ -114,10 +118,11 @@ export function TrackParticipantsPanel({
           <div className="flex flex-col">
             {online.map((participant, i) => (
               <MemberRow
-                key={participant.id}
+                key={`${trackId}-${participant.id}`}
                 participant={participant}
                 avatarUrl={urlFor(participant)}
                 index={i}
+                columnIndex={columnIndex}
               />
             ))}
           </div>
@@ -125,15 +130,23 @@ export function TrackParticipantsPanel({
       ) : null}
 
       {offline.length > 0 ? (
-        <SidebarGroup className="py-1">
-          <SidebarGroupLabel>Offline</SidebarGroupLabel>
+        <SidebarGroup key={`${trackId}-offline`} className="py-1">
+          <motion.div
+            key={`${trackId}-offline-label`}
+            initial={HIDE}
+            animate={ENTER}
+            transition={columnEnterTransition(columnIndex, online.length)}
+          >
+            <SidebarGroupLabel>Offline</SidebarGroupLabel>
+          </motion.div>
           <div className="flex flex-col">
             {offline.map((participant, i) => (
               <MemberRow
-                key={participant.id}
+                key={`${trackId}-${participant.id}`}
                 participant={participant}
                 avatarUrl={urlFor(participant)}
                 index={offlineStartIndex + i}
+                columnIndex={columnIndex}
               />
             ))}
           </div>

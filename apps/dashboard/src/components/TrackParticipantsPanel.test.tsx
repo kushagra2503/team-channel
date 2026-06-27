@@ -4,16 +4,15 @@ import { makeWorkspaceStatus } from '../test/factories';
 import { TrackParticipantsPanel } from './TrackParticipantsPanel';
 
 describe('TrackParticipantsPanel', () => {
-  it('renders nothing when no status is provided', () => {
-    const { container } = render(<TrackParticipantsPanel />);
+  it('shows empty state when no status is provided', () => {
+    render(<TrackParticipantsPanel />);
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText('Select a track to see participants.')).toBeTruthy();
   });
 
-  it('renders participant rows with branch and track label', () => {
+  it('renders participant rows with branch', () => {
     render(<TrackParticipantsPanel status={makeWorkspaceStatus()} />);
 
-    expect(screen.getByText('1 on this track')).toBeTruthy();
     expect(screen.getByText('Ronish')).toBeTruthy();
     expect(screen.getByText('teambridge/billing-refactor/ronish')).toBeTruthy();
   });

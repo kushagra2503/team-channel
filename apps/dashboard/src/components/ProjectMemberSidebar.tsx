@@ -101,11 +101,8 @@ export function ProjectMemberSidebar({
 
   return (
     <section aria-label="Project team" className="flex flex-col py-2">
-      <SidebarGroup className="py-1">
-        <SidebarGroupLabel className="tabular-nums">
-          Project team · {total}
-        </SidebarGroupLabel>
-        {online.length > 0 ? (
+      {online.length > 0 ? (
+        <SidebarGroup className="py-1">
           <div className="flex flex-col">
             {online.map((member, i) => (
               <MemberRow
@@ -118,12 +115,21 @@ export function ProjectMemberSidebar({
               />
             ))}
           </div>
-        ) : null}
-      </SidebarGroup>
+        </SidebarGroup>
+      ) : total === 0 ? (
+        <p className="px-3 text-xs text-muted-foreground">No project members yet.</p>
+      ) : null}
 
       {offline.length > 0 ? (
-        <SidebarGroup className="py-1">
-          <SidebarGroupLabel>Offline</SidebarGroupLabel>
+        <SidebarGroup key={staggerKey ? `${staggerKey}-offline` : 'offline'} className="py-1">
+          <motion.div
+            key={staggerKey ? `${staggerKey}-offline-label` : 'offline-label'}
+            initial={HIDE}
+            animate={ENTER}
+            transition={columnEnterTransition(columnIndex, online.length)}
+          >
+            <SidebarGroupLabel>Offline</SidebarGroupLabel>
+          </motion.div>
           <div className="flex flex-col">
             {offline.map((member, i) => (
               <MemberRow

@@ -224,10 +224,7 @@ export function DashboardPage() {
           tracks={tracks}
           selectedTrackId={selectedTrackId}
           clientConfig={clientConfig}
-          trackStatus={workspaceStatus}
-          trackError={detailsError}
           error={tracksError}
-          avatarRev={avatarRev}
           onSelectTrack={setSelectedTrackId}
         />
       </div>
@@ -254,6 +251,8 @@ export function DashboardPage() {
           columnIndex={2}
           open={teamPanelOpen}
           members={members}
+          trackStatus={workspaceStatus}
+          trackError={detailsError}
           daemonBaseUrl={clientConfig.daemonBaseUrl}
           repoRoot={clientConfig.repoRoot}
           avatarRev={avatarRev}
