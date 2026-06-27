@@ -7,6 +7,7 @@ import {
   IconGitBranch,
   IconGitFork
 } from '@tabler/icons-react';
+import { motion } from 'motion/react';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 import { getRepoContext, openRepoPath } from '@/api/teambridgeClient';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,8 @@ export type RepoContextPanelProps = {
   workspaceId?: string;
   clientConfig: TeambridgeClientConfig;
 };
+
+const panelSpring = { type: 'spring' as const, duration: 0.32, bounce: 0 };
 
 function formatLocalPath(path: string): string {
   const home = import.meta.env.VITE_HOME_DIR as string | undefined;
@@ -97,11 +100,14 @@ function ContextRow({
 export function RepoContextPanel({ workspaceId, clientConfig }: RepoContextPanelProps) {
   const [context, setContext] = useState<RepoContext | null>(null);
   const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
+    setLoading(true);
     setError(undefined);
+    setContext(null);
 
     void getRepoContext(clientConfig, workspaceId, controller.signal)
       .then((res) => setContext(res.context))
@@ -109,6 +115,11 @@ export function RepoContextPanel({ workspaceId, clientConfig }: RepoContextPanel
         if (controller.signal.aborted) return;
         setContext(null);
         setError(err instanceof Error ? err.message : 'Failed to load repo context');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       });
 
     return () => controller.abort();
@@ -132,88 +143,94 @@ export function RepoContextPanel({ workspaceId, clientConfig }: RepoContextPanel
   const localLabel = context ? formatLocalPath(context.localPath) : '—';
   const iconClass = 'size-3.5 shrink-0';
   const iconStroke = 1.75;
+  const showPanel = !loading && (context !== null || Boolean(error));
 
   return (
-    <div
+    <motion.div
       data-slot="repo-context-panel"
-      className="w-full shrink-0 border-b bg-background py-2 group-data-[collapsible=icon]:hidden"
+      className="w-full shrink-0 overflow-hidden border-b bg-background group-data-[collapsible=icon]:hidden"
+      initial={false}
+      animate={{ height: showPanel ? 'auto' : 0 }}
+      transition={panelSpring}
     >
-      {error ? <p className="px-3 text-xs text-destructive">{error}</p> : null}
+      <div className="py-2">
+        {error ? <p className="px-3 text-xs text-destructive">{error}</p> : null}
 
-      {context ? (
-        <nav aria-label="Repository context">
-          <ul className="flex w-full flex-col">
-            <li>
-              <ContextRow
-                onClick={handleOpenPath}
-                icon={<IconDeviceDesktop className={iconClass} stroke={iconStroke} />}
-                label={localLabel}
-                title={context.localPath}
-              />
-            </li>
+        {context ? (
+          <nav aria-label="Repository context">
+            <ul className="flex w-full flex-col">
+              <li>
+                <ContextRow
+                  onClick={handleOpenPath}
+                  icon={<IconDeviceDesktop className={iconClass} stroke={iconStroke} />}
+                  label={localLabel}
+                  title={context.localPath}
+                />
+              </li>
 
-            {context.branch ? (
-              <li>
-                <ContextRow
-                  href={context.branchWebUrl}
-                  icon={<IconGitBranch className={iconClass} stroke={iconStroke} />}
-                  label={context.branch}
-                  title={context.branchWebUrl ?? context.branch}
-                />
-              </li>
-            ) : null}
+              {context.branch ? (
+                <li>
+                  <ContextRow
+                    href={context.branchWebUrl}
+                    icon={<IconGitBranch className={iconClass} stroke={iconStroke} />}
+                    label={context.branch}
+                    title={context.branchWebUrl ?? context.branch}
+                  />
+                </li>
+              ) : null}
 
-            {context.repoLabel ? (
-              <li>
-                <ContextRow
-                  href={context.repoWebUrl}
-                  icon={
-                    context.remoteUrl?.includes('github.com') ? (
-                      <IconBrandGithub className={iconClass} stroke={iconStroke} />
-                    ) : (
-                      <IconGitFork className={iconClass} stroke={iconStroke} />
-                    )
-                  }
-                  label={context.repoLabel}
-                  title={context.remoteUrl ?? context.repoLabel}
-                />
-              </li>
-            ) : (
-              <li>
-                <ContextRow
-                  icon={<IconGitFork className={iconClass} stroke={iconStroke} />}
-                  label="Local repository"
-                />
-              </li>
-            )}
+              {context.repoLabel ? (
+                <li>
+                  <ContextRow
+                    href={context.repoWebUrl}
+                    icon={
+                      context.remoteUrl?.includes('github.com') ? (
+                        <IconBrandGithub className={iconClass} stroke={iconStroke} />
+                      ) : (
+                        <IconGitFork className={iconClass} stroke={iconStroke} />
+                      )
+                    }
+                    label={context.repoLabel}
+                    title={context.remoteUrl ?? context.repoLabel}
+                  />
+                </li>
+              ) : (
+                <li>
+                  <ContextRow
+                    icon={<IconGitFork className={iconClass} stroke={iconStroke} />}
+                    label="Local repository"
+                  />
+                </li>
+              )}
 
-            {lastPush ? (
-              <li>
-                <ContextRow
-                  href={context.lastPushCommitWebUrl}
-                  icon={<IconCloudUpload className={iconClass} stroke={iconStroke} />}
-                  label={
-                    <>
-                      Last push{' '}
-                      <span className={cn(isRecentPush && 'font-medium text-emerald-600 dark:text-emerald-500')}>
-                        {lastPush.text}
-                      </span>
-                    </>
-                  }
-                  title={context.lastPushCommitSha ?? undefined}
-                />
-              </li>
-            ) : (
-              <li>
-                <ContextRow
-                  icon={<IconCloudUpload className={iconClass} stroke={iconStroke} />}
-                  label="No push recorded"
-                />
-              </li>
-            )}
-          </ul>
-        </nav>
-      ) : null}
-    </div>
+              {lastPush ? (
+                <li>
+                  <ContextRow
+                    href={context.lastPushCommitWebUrl}
+                    icon={<IconCloudUpload className={iconClass} stroke={iconStroke} />}
+                    label={
+                      <>
+                        Last push{' '}
+                        <span className={cn(isRecentPush && 'font-medium text-emerald-600 dark:text-emerald-500')}>
+                          {lastPush.text}
+                        </span>
+                      </>
+                    }
+                    title={context.lastPushCommitSha ?? undefined}
+                  />
+                </li>
+              ) : (
+                <li>
+                  <ContextRow
+                    icon={<IconCloudUpload className={iconClass} stroke={iconStroke} />}
+                    label="No push recorded"
+                  />
+                </li>
+              )}
+            </ul>
+          </nav>
+        ) : null}
+      </div>
+    </motion.div>
   );
 }
