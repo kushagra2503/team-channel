@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AppShellProvider } from './components/app-shell-context';
+import { SidebarProvider } from './components/ui/sidebar';
 import { ProjectSelectionPage } from './pages/ProjectSelectionPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { makeVaultContext, makeWorkspace, makeWorkspaceStatus } from './test/factories';
@@ -18,13 +20,19 @@ const api = vi.hoisted(() => ({
 
 vi.mock('./api/teambridgeClient', () => api);
 
-function renderAtRoute(path: string, element: React.ReactElement) {
+function renderAtRoute(path: string, element: React.ReactElement, withSidebar = false) {
+  const routes = (
+    <Routes>
+      <Route path="/projects" element={<ProjectSelectionPage />} />
+      <Route path="/projects/:projectId" element={element} />
+    </Routes>
+  );
+
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/" element={<ProjectSelectionPage />} />
-        <Route path="/projects/:projectId" element={element} />
-      </Routes>
+      <AppShellProvider>
+        {withSidebar ? <SidebarProvider>{routes}</SidebarProvider> : routes}
+      </AppShellProvider>
     </MemoryRouter>
   );
 }
@@ -44,7 +52,7 @@ describe('ProjectSelectionPage', () => {
       ]
     });
 
-    renderAtRoute('/', <ProjectSelectionPage />);
+    renderAtRoute('/projects', <ProjectSelectionPage />);
 
     expect(await screen.findByText('Beacon')).toBeTruthy();
     expect(screen.getByText('Forge')).toBeTruthy();
@@ -54,7 +62,7 @@ describe('ProjectSelectionPage', () => {
   it('shows an error message when the API is unreachable', async () => {
     api.listProjects.mockRejectedValue(new Error('Unable to reach local Teambridge daemon.'));
 
-    renderAtRoute('/', <ProjectSelectionPage />);
+    renderAtRoute('/projects', <ProjectSelectionPage />);
 
     expect(await screen.findByText('Unable to reach local Teambridge daemon.')).toBeTruthy();
   });
@@ -62,7 +70,7 @@ describe('ProjectSelectionPage', () => {
   it('shows empty state when no projects exist', async () => {
     api.listProjects.mockResolvedValue({ projects: [] });
 
-    renderAtRoute('/', <ProjectSelectionPage />);
+    renderAtRoute('/projects', <ProjectSelectionPage />);
 
     expect(await screen.findByText(/No projects found/)).toBeTruthy();
   });
@@ -86,7 +94,7 @@ describe('DashboardPage', () => {
     api.getWorkspaceStatus.mockResolvedValue(makeWorkspaceStatus({ workspace: track, lastSeq: 2 }));
     api.getVaultContext.mockResolvedValue({ context: makeVaultContext() });
 
-    renderAtRoute(`/projects/${projectId}`, <DashboardPage />);
+    renderAtRoute(`/projects/${projectId}`, <DashboardPage />, true);
 
     expect(await screen.findByText(/Backend owns invoice state/)).toBeTruthy();
     expect(api.getWorkspaceStatus).toHaveBeenCalledWith('ws_track1', {}, expect.any(AbortSignal));
@@ -96,7 +104,7 @@ describe('DashboardPage', () => {
     api.getProjectTracks.mockRejectedValue(new Error('Unable to load tracks.'));
     api.getProjectMembers.mockResolvedValue({ members: [] });
 
-    renderAtRoute(`/projects/${projectId}`, <DashboardPage />);
+    renderAtRoute(`/projects/${projectId}`, <DashboardPage />, true);
 
     expect(await screen.findByText('Unable to load tracks.')).toBeTruthy();
   });

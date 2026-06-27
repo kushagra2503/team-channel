@@ -13,6 +13,8 @@ export type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   selectedTrackId?: string;
   error?: string;
   onSelectTrack: (trackId: string) => void;
+  columnIndex?: number;
+  staggerKey?: string;
 };
 
 export function AppSidebar({
@@ -20,6 +22,8 @@ export function AppSidebar({
   selectedTrackId,
   error,
   onSelectTrack,
+  columnIndex,
+  staggerKey,
   ...props
 }: AppSidebarProps) {
   return (
@@ -30,6 +34,8 @@ export function AppSidebar({
           selectedTrackId={selectedTrackId}
           error={error}
           onSelect={onSelectTrack}
+          columnIndex={columnIndex}
+          staggerKey={staggerKey}
         />
       </SidebarContent>
 

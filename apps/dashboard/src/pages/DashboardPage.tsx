@@ -11,13 +11,11 @@ import {
   DEFAULT_DAEMON_BASE_URL,
   type TeambridgeClientConfig
 } from '@/api/teambridgeClient';
+import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
 import { AppSidebar } from '@/components/app-sidebar';
-import { SiteHeader } from '@/components/site-header';
-import { SettingsDialog } from '@/components/settings-dialog';
 import { TeamSidebar } from '@/components/team-sidebar';
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { SidebarInset } from '@/components/ui/sidebar';
 import { VaultHighlights } from '@/components/VaultHighlights';
 
 const LAST_PROJECT_KEY = 'tb_last_project';
@@ -29,6 +27,7 @@ function setLastProjectId(id: string): void {
 export function DashboardPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const { setHeader, resetHeader } = useAppShell();
   const clientConfig = useMemo<TeambridgeClientConfig>(() => getDefaultClientConfig(), []);
 
   const cache = useMemo(
@@ -36,7 +35,6 @@ export function DashboardPage() {
     [clientConfig.daemonBaseUrl]
   );
 
-  // Project-level state
   const [project, setProject] = useState<Project | undefined>(() =>
     cache.projects.find((p) => p.id === projectId)
   );
@@ -47,7 +45,6 @@ export function DashboardPage() {
     projectId ? cache.workspaces.filter((w) => w.projectId === projectId) : []
   );
 
-  // Track-level state
   const [selectedTrackId, setSelectedTrackIdState] = useState<string | undefined>(() => {
     const initial = cache.selectedWorkspaceId;
     return initial && tracks.some((t) => t.id === initial) ? initial : tracks[0]?.id;
@@ -63,11 +60,13 @@ export function DashboardPage() {
   const [detailsError, setDetailsError] = useState<string>();
   const [vaultError, setVaultError] = useState<string>();
   const [teamPanelOpen, setTeamPanelOpen] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [avatarRev, setAvatarRev] = useState(0);
   const abortRef = useRef<AbortController | undefined>(undefined);
 
-  // Remember this project
+  const toggleTeamPanel = useCallback(() => {
+    setTeamPanelOpen((open) => !open);
+  }, []);
+
   useEffect(() => {
     if (projectId) setLastProjectId(projectId);
   }, [projectId]);
@@ -83,10 +82,9 @@ export function DashboardPage() {
     }
   }, [cache]);
 
-  // Load project data
   useEffect(() => {
     if (!projectId) {
-      navigate('/', { replace: true });
+      navigate('/projects', { replace: true });
       return;
     }
 
@@ -95,20 +93,17 @@ export function DashboardPage() {
     abortRef.current = controller;
     setTracksError(undefined);
 
-    // If project not in cache, fetch all projects to resolve name
-    const resolveProject = project
-      ? Promise.resolve()
-      : listProjects(clientConfig, controller.signal).then((res) => {
-          cache.setProjects(res.projects);
-          const found = res.projects.find((p) => p.id === projectId);
-          if (!found) {
-            navigate('/', { replace: true });
-            return;
-          }
-          setProject(found);
-        });
-
-    void resolveProject;
+    if (!project) {
+      void listProjects(clientConfig, controller.signal).then((res) => {
+        cache.setProjects(res.projects);
+        const found = res.projects.find((p) => p.id === projectId);
+        if (!found) {
+          navigate('/projects', { replace: true });
+          return;
+        }
+        setProject(found);
+      });
+    }
 
     void Promise.all([
       getProjectTracks(projectId, clientConfig, controller.signal)
@@ -141,7 +136,6 @@ export function DashboardPage() {
     return () => controller.abort();
   }, [projectId, clientConfig, cache, navigate, project]);
 
-  // Load track data when selection changes
   useEffect(() => {
     if (!selectedTrackId) {
       setWorkspaceStatus(undefined);
@@ -181,57 +175,71 @@ export function DashboardPage() {
 
   const selectedTrack = workspaceStatus?.workspace ?? tracks.find((t) => t.id === selectedTrackId);
 
+  useEffect(() => {
+    setHeader({
+      variant: 'dashboard',
+      project,
+      workspace: selectedTrack,
+      status: workspaceStatus,
+      context: vaultContext,
+      teamPanelOpen,
+      onToggleTeamPanel: toggleTeamPanel
+    });
+  }, [
+    project,
+    selectedTrack,
+    workspaceStatus,
+    vaultContext,
+    teamPanelOpen,
+    toggleTeamPanel,
+    setHeader
+  ]);
+
+  useEffect(() => () => resetHeader(), [resetHeader]);
+
   return (
-    <TooltipProvider>
-      <div className="[--header-height:calc(--spacing(14))] select-none">
-        <SidebarProvider className="flex min-h-screen flex-col">
-          <SiteHeader
-            project={project}
-            workspace={selectedTrack}
-            status={workspaceStatus}
-            context={vaultContext}
-            teamPanelOpen={teamPanelOpen}
-            onToggleTeamPanel={() => setTeamPanelOpen((open) => !open)}
-            onOpenSettings={() => setSettingsOpen(true)}
-          />
-          <div className="flex flex-1">
-            <AppSidebar
-              tracks={tracks}
-              selectedTrackId={selectedTrackId}
-              error={tracksError}
-              onSelectTrack={setSelectedTrackId}
-            />
-            <SidebarInset>
-              <div className="flex flex-1 flex-col select-text">
-                <VaultHighlights
-                  context={vaultContext}
-                  error={vaultError}
-                  participants={workspaceStatus?.participants}
-                  workspaceId={workspaceStatus?.workspace.id}
-                  daemonBaseUrl={clientConfig.daemonBaseUrl}
-                  repoRoot={clientConfig.repoRoot}
-                  avatarRev={avatarRev}
-                />
-              </div>
-            </SidebarInset>
-            <TeamSidebar
-              open={teamPanelOpen}
-              members={members}
-              error={detailsError}
+    <>
+      <div className="flex shrink-0">
+        <AppSidebar
+          staggerKey={projectId}
+          columnIndex={0}
+          tracks={tracks}
+          selectedTrackId={selectedTrackId}
+          error={tracksError}
+          onSelectTrack={setSelectedTrackId}
+        />
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <SidebarInset>
+          <div className="flex flex-1 flex-col select-text">
+            <VaultHighlights
+              staggerKey={projectId}
+              columnIndex={1}
+              context={vaultContext}
+              error={vaultError}
+              participants={workspaceStatus?.participants}
+              workspaceId={workspaceStatus?.workspace.id}
               daemonBaseUrl={clientConfig.daemonBaseUrl}
               repoRoot={clientConfig.repoRoot}
               avatarRev={avatarRev}
-              trackId={selectedTrackId}
-              onAvatarRev={() => setAvatarRev((rev) => rev + 1)}
             />
           </div>
-        </SidebarProvider>
+        </SidebarInset>
       </div>
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        config={clientConfig}
-      />
-    </TooltipProvider>
+      <div className="flex shrink-0">
+        <TeamSidebar
+          staggerKey={projectId}
+          columnIndex={2}
+          open={teamPanelOpen}
+          members={members}
+          error={detailsError}
+          daemonBaseUrl={clientConfig.daemonBaseUrl}
+          repoRoot={clientConfig.repoRoot}
+          avatarRev={avatarRev}
+          trackId={selectedTrackId}
+          onAvatarRev={() => setAvatarRev((rev) => rev + 1)}
+        />
+      </div>
+    </>
   );
 }

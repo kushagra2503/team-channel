@@ -4,6 +4,7 @@ import type { Participant, VaultContext } from '@teambridge/core';
 import { Badge } from '@/components/ui/badge';
 import { buildAvatarUrl, type TeambridgeClientConfig } from '@/api/teambridgeClient';
 import { avatarColor, participantInitials, prettyParticipantName } from './participantDisplay';
+import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
 export type VaultHighlightsProps = {
   context?: VaultContext;
@@ -13,6 +14,8 @@ export type VaultHighlightsProps = {
   daemonBaseUrl?: string;
   repoRoot?: string;
   avatarRev?: number;
+  columnIndex?: number;
+  staggerKey?: string;
 };
 
 type VaultSection = { path: string; title: string; items: string[] };
@@ -300,11 +303,19 @@ function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, part
   );
 }
 
-const ENTER = { opacity: 1, y: 0 } as const;
-const HIDE = { opacity: 0, y: 6 } as const;
+const ENTER = COLUMN_ENTER;
+const HIDE = COLUMN_HIDE;
 
 export function VaultHighlights({
-  context, error, participants = [], workspaceId, daemonBaseUrl, repoRoot, avatarRev
+  context,
+  error,
+  participants = [],
+  workspaceId,
+  daemonBaseUrl,
+  repoRoot,
+  avatarRev,
+  columnIndex = 1,
+  staggerKey
 }: VaultHighlightsProps) {
   const sections = useMemo(() => (context ? parseVaultSections(context.content) : []), [context?.content]);
   const config = useMemo<TeambridgeClientConfig>(() => ({ daemonBaseUrl, repoRoot }), [daemonBaseUrl, repoRoot]);
@@ -338,9 +349,9 @@ export function VaultHighlights({
       ) : (
         sections.map((section, i) => (
           <motion.article
-            key={section.path}
+            key={staggerKey ? `${staggerKey}-${section.path}` : section.path}
             initial={HIDE} animate={ENTER}
-            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1], delay: i * 0.05 }}
+            transition={columnEnterTransition(columnIndex, i)}
             className="border-b border-border p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-3">

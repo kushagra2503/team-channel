@@ -10,18 +10,18 @@ import {
 } from '@/components/ui/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { getWorkspaceDisplayName } from './workspaceDisplay';
+import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
 export type TrackListProps = {
   tracks: Workspace[];
   selectedTrackId?: string;
   error?: string;
   onSelect: (trackId: string) => void;
+  columnIndex?: number;
+  staggerKey?: string;
 };
 
-const ENTER = { opacity: 1, y: 0 } as const;
-const HIDE = { opacity: 0, y: 4 } as const;
-
-function TrackListComponent({ tracks, selectedTrackId, error, onSelect }: TrackListProps) {
+function TrackListComponent({ tracks, selectedTrackId, error, onSelect, columnIndex = 0, staggerKey }: TrackListProps) {
   return (
     <SidebarGroup className="pt-2">
       <span className="sr-only" id="track-list-title">Tracks</span>
@@ -31,10 +31,10 @@ function TrackListComponent({ tracks, selectedTrackId, error, onSelect }: TrackL
       <SidebarMenu aria-labelledby="track-list-title">
         {tracks.map((track, i) => (
           <motion.div
-            key={track.id}
-            initial={HIDE}
-            animate={ENTER}
-            transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1], delay: i * 0.04 }}
+            key={staggerKey ? `${staggerKey}-${track.id}` : track.id}
+            initial={COLUMN_HIDE}
+            animate={COLUMN_ENTER}
+            transition={columnEnterTransition(columnIndex, i)}
           >
             <SidebarMenuItem>
               <SidebarMenuButton

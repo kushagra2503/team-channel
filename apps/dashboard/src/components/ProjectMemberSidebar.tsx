@@ -5,6 +5,7 @@ import { buildAvatarUrl } from '@/api/teambridgeClient';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { avatarColor, participantInitials, prettyParticipantName } from './participantDisplay';
+import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
 export type ProjectMemberSidebarProps = {
   members?: ProjectMember[];
@@ -14,6 +15,8 @@ export type ProjectMemberSidebarProps = {
   avatarRev?: number;
   /** Workspace ID of any track in the project for avatar lookups */
   trackId?: string;
+  columnIndex?: number;
+  staggerKey?: string;
 };
 
 const PRESENCE_DOT: Record<'active' | 'idle' | 'offline', string> = {
@@ -28,21 +31,23 @@ const STATUS_LABEL: Record<'active' | 'idle' | 'offline', string> = {
   offline: 'Offline'
 };
 
-const ENTER = { opacity: 1, y: 0 } as const;
-const HIDE = { opacity: 0, y: 5 } as const;
+const ENTER = COLUMN_ENTER;
+const HIDE = COLUMN_HIDE;
 
 function MemberRow({
   member,
   config,
   trackId,
   avatarRev,
-  index
+  index,
+  columnIndex
 }: {
   member: ProjectMember;
   config: TeambridgeClientConfig;
   trackId?: string;
   avatarRev?: number;
   index: number;
+  columnIndex: number;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const showDot = member.status !== 'offline';
@@ -54,7 +59,7 @@ function MemberRow({
     <motion.div
       initial={HIDE}
       animate={ENTER}
-      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1], delay: index * 0.04 }}
+      transition={columnEnterTransition(columnIndex, index)}
       className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
     >
       <div className="relative shrink-0">
@@ -96,7 +101,9 @@ export function ProjectMemberSidebar({
   daemonBaseUrl,
   repoRoot,
   avatarRev,
-  trackId
+  trackId,
+  columnIndex = 2,
+  staggerKey
 }: ProjectMemberSidebarProps) {
   if (error) {
     return (
@@ -113,29 +120,27 @@ export function ProjectMemberSidebar({
   const offlineStartIndex = online.length + 1;
 
   return (
-    <section aria-label="Team members" className="flex flex-col gap-1 py-2">
+    <section aria-label="Team members" className="flex flex-col py-2">
       <SidebarGroup className="py-1">
         <SidebarGroupLabel className="tabular-nums">
           {total} {total === 1 ? 'Member' : 'Members'}
         </SidebarGroupLabel>
-      </SidebarGroup>
-
-      {online.length > 0 ? (
-        <SidebarGroup className="py-1">
+        {online.length > 0 ? (
           <div className="flex flex-col">
             {online.map((member, i) => (
               <MemberRow
-                key={member.id}
+                key={staggerKey ? `${staggerKey}-${member.id}` : member.id}
                 member={member}
                 config={config}
                 trackId={trackId}
                 avatarRev={avatarRev}
                 index={i}
+                columnIndex={columnIndex}
               />
             ))}
           </div>
-        </SidebarGroup>
-      ) : null}
+        ) : null}
+      </SidebarGroup>
 
       {offline.length > 0 ? (
         <SidebarGroup className="py-1">
@@ -143,12 +148,13 @@ export function ProjectMemberSidebar({
           <div className="flex flex-col">
             {offline.map((member, i) => (
               <MemberRow
-                key={member.id}
+                key={staggerKey ? `${staggerKey}-${member.id}` : member.id}
                 member={member}
                 config={config}
                 trackId={trackId}
                 avatarRev={avatarRev}
                 index={offlineStartIndex + i}
+                columnIndex={columnIndex}
               />
             ))}
           </div>

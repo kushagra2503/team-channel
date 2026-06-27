@@ -13,6 +13,8 @@ export type TeamSidebarProps = {
   /** Workspace ID of the currently selected track for avatar lookups */
   trackId?: string;
   onAvatarRev?: () => void;
+  columnIndex?: number;
+  staggerKey?: string;
 };
 
 const TEAM_SIDEBAR_WIDTH = 288; // w-72
@@ -25,7 +27,9 @@ export function TeamSidebar({
   daemonBaseUrl,
   repoRoot,
   avatarRev,
-  trackId
+  trackId,
+  columnIndex,
+  staggerKey
 }: TeamSidebarProps) {
   return (
     <motion.aside
@@ -44,6 +48,8 @@ export function TeamSidebar({
             repoRoot={repoRoot}
             avatarRev={avatarRev}
             trackId={trackId}
+            columnIndex={columnIndex}
+            staggerKey={staggerKey}
           />
         </SidebarContent>
       </div>
