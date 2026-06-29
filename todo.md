@@ -61,7 +61,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 - [ ] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
   - [x] Ronish/Kushagra: implement `teambridge track start [NAME]` (wraps `/workspaces/start`, links `projectId`, uses local profile).
   - [ ] Kushagra: implement `teambridge start <session_name> [base_ref]` (north-star alias / full worktree+branch flow).
-  - [ ] Kushagra: implement `teambridge join <session_name>`, use recorded `base_commit`, and create participant worktree/branch.
+  - [x] Kushagra: implement `teambridge track join [NAME] --as <display_name>` — uses recorded `base_commit`, creates an isolated git worktree + branch `teambridge/<session>/<safeName>` under `.teambridge/worktrees/`, idempotent re-join. See `docs/cli-worktrees.md`.
   - [ ] Kushagra: implement `teambridge enter <session_name>`.
 - [x] Step 7, Nihal backend event and vault APIs:
   - [x] Nihal: implement local event append to `events.jsonl`.
@@ -104,7 +104,7 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
 - [x] Topbar cleanup (removed teammate count + note # chips)
 
-Still pending: MCP HTTP server, inbox UI, conflicts UI, presence/branches polish, CLI publish/join/enter/vault commands, packaged installer / auto-start daemon.
+Still pending: MCP HTTP server, inbox UI, conflicts UI, presence/branches polish, CLI publish/enter/vault commands (`track join` is done — see `docs/cli-worktrees.md`), packaged installer / auto-start daemon.
 
 CLI + dashboard dogfood (no seed):
 
@@ -121,7 +121,7 @@ pnpm test:integration   # verify CLI + daemon end-to-end
 
 ### Phase 1 Pass Example
 
-> **Runnable today (without full north-star CLI):** `pnpm build`, `pnpm daemon`, then either `pnpm seed` + `pnpm dashboard` **or** the dogfood CLI flow above. Integration tests: `pnpm test:integration`. Publish/join/enter/vault CLI commands are still pending.
+> **Runnable today (without full north-star CLI):** `pnpm build`, `pnpm daemon`, then either `pnpm seed` + `pnpm dashboard` **or** the dogfood CLI flow above. Integration tests: `pnpm test:integration`. `track join` (real worktree creation) is done; publish/enter/vault CLI commands are still pending.
 
 ```bash
 # Nihal starts the workspace from main.

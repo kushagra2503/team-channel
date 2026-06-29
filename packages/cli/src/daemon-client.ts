@@ -1,13 +1,14 @@
 import type {
   ApiResult,
   CreateProjectResponse,
+  JoinWorkspaceResponse,
   LocalUserProfile,
   ProjectListResponse,
   StartWorkspaceResponse,
   TrackListResponse,
   WorkspaceStatusResponse
 } from '@teambridge/core';
-import { buildDaemonUrl } from '@teambridge/core';
+import { apiFail, buildDaemonUrl } from '@teambridge/core';
 
 export type ClientOptions = {
   baseUrl?: string;
@@ -15,14 +16,29 @@ export type ClientOptions = {
 };
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<ApiResult<T>> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...(init.headers ?? {})
-    }
-  });
-  return response.json() as Promise<ApiResult<T>>;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        'content-type': 'application/json',
+        ...(init.headers ?? {})
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return apiFail('INTERNAL_ERROR', `Cannot reach the teambridge daemon at ${url} — is it running? (run \`pnpm daemon\`)\n  ${message}`);
+  }
+
+  const text = await response.text();
+  if (!text) {
+    return apiFail('INTERNAL_ERROR', `Empty response from daemon (HTTP ${response.status}).`);
+  }
+  try {
+    return JSON.parse(text) as ApiResult<T>;
+  } catch {
+    return apiFail('INTERNAL_ERROR', `Unexpected non-JSON response from daemon (HTTP ${response.status}): ${text.slice(0, 200)}`);
+  }
 }
 
 export async function initConfig(options: ClientOptions): Promise<ApiResult<{ created: boolean }>> {
@@ -78,6 +94,23 @@ export async function startTrack(
 
 export async function listTracks(options: ClientOptions): Promise<ApiResult<TrackListResponse>> {
   return request(buildDaemonUrl('/tracks', options));
+}
+
+export async function joinWorkspace(
+  options: ClientOptions,
+  body: {
+    sessionName: string;
+    displayName?: string;
+    agent?: LocalUserProfile['defaultAgent'];
+    // worktreePath is a daemon-side schema extension (not in core's JoinWorkspaceRequest);
+    // the CLI owns worktree creation and passes the path it created.
+    worktreePath: string;
+  }
+): Promise<ApiResult<JoinWorkspaceResponse>> {
+  return request(buildDaemonUrl('/workspaces/join', options), {
+    method: 'POST',
+    body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
 }
 
 export async function getWorkspaceStatus(

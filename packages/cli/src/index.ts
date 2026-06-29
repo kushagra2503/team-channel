@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { runInit } from './commands/init';
 import { runProjectCreate, runProjectList } from './commands/project';
-import { runTrackStart } from './commands/track';
+import { runTrackJoin, runTrackStart } from './commands/track';
 import { runStatus } from './commands/status';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
@@ -13,6 +13,7 @@ Usage:
   teambridge project create [--name NAME] [--description TEXT]
   teambridge project list
   teambridge track start [NAME] [--project PROJECT_ID] [--base-ref REF]
+  teambridge track join [NAME] [--as DISPLAY_NAME]
   teambridge status
 
 Environment:
@@ -59,7 +60,11 @@ async function main(): Promise<void> {
         await runTrackStart(argv.slice(2), options);
         return;
       }
-      throw new Error('Usage: teambridge track start [NAME]');
+      if (sub === 'join') {
+        await runTrackJoin(argv.slice(2), options);
+        return;
+      }
+      throw new Error('Usage: teambridge track start|join [NAME]');
     }
 
     if (command === 'status') {
