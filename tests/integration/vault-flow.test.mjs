@@ -80,6 +80,28 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
   assert.equal(searchNoMatch.exitCode, 0, searchNoMatch.stderr || searchNoMatch.stdout);
   assert.match(searchNoMatch.stdout, /No matches\./);
 
+  // FTS5 special characters must never crash the daemon or leak a syntax error.
+  const searchSpecialChars = runCli(['vault', 'search', '"*AND-OR NEAR/2'], { ...ctx, cwd: ronishWorktree });
+  assert.equal(searchSpecialChars.exitCode, 0, searchSpecialChars.stderr || searchSpecialChars.stdout);
+
+  // Rebuild-from-events parity (Scope Boundaries): search results must be
+  // identical after the vault is deleted and rebuilt from events.jsonl.
+  const trackList = await (
+    await fetch(new URL(`/tracks?repoRoot=${encodeURIComponent(repoRoot)}`, daemon.baseUrl))
+  ).json();
+  const workspaceId = trackList.data.tracks.find((t) => t.sessionName === 'auth-redesign').id;
+  const rebuildUrl = new URL(`/workspaces/${workspaceId}/vault/rebuild`, daemon.baseUrl);
+  const rebuildResponse = await fetch(rebuildUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ repoRoot })
+  });
+  assert.equal(rebuildResponse.status, 200);
+
+  const searchAfterRebuild = runCli(['vault', 'search', 'invoice'], { ...ctx, cwd: ronishWorktree });
+  assert.equal(searchAfterRebuild.exitCode, 0, searchAfterRebuild.stderr || searchAfterRebuild.stdout);
+  assert.equal(searchAfterRebuild.stdout, search.stdout);
+
   // ws who/branches show both participants, from either worktree.
   const who = runCli(['ws', 'who', 'auth-redesign'], { ...ctx, cwd: kushagraWorktree });
   assert.equal(who.exitCode, 0, who.stderr || who.stdout);

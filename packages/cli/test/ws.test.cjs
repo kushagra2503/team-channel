@@ -87,6 +87,20 @@ test('ws branches lists each participant branch', async () => {
   }
 });
 
+test('ws show|who|branches pass through a daemon status-fetch error', async () => {
+  const restore = stubDaemon({
+    tracks: [{ id: 'ws_1', sessionName: 'auth-redesign' }],
+    status: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'daemon unavailable' } }
+  });
+  try {
+    await assert.rejects(() => runWs(['show', 'auth-redesign'], OPTIONS), /daemon unavailable/);
+    await assert.rejects(() => runWs(['who', 'auth-redesign'], OPTIONS), /daemon unavailable/);
+    await assert.rejects(() => runWs(['branches', 'auth-redesign'], OPTIONS), /daemon unavailable/);
+  } finally {
+    restore();
+  }
+});
+
 test('ws show|who|branches throw a clear error for an unknown session name', async () => {
   const restore = stubDaemon({ tracks: [], status: TWO_PARTICIPANTS });
   try {

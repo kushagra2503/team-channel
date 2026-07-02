@@ -145,3 +145,23 @@ test(
     }
   })
 );
+
+test(
+  'vault context passes through a daemon error',
+  withTrackWorktree(async (options) => {
+    const original = daemonClient.getVaultContext;
+    daemonClient.getVaultContext = async () => ({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'daemon unavailable' } });
+    try {
+      await assert.rejects(() => runVault(['context'], options), /daemon unavailable/);
+    } finally {
+      daemonClient.getVaultContext = original;
+    }
+  })
+);
+
+test(
+  'vault rejects an unrecognized subcommand',
+  withTrackWorktree(async (options) => {
+    await assert.rejects(() => runVault(['bogus'], options), /Usage: teambridge vault read/);
+  })
+);

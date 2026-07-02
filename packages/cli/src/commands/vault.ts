@@ -27,7 +27,7 @@ async function runVaultContext(_argv: string[], options: ClientOptions): Promise
   const { context } = result.data;
   process.stdout.write(context.content);
   console.error(
-    `\n[vault context: ${context.includedPaths.length} file(s), truncated=${context.truncated}, lastSeq=${context.lastSeq ?? 0}]`
+    `[vault context: ${context.includedPaths.length} file(s), truncated=${context.truncated}, lastSeq=${context.lastSeq ?? 0}]`
   );
 }
 
