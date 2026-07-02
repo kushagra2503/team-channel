@@ -109,3 +109,39 @@ test(
     }
   })
 );
+
+test(
+  'vault search prints results as path:line: text',
+  withTrackWorktree(async (options) => {
+    const original = daemonClient.searchVault;
+    daemonClient.searchVault = async (_options, workspaceId, query) => {
+      assert.equal(workspaceId, 'ws_1');
+      assert.equal(query, 'invoice state');
+      return { ok: true, data: { results: [{ path: 'decisions.md', line: 2, text: '- Backend owns invoice state' }] } };
+    };
+    const capture = captureStdout();
+    try {
+      await runVault(['search', 'invoice', 'state'], options);
+      assert.equal(capture.output, 'decisions.md:2: - Backend owns invoice state\n');
+    } finally {
+      capture.restore();
+      daemonClient.searchVault = original;
+    }
+  })
+);
+
+test(
+  'vault search reports no matches without erroring',
+  withTrackWorktree(async (options) => {
+    const original = daemonClient.searchVault;
+    daemonClient.searchVault = async () => ({ ok: true, data: { results: [] } });
+    const capture = captureStdout();
+    try {
+      await runVault(['search', 'nonexistent'], options);
+      assert.equal(capture.output, 'No matches.\n');
+    } finally {
+      capture.restore();
+      daemonClient.searchVault = original;
+    }
+  })
+);

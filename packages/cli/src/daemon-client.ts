@@ -8,6 +8,7 @@ import type {
   TrackListResponse,
   VaultContextResponse,
   VaultReadResponse,
+  VaultSearchResponse,
   WorkspaceEvent,
   WorkspaceStatusResponse
 } from '@teambridge/core';
@@ -144,6 +145,14 @@ export async function getVaultContext(
   workspaceId: string
 ): Promise<ApiResult<VaultContextResponse>> {
   return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/context`, options));
+}
+
+export async function searchVault(
+  options: ClientOptions,
+  workspaceId: string,
+  query: string
+): Promise<ApiResult<VaultSearchResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/search`, options, { q: query }));
 }
 
 export async function getWorkspaceStatus(

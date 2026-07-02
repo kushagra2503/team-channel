@@ -23,6 +23,7 @@ Usage:
   teambridge publish <TARGET_FILE> <TEXT>
   teambridge vault read <PATH>
   teambridge vault context
+  teambridge vault search <QUERY>
   teambridge status
 
 Environment:

@@ -1,5 +1,5 @@
 import type { ClientOptions } from '../daemon-client';
-import { getVaultContext, readVaultFile } from '../daemon-client';
+import { getVaultContext, readVaultFile, searchVault } from '../daemon-client';
 import { resolveCurrentTrack } from '../lib/current-track';
 
 async function runVaultRead(argv: string[], options: ClientOptions): Promise<void> {
@@ -31,6 +31,28 @@ async function runVaultContext(_argv: string[], options: ClientOptions): Promise
   );
 }
 
+async function runVaultSearch(argv: string[], options: ClientOptions): Promise<void> {
+  const query = argv.filter((arg) => !arg.startsWith('-')).join(' ');
+  if (!query.trim()) {
+    throw new Error('Usage: teambridge vault search <query>');
+  }
+
+  const track = await resolveCurrentTrack(options);
+  const result = await searchVault(options, track.id, query);
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+
+  if (result.data.results.length === 0) {
+    console.log('No matches.');
+    return;
+  }
+
+  for (const match of result.data.results) {
+    console.log(`${match.path}:${match.line}: ${match.text}`);
+  }
+}
+
 export async function runVault(argv: string[], options: ClientOptions): Promise<void> {
   const sub = argv[0];
   if (sub === 'read') {
@@ -41,5 +63,9 @@ export async function runVault(argv: string[], options: ClientOptions): Promise<
     await runVaultContext(argv.slice(1), options);
     return;
   }
-  throw new Error('Usage: teambridge vault read <path>|context');
+  if (sub === 'search') {
+    await runVaultSearch(argv.slice(1), options);
+    return;
+  }
+  throw new Error('Usage: teambridge vault read <path>|context|search <query>');
 }
