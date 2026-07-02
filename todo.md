@@ -58,6 +58,9 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [ ] Keep daemon startup generic; normal users should not have to start the daemon with `--repo` (auto-detect shipped; background service / IDE launch still pending).
 - [x] Step 5, Nihal backend workspace APIs:
   - [x] Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
+  - [x] Local user profile APIs (`GET/POST /user/profile`, flower avatar on init). (moved from Step 9 — backend API work, not dashboard UI)
+  - [x] `POST /projects` + roster member upsert; start/join link tracks to projects. (moved from Step 9 — backend API work, not dashboard UI)
+  - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`). (moved from Step 9 — done early; real MCP server work is Phase 3 Step 2)
 - [ ] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
   - [x] Ronish/Kushagra: implement `teambridge track start [NAME]` (wraps `/workspaces/start`, links `projectId`, uses local profile).
   - [x] Kushagra: implement `teambridge start <session_name> [base_ref]` (north-star alias / full worktree+branch flow) — creates a real worktree/branch for the starter, symmetric with `track join`.
@@ -76,15 +79,12 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Kushagra: implement `teambridge vault search <query>` — backed by a real SQLite FTS5 index (`vault_search_index` in `state.sqlite`), kept consistent through `vault rebuild`. See `packages/daemon/src/index.ts` (`reindexVaultFile`) and the `GET /workspaces/:id/vault/search` route.
   - [x] Kushagra: implement `teambridge vault context`.
 - [ ] Step 9, Ronish after daemon read endpoints exist:
-  - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`).
   - [x] Stub dashboard API client against daemon response contracts.
   - [x] Show local workspace list (project picker + track sidebar).
   - [x] Show local participants (project members sidebar) — display name/status only; branch/agent are fetched but not rendered (see Dashboard milestone follow-ups below).
   - [x] Show vault file highlights (with color/assign annotations).
   - [x] CLI scaffold aligned with dashboard (`teambridge init`, `project create`, `track start` → same daemon data).
   - [x] Sidebar repo context panel (`GET /repo/context`, `POST /repo/open-path` — remote, branch, local path, last push + commit link).
-  - [x] Local user profile APIs (`GET/POST /user/profile`, flower avatar on init).
-  - [x] `POST /projects` + roster member upsert; start/join link tracks to projects.
   - [x] Vault chip first-name display (`participantFirstName`).
   - [x] Root ergonomics: `pnpm teambridge`, `pnpm dashboard:preview`, `VITE_TEAMBRIDGE_REPO_ROOT` baked at dashboard build.
   - [x] CLI integration tests in `tests/integration/` (`pnpm test:integration`).
@@ -152,7 +152,7 @@ Pass when:
 - [x] A `publish` event with `targetFile` updates the correct flat vault file.
 - [x] Filtering can work by `targetFile` for Phase 1.
 - [x] `vault context` returns a concatenated flat-vault context with `includedPaths`, `lastSeq`, and `truncated`.
-- [ ] The vault can be deleted and rebuilt from `events.jsonl`. (Verified manually via `/vault/rebuild` during development — not yet an automated test.)
+- [x] The vault can be deleted and rebuilt from `events.jsonl`. (Automated in `tests/integration/vault-flow.test.mjs` — calls `POST /vault/rebuild` and asserts search results are unchanged.)
 - [x] No Supabase, MCP, hooks, or dashboard polish is required for this workflow.
 
 Partial progress:
