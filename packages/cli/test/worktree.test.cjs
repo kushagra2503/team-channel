@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const naming = require('../dist/lib/naming.js');
-const { prepareJoinerWorktree } = require('../dist/lib/worktree.js');
+const { prepareParticipantWorktree } = require('../dist/lib/worktree.js');
 
 test('safeDisplayName matches the daemon rules byte-for-byte', () => {
   assert.equal(naming.safeDisplayName('Kush.ra'), 'kush.ra');
@@ -45,7 +45,7 @@ function fakeGit(handlers) {
 const OK = { stdout: '', stderr: '', status: 0 };
 const FAIL = { stdout: '', stderr: '', status: 1 };
 
-test('prepareJoinerWorktree creates a new branch worktree on the happy path', () => {
+test('prepareParticipantWorktree creates a new branch worktree on the happy path', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-happy-does-not-exist');
   const git = fakeGit([
     { match: (a) => a[0] === 'check-ignore', result: OK }, // .teambridge ignored
@@ -55,7 +55,7 @@ test('prepareJoinerWorktree creates a new branch worktree on the happy path', ()
     { match: (a) => a[0] === 'worktree' && a[1] === 'add', result: OK }
   ]);
 
-  const result = prepareJoinerWorktree(
+  const result = prepareParticipantWorktree(
     { repoRoot, sessionName: 'auth', displayName: 'Kushagra', baseCommit: 'abc123' },
     git
   );
@@ -69,7 +69,7 @@ test('prepareJoinerWorktree creates a new branch worktree on the happy path', ()
   assert.ok(addCall.includes('abc123'), 'expected the worktree to be cut from the base commit');
 });
 
-test('prepareJoinerWorktree fails clearly when the base commit is missing locally', () => {
+test('prepareParticipantWorktree fails clearly when the base commit is missing locally', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-missing-base');
   const git = fakeGit([
     { match: (a) => a[0] === 'check-ignore', result: OK },
@@ -78,13 +78,13 @@ test('prepareJoinerWorktree fails clearly when the base commit is missing locall
   ]);
 
   assert.throws(
-    () => prepareJoinerWorktree({ repoRoot, sessionName: 'auth', displayName: 'k', baseCommit: 'deadbeef' }, git),
+    () => prepareParticipantWorktree({ repoRoot, sessionName: 'auth', displayName: 'k', baseCommit: 'deadbeef' }, git),
     /not present locally/
   );
   assert.ok(!git.calls.some((a) => a[0] === 'worktree' && a[1] === 'add'), 'must not create a worktree without the base');
 });
 
-test('prepareJoinerWorktree is idempotent: reuses an already-registered worktree', () => {
+test('prepareParticipantWorktree is idempotent: reuses an already-registered worktree', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-reuse');
   const expectedPath = naming.worktreePathFor(repoRoot, 'auth', 'Kushagra');
   const porcelain = `worktree ${expectedPath}\nHEAD abc123\nbranch refs/heads/teambridge/auth/kushagra\n`;
@@ -93,7 +93,7 @@ test('prepareJoinerWorktree is idempotent: reuses an already-registered worktree
     { match: (a) => a[0] === 'worktree' && a[1] === 'list', result: { stdout: porcelain, stderr: '', status: 0 } }
   ]);
 
-  const result = prepareJoinerWorktree(
+  const result = prepareParticipantWorktree(
     { repoRoot, sessionName: 'auth', displayName: 'Kushagra', baseCommit: 'abc123' },
     git
   );
@@ -103,7 +103,7 @@ test('prepareJoinerWorktree is idempotent: reuses an already-registered worktree
   assert.ok(!git.calls.some((a) => a[0] === 'worktree' && a[1] === 'add'), 'must not re-add an existing worktree');
 });
 
-test('prepareJoinerWorktree refuses when the branch is checked out elsewhere', () => {
+test('prepareParticipantWorktree refuses when the branch is checked out elsewhere', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-branch-elsewhere');
   const porcelain = `worktree /some/other/path\nHEAD abc123\nbranch refs/heads/teambridge/auth/kushagra\n`;
   const git = fakeGit([
@@ -112,7 +112,7 @@ test('prepareJoinerWorktree refuses when the branch is checked out elsewhere', (
   ]);
 
   assert.throws(
-    () => prepareJoinerWorktree({ repoRoot, sessionName: 'auth', displayName: 'Kushagra', baseCommit: 'abc123' }, git),
+    () => prepareParticipantWorktree({ repoRoot, sessionName: 'auth', displayName: 'Kushagra', baseCommit: 'abc123' }, git),
     /already checked out/
   );
 });

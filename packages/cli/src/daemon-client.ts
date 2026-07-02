@@ -6,6 +6,10 @@ import type {
   ProjectListResponse,
   StartWorkspaceResponse,
   TrackListResponse,
+  VaultContextResponse,
+  VaultReadResponse,
+  VaultSearchResponse,
+  WorkspaceEvent,
   WorkspaceStatusResponse
 } from '@teambridge/core';
 import { apiFail, buildDaemonUrl } from '@teambridge/core';
@@ -111,6 +115,44 @@ export async function joinWorkspace(
     method: 'POST',
     body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
   });
+}
+
+export async function publishEvent(
+  options: ClientOptions,
+  workspaceId: string,
+  body: { targetFile: string; text: string }
+): Promise<ApiResult<{ event: WorkspaceEvent }>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/events`, options), {
+    method: 'POST',
+    body: JSON.stringify({
+      targetFile: body.targetFile,
+      payload: { text: body.text },
+      repoRoot: options.repoRoot
+    })
+  });
+}
+
+export async function readVaultFile(
+  options: ClientOptions,
+  workspaceId: string,
+  path: string
+): Promise<ApiResult<VaultReadResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/read`, options, { path }));
+}
+
+export async function getVaultContext(
+  options: ClientOptions,
+  workspaceId: string
+): Promise<ApiResult<VaultContextResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/context`, options));
+}
+
+export async function searchVault(
+  options: ClientOptions,
+  workspaceId: string,
+  query: string
+): Promise<ApiResult<VaultSearchResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/search`, options, { q: query }));
 }
 
 export async function getWorkspaceStatus(

@@ -2,6 +2,11 @@
 import { runInit } from './commands/init';
 import { runProjectCreate, runProjectList } from './commands/project';
 import { runTrackJoin, runTrackStart } from './commands/track';
+import { runStart } from './commands/start';
+import { runEnter } from './commands/enter';
+import { runPublish } from './commands/publish';
+import { runVault } from './commands/vault';
+import { runWs } from './commands/ws';
 import { runStatus } from './commands/status';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
@@ -14,6 +19,13 @@ Usage:
   teambridge project list
   teambridge track start [NAME] [--project PROJECT_ID] [--base-ref REF]
   teambridge track join [NAME] [--as DISPLAY_NAME]
+  teambridge start [NAME] [--project PROJECT_ID] [--base-ref REF]
+  teambridge enter <NAME>
+  teambridge publish <TARGET_FILE> <TEXT>
+  teambridge vault read <PATH>
+  teambridge vault context
+  teambridge vault search <QUERY>
+  teambridge ws show|who|branches <NAME>
   teambridge status
 
 Environment:
@@ -65,6 +77,31 @@ async function main(): Promise<void> {
         return;
       }
       throw new Error('Usage: teambridge track start|join [NAME]');
+    }
+
+    if (command === 'start') {
+      await runStart(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'enter') {
+      await runEnter(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'publish') {
+      await runPublish(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'vault') {
+      await runVault(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'ws') {
+      await runWs(argv.slice(1), options);
+      return;
     }
 
     if (command === 'status') {

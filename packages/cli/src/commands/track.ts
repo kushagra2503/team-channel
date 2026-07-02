@@ -1,11 +1,20 @@
+import type { ApiOk, LocalUserProfile, StartWorkspaceResponse } from '@teambridge/core';
 import type { ClientOptions } from '../daemon-client';
 import { getUserProfile, joinWorkspace, listProjects, listTracks, startTrack } from '../daemon-client';
 import { ask, parseFlag } from '../prompt';
 import { assertValidSessionName } from '../lib/naming';
-import { prepareJoinerWorktree, rollbackJoinerWorktree } from '../lib/worktree';
+import { prepareParticipantWorktree, rollbackParticipantWorktree } from '../lib/worktree';
 import { writeWorktreePointer } from '../lib/pointers';
 
-export async function runTrackStart(argv: string[], options: ClientOptions): Promise<void> {
+/**
+ * Shared by `track start` and `start` (which additionally creates a worktree
+ * for the starter — see commands/start.ts). Resolves the profile/project
+ * inputs and registers the track with the daemon; does not touch git.
+ */
+export async function registerTrackStart(
+  argv: string[],
+  options: ClientOptions
+): Promise<{ profile: LocalUserProfile; projectId: string | undefined; started: ApiOk<StartWorkspaceResponse> }> {
   const profile = await getUserProfile(options);
   if (!profile.ok) {
     throw new Error(profile.error.message);
@@ -61,6 +70,12 @@ export async function runTrackStart(argv: string[], options: ClientOptions): Pro
     throw new Error(started.error.message);
   }
 
+  return { profile: profile.data.profile, projectId, started };
+}
+
+export async function runTrackStart(argv: string[], options: ClientOptions): Promise<void> {
+  const { started, projectId } = await registerTrackStart(argv, options);
+
   console.log(`Started track "${started.data.manifest.sessionName}" on project ${projectId}`);
   console.log(`Workspace id: ${started.data.manifest.id}`);
   console.log('Dashboard will show this track under the project sidebar.');
@@ -103,7 +118,7 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
 
   // Git-first: create the isolated worktree before registering with the daemon,
   // so the daemon never records a row for a worktree that failed to materialize.
-  const worktree = prepareJoinerWorktree({
+  const worktree = prepareParticipantWorktree({
     repoRoot: options.repoRoot,
     sessionName: track.sessionName,
     displayName,
@@ -128,7 +143,7 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
     }
     // Otherwise roll back only what we created this run.
     if (worktree.created) {
-      rollbackJoinerWorktree({ repoRoot: options.repoRoot, path: worktree.path, branch: worktree.branch });
+      rollbackParticipantWorktree({ repoRoot: options.repoRoot, path: worktree.path, branch: worktree.branch });
     }
     throw new Error(joined.error.message);
   }

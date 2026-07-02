@@ -44,9 +44,10 @@ Flow (git-first, then daemon, so the daemon never records a row for a worktree t
 ```
 packages/cli/src/lib/naming.ts     # safeDisplayName, branchForParticipant, worktreePathFor, assertValidSessionName
 packages/cli/src/lib/git.ts        # GitRunner seam + git helpers (only place that shells to git)
-packages/cli/src/lib/worktree.ts   # prepareJoinerWorktree / rollbackJoinerWorktree
+packages/cli/src/lib/worktree.ts   # prepareParticipantWorktree / rollbackParticipantWorktree (shared by start + join)
 packages/cli/src/lib/pointers.ts   # .worktree.<name>.json read/write
 packages/cli/src/commands/track.ts # runTrackJoin
+packages/cli/src/commands/start.ts # runStart (creator worktree, symmetric with join)
 ```
 
 Tests: `packages/cli/test/worktree.test.cjs` (naming parity + worktree orchestration with a fake `GitRunner`).
