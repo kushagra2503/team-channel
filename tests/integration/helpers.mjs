@@ -104,10 +104,10 @@ export async function startTestDaemon(repoRoot) {
   };
 }
 
-export function runCli(args, { repoRoot, baseUrl }) {
+export function runCli(args, { repoRoot, baseUrl, cwd }) {
   try {
     const stdout = execFileSync(process.execPath, [CLI_BIN, ...args], {
-      cwd: repoRoot,
+      cwd: cwd ?? repoRoot,
       env: {
         ...process.env,
         TEAMBRIDGE_DAEMON_URL: baseUrl,
