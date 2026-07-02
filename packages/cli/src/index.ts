@@ -3,6 +3,7 @@ import { runInit } from './commands/init';
 import { runProjectCreate, runProjectList } from './commands/project';
 import { runTrackJoin, runTrackStart } from './commands/track';
 import { runStart } from './commands/start';
+import { runEnter } from './commands/enter';
 import { runStatus } from './commands/status';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
@@ -16,6 +17,7 @@ Usage:
   teambridge track start [NAME] [--project PROJECT_ID] [--base-ref REF]
   teambridge track join [NAME] [--as DISPLAY_NAME]
   teambridge start [NAME] [--project PROJECT_ID] [--base-ref REF]
+  teambridge enter <NAME>
   teambridge status
 
 Environment:
@@ -71,6 +73,11 @@ async function main(): Promise<void> {
 
     if (command === 'start') {
       await runStart(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'enter') {
+      await runEnter(argv.slice(1), options);
       return;
     }
 
