@@ -5,6 +5,7 @@ import { runTrackJoin, runTrackStart } from './commands/track';
 import { runStart } from './commands/start';
 import { runEnter } from './commands/enter';
 import { runPublish } from './commands/publish';
+import { runVault } from './commands/vault';
 import { runStatus } from './commands/status';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
@@ -20,6 +21,8 @@ Usage:
   teambridge start [NAME] [--project PROJECT_ID] [--base-ref REF]
   teambridge enter <NAME>
   teambridge publish <TARGET_FILE> <TEXT>
+  teambridge vault read <PATH>
+  teambridge vault context
   teambridge status
 
 Environment:
@@ -85,6 +88,11 @@ async function main(): Promise<void> {
 
     if (command === 'publish') {
       await runPublish(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'vault') {
+      await runVault(argv.slice(1), options);
       return;
     }
 

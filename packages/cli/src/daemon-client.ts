@@ -6,6 +6,8 @@ import type {
   ProjectListResponse,
   StartWorkspaceResponse,
   TrackListResponse,
+  VaultContextResponse,
+  VaultReadResponse,
   WorkspaceEvent,
   WorkspaceStatusResponse
 } from '@teambridge/core';
@@ -127,6 +129,21 @@ export async function publishEvent(
       repoRoot: options.repoRoot
     })
   });
+}
+
+export async function readVaultFile(
+  options: ClientOptions,
+  workspaceId: string,
+  path: string
+): Promise<ApiResult<VaultReadResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/read`, options, { path }));
+}
+
+export async function getVaultContext(
+  options: ClientOptions,
+  workspaceId: string
+): Promise<ApiResult<VaultContextResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/context`, options));
 }
 
 export async function getWorkspaceStatus(
