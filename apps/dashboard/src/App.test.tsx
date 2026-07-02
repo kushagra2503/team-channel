@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   getDefaultClientConfig: vi.fn(() => ({})),
   DEFAULT_DAEMON_BASE_URL: 'http://127.0.0.1:9473',
   listProjects: vi.fn(),
+  listKnownRepos: vi.fn(),
   getProjectMembers: vi.fn(),
   getProjectTracks: vi.fn(),
   listWorkspaces: vi.fn(),
@@ -43,6 +44,7 @@ describe('ProjectSelectionPage', () => {
     vi.resetAllMocks();
     sessionStorage.clear();
     api.getDefaultClientConfig.mockReturnValue({});
+    api.listKnownRepos.mockResolvedValue({ repos: [] });
   });
 
   it('shows a list of projects fetched from the API', async () => {
@@ -75,6 +77,26 @@ describe('ProjectSelectionPage', () => {
 
     expect(await screen.findByText(/No projects found/)).toBeTruthy();
   });
+
+  it('shows projects discovered from known repos', async () => {
+    api.listProjects.mockResolvedValue({ projects: [] });
+    api.listKnownRepos.mockResolvedValue({
+      repos: [
+        {
+          repoRoot: '/tmp/teambridge-dummy-repo',
+          lastSeenAt: '2026-01-01T00:00:00.000Z',
+          projects: [
+            { id: 'proj_dummy', name: 'Dummy Repo', description: 'Local test repo', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
+          ]
+        }
+      ]
+    });
+
+    renderAtRoute('/projects', <ProjectSelectionPage />);
+
+    expect(await screen.findByText('Dummy Repo')).toBeTruthy();
+    expect(screen.getByText('Local test repo')).toBeTruthy();
+  });
 });
 
 describe('DashboardPage', () => {
@@ -102,6 +124,7 @@ describe('DashboardPage', () => {
     });
     // Prevent unhandled rejection from listProjects call inside DashboardPage
     api.listProjects.mockResolvedValue({ projects: [] });
+    api.listKnownRepos.mockResolvedValue({ repos: [] });
   });
 
   it('loads tracks and renders vault content for the selected track', async () => {

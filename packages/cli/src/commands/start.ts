@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import type { ClientOptions } from '../daemon-client';
+import { registerWorktree } from '../daemon-client';
 import { prepareParticipantWorktree, rollbackParticipantWorktree } from '../lib/worktree';
 import { writeWorktreePointer } from '../lib/pointers';
 import { registerTrackStart } from './track';
@@ -34,6 +36,18 @@ export async function runStart(argv: string[], options: ClientOptions): Promise<
   }
 
   try {
+    const registered = await registerWorktree(options, manifest.id, {
+      userId: manifest.createdBy,
+      path: worktree.path,
+      branch: worktree.branch,
+      baseCommit: manifest.baseCommit,
+      currentCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree.path, encoding: 'utf8' }).trim(),
+      dirty: false
+    });
+    if (!registered.ok) {
+      throw new Error(registered.error.message);
+    }
+
     writeWorktreePointer(options.repoRoot, {
       workspaceId: manifest.id,
       sessionName: manifest.sessionName,

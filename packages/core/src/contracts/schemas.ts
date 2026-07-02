@@ -191,6 +191,13 @@ export const StartWorkspaceResponseSchema = z.object({
 
 export const JoinWorkspaceResponseSchema = StartWorkspaceResponseSchema;
 
+export const WorkspaceStatusResponseSchema = z.object({
+  workspace: WorkspaceSchema,
+  participants: z.array(ParticipantSchema),
+  worktrees: z.array(WorktreeInfoSchema),
+  lastSeq: z.number().int().nonnegative()
+});
+
 export const VaultReadResponseSchema = z.object({
   file: VaultFileSchema
 });

@@ -37,6 +37,17 @@ export function makeWorkspaceStatus(overrides: Partial<WorkspaceStatusResponse> 
   return {
     workspace: makeWorkspace({ baseCommit: 'abc123' }),
     participants: [makeParticipant()],
+    worktrees: [
+      {
+        workspaceId: 'ws_123',
+        userId: 'user_ronish',
+        path: '/tmp/teambridge/.teambridge/worktrees/billing-refactor/ronish',
+        branch: 'teambridge/billing-refactor/ronish',
+        baseCommit: 'abc123',
+        currentCommit: 'abc123',
+        dirty: false
+      }
+    ],
     lastSeq: 3,
     ...overrides
   };

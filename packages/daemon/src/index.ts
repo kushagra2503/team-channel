@@ -40,6 +40,7 @@ import type {
   VaultReadResponse,
   VaultSearchResponse,
   VaultSearchResult,
+  WorktreeInfo,
   Workspace,
   WorkspaceEvent,
   WorkspaceListResponse,
@@ -145,6 +146,16 @@ const PfpRegenerateBodySchema = z.object({
   algorithm: z.enum(['floyd-steinberg', 'atkinson', 'bayer']).optional(),
   bayerLevel: z.number().int().min(0).max(4).optional(),
   color: z.object({ r: z.number().int().min(0).max(255), g: z.number().int().min(0).max(255), b: z.number().int().min(0).max(255) }).optional()
+});
+
+const RegisterWorktreeBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  userId: z.string().min(1),
+  path: z.string().min(1),
+  branch: z.string().min(1),
+  baseCommit: z.string().min(1),
+  currentCommit: z.string().min(1).optional(),
+  dirty: z.boolean().optional()
 });
 
 const DEFAULT_CONFIG: TeambridgeConfig = {
@@ -558,6 +569,11 @@ function initializeStateDb(repoRoot: string): string {
     create table if not exists local_sequences (
       workspace_id text primary key references tracks(id),
       last_seq integer not null default 0
+    );
+
+    create table if not exists known_repos (
+      repo_root text primary key,
+      last_seen_at text not null
     );
   `);
 
@@ -1113,6 +1129,39 @@ function listProjects(repoRoot: string): Project[] {
   return rows.map(rowToProject);
 }
 
+function rememberRepoRoot(registryRoot: string, repoRoot: string): void {
+  const resolved = resolve(repoRoot);
+  const dbPath = initializeStateDb(registryRoot);
+  runSql(dbPath, `
+    insert into known_repos (repo_root, last_seen_at)
+    values (${sqlValue(resolved)}, ${sqlValue(new Date().toISOString())})
+    on conflict(repo_root) do update set last_seen_at = excluded.last_seen_at;
+  `);
+}
+
+function listKnownRepos(registryRoot: string): Array<{ repoRoot: string; lastSeenAt: string; projects: Project[] }> {
+  const dbPath = initializeStateDb(registryRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    'select repo_root, last_seen_at from known_repos order by last_seen_at desc'
+  );
+
+  return rows
+    .map((row) => {
+      const repoRoot = String(row.repo_root);
+      try {
+        return {
+          repoRoot,
+          lastSeenAt: String(row.last_seen_at),
+          projects: listProjects(repoRoot)
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is { repoRoot: string; lastSeenAt: string; projects: Project[] } => Boolean(entry));
+}
+
 function getProjectById(repoRoot: string, projectId: string): Project | undefined {
   const dbPath = initializeStateDb(repoRoot);
   const [row] = querySql<Record<string, unknown>>(
@@ -1147,6 +1196,55 @@ function listParticipants(repoRoot: string, workspaceId: string): Participant[] 
     `select * from participants where workspace_id = ${sqlValue(workspaceId)} order by display_name asc`
   );
   return rows.map(rowToParticipant);
+}
+
+function rowToWorktree(row: Record<string, unknown>): WorktreeInfo {
+  return {
+    workspaceId: String(row.workspace_id),
+    userId: String(row.user_id),
+    path: String(row.path),
+    branch: String(row.branch),
+    baseCommit: String(row.base_commit),
+    currentCommit: row.current_commit ? String(row.current_commit) : undefined,
+    dirty: Number(row.dirty) === 1
+  };
+}
+
+function listWorktrees(repoRoot: string, workspaceId: string): WorktreeInfo[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from worktrees where workspace_id = ${sqlValue(workspaceId)} order by rowid asc`
+  );
+  return rows.map(rowToWorktree);
+}
+
+function registerWorktree(
+  repoRoot: string,
+  workspaceId: string,
+  worktree: Omit<WorktreeInfo, 'workspaceId'>
+): WorktreeInfo {
+  const dbPath = initializeStateDb(repoRoot);
+  const path = resolve(worktree.path);
+  runSql(dbPath, `
+    insert or replace into worktrees (
+      workspace_id, user_id, path, branch, base_commit, current_commit, dirty
+    ) values (
+      ${sqlValue(workspaceId)},
+      ${sqlValue(worktree.userId)},
+      ${sqlValue(path)},
+      ${sqlValue(worktree.branch)},
+      ${sqlValue(worktree.baseCommit)},
+      ${sqlValue(worktree.currentCommit ?? null)},
+      ${worktree.dirty ? 1 : 0}
+    );
+  `);
+
+  return {
+    workspaceId,
+    ...worktree,
+    path
+  };
 }
 
 function findLegacyAvatarIdsForSlug(repoRoot: string, slug: string): string[] {
@@ -1361,8 +1459,22 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  if (method === 'GET' && url.pathname === '/repos') {
+    sendJson(response, 200, ok({ repos: listKnownRepos(state.defaultRepoRoot) }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/repos/register') {
+    const body = ConfigRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    sendJson(response, 200, ok({ repoRoot }));
+    return;
+  }
+
   if (method === 'GET' && url.pathname === '/config') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const config = await readRepoConfig(repoRoot);
     sendJson(response, 200, ok({ config, path: getConfigPath(repoRoot), exists: config !== DEFAULT_CONFIG }));
     return;
@@ -1371,6 +1483,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'POST' && url.pathname === '/config/init') {
     const body = ConfigRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const result = await initRepoConfig(repoRoot);
     sendJson(response, result.created ? 201 : 200, ok(result));
     return;
@@ -1378,18 +1491,21 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   if (method === 'GET' && url.pathname === '/workspaces') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     sendJson<WorkspaceListResponse>(response, 200, ok({ workspaces: listWorkspaces(repoRoot) }));
     return;
   }
 
   if (method === 'GET' && url.pathname === '/tracks') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     sendJson<TrackListResponse>(response, 200, ok({ tracks: listWorkspaces(repoRoot) }));
     return;
   }
 
   if (method === 'GET' && url.pathname === '/projects') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     sendJson<ProjectListResponse>(response, 200, ok({ projects: listProjects(repoRoot) }));
     return;
   }
@@ -1398,6 +1514,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     try {
       const body = CreateProjectBodySchema.parse(await readJsonBody<unknown>(request));
       const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      rememberRepoRoot(state.defaultRepoRoot, repoRoot);
       const result = await createProject(repoRoot, body);
       sendJson<CreateProjectResponse>(response, 201, ok(result));
     } catch (error) {
@@ -1410,6 +1527,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   if (method === 'GET' && url.pathname === '/user/profile') {
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const profile = await readLocalUserProfile(repoRoot);
     const avatarVersion = profile
       ? await getAvatarVersionForDisplayName(repoRoot, profile.displayName)
@@ -1452,6 +1570,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     try {
       const body = SaveLocalUserBodySchema.parse(await readJsonBody<unknown>(request));
       const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      rememberRepoRoot(state.defaultRepoRoot, repoRoot);
       await initRepoConfig(repoRoot);
       const result = await saveLocalUserProfile(repoRoot, body);
       sendJson(response, 200, ok(result));
@@ -1487,6 +1606,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && projectMembersMatch) {
     const projectId = decodeURIComponent(projectMembersMatch[1]);
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const project = getProjectById(repoRoot, projectId);
     if (!project) {
       sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
@@ -1509,6 +1629,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       const projectId = decodeURIComponent(projectMembersMatch[1]);
       const body = UpsertProjectMemberBodySchema.parse(await readJsonBody<unknown>(request));
       const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+      rememberRepoRoot(state.defaultRepoRoot, repoRoot);
       const project = getProjectById(repoRoot, projectId);
       if (!project) {
         sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
@@ -1558,6 +1679,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && projectTracksMatch) {
     const projectId = decodeURIComponent(projectTracksMatch[1]);
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const project = getProjectById(repoRoot, projectId);
     if (!project) {
       sendJson(response, 404, fail('PROJECT_NOT_FOUND', `Project ${projectId} was not found`));
@@ -1569,6 +1691,8 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   if (method === 'POST' && url.pathname === '/workspaces/start') {
     const body = StartRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const result = await startWorkspace(state, body);
     sendJson(response, 201, ok(result));
     return;
@@ -1576,6 +1700,8 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   if (method === 'POST' && url.pathname === '/workspaces/join') {
     const body = JoinRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const result = await joinWorkspace(state, body);
     sendJson(response, 201, ok(result));
     return;
@@ -1585,6 +1711,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
   if (method === 'GET' && eventListMatch) {
     const workspaceIdentifier = decodeURIComponent(eventListMatch[1]);
     const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
     const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
     if (!workspace) {
       sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
@@ -1740,6 +1867,29 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  const registerWorktreeMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/worktrees\/register$/);
+  if (method === 'POST' && registerWorktreeMatch) {
+    const workspaceIdentifier = decodeURIComponent(registerWorktreeMatch[1]);
+    const body = RegisterWorktreeBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    const worktree = registerWorktree(repoRoot, workspace.id, {
+      userId: body.userId,
+      path: body.path,
+      branch: body.branch,
+      baseCommit: body.baseCommit,
+      currentCommit: body.currentCommit,
+      dirty: body.dirty ?? false
+    });
+    sendJson(response, 200, ok({ worktree }));
+    return;
+  }
+
   const statusMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/status$/);
   if (method === 'GET' && statusMatch) {
     const workspaceIdentifier = decodeURIComponent(statusMatch[1]);
@@ -1760,6 +1910,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     sendJson(response, 200, ok({
       workspace,
       participants: listParticipants(repoRoot, workspace.id),
+      worktrees: listWorktrees(repoRoot, workspace.id),
       lastSeq: sequence?.last_seq ?? 0
     }));
     return;

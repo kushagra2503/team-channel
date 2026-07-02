@@ -47,6 +47,12 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
   const ronishWorktree = parseWorktreePath(join.stdout);
   assert.notEqual(ronishWorktree, kushagraWorktree);
 
+  const joinNihal = runCli(['track', 'join', 'auth-redesign', '--as', 'Nihal'], ctx);
+  assert.equal(joinNihal.exitCode, 0, joinNihal.stderr || joinNihal.stdout);
+  const nihalWorktree = parseWorktreePath(joinNihal.stdout);
+  assert.notEqual(nihalWorktree, kushagraWorktree);
+  assert.notEqual(nihalWorktree, ronishWorktree);
+
   // Publish runs from INSIDE Kushagra's worktree — repoRoot resolution (U1) and
   // current-track resolution from the branch (U4/KTD4) both get exercised here.
   const publish = runCli(['publish', 'decisions.md', 'Backend owns invoice state'], { ...ctx, cwd: kushagraWorktree });
@@ -90,6 +96,17 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
     await fetch(new URL(`/tracks?repoRoot=${encodeURIComponent(repoRoot)}`, daemon.baseUrl))
   ).json();
   const workspaceId = trackList.data.tracks.find((t) => t.sessionName === 'auth-redesign').id;
+  const statusBeforeRebuild = await (
+    await fetch(new URL(`/workspaces/${workspaceId}/status?repoRoot=${encodeURIComponent(repoRoot)}`, daemon.baseUrl))
+  ).json();
+  assert.equal(statusBeforeRebuild.data.participants.length, 3);
+  assert.equal(statusBeforeRebuild.data.worktrees.length, 3);
+  assert.equal(new Set(statusBeforeRebuild.data.worktrees.map((worktree) => worktree.path)).size, 3);
+  assert.deepEqual(
+    [...new Set(statusBeforeRebuild.data.worktrees.map((worktree) => worktree.baseCommit))],
+    [statusBeforeRebuild.data.workspace.baseCommit]
+  );
+
   const rebuildUrl = new URL(`/workspaces/${workspaceId}/vault/rebuild`, daemon.baseUrl);
   const rebuildResponse = await fetch(rebuildUrl, {
     method: 'POST',
@@ -107,9 +124,11 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
   assert.equal(who.exitCode, 0, who.stderr || who.stdout);
   assert.match(who.stdout, /Kushagra A/);
   assert.match(who.stdout, /Ronish/);
+  assert.match(who.stdout, /Nihal/);
 
   const branches = runCli(['ws', 'branches', 'auth-redesign'], { ...ctx, cwd: ronishWorktree });
   assert.equal(branches.exitCode, 0, branches.stderr || branches.stdout);
   assert.match(branches.stdout, /teambridge\/auth-redesign\/kushagra-a/);
   assert.match(branches.stdout, /teambridge\/auth-redesign\/ronish/);
+  assert.match(branches.stdout, /teambridge\/auth-redesign\/nihal/);
 });

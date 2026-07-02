@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Project } from '@teambridge/core';
-import { listProjects, getDefaultClientConfig, DEFAULT_DAEMON_BASE_URL } from '@/api/teambridgeClient';
+import { listKnownRepos, listProjects, getDefaultClientConfig, DEFAULT_DAEMON_BASE_URL } from '@/api/teambridgeClient';
 import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
 
 const LAST_PROJECT_KEY = 'tb_last_project';
+const PROJECT_LIST_REFRESH_MS = 5000;
+
+type ProjectCard = Project & {
+  repoRoot?: string;
+};
 
 function setLastProjectId(id: string): void {
   try { sessionStorage.setItem(LAST_PROJECT_KEY, id); } catch { /* ignore */ }
@@ -17,7 +22,7 @@ export function ProjectSelectionPage() {
   const config = useMemo(() => getDefaultClientConfig(), []);
   const cache = useMemo(() => createCache(config.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL), [config.daemonBaseUrl]);
 
-  const [projects, setProjects] = useState<Project[]>(() => cache.projects);
+  const [projects, setProjects] = useState<ProjectCard[]>(() => cache.projects);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -28,23 +33,55 @@ export function ProjectSelectionPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    listProjects(config, controller.signal)
-      .then((res) => {
-        cache.setProjects(res.projects);
-        setProjects(res.projects);
-      })
-      .catch((err) => {
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Unable to reach local Condominium daemon.');
-        }
-      });
 
-    return () => controller.abort();
+    const loadProjects = async () => {
+      try {
+        const res = await listProjects(config, controller.signal);
+        if (res.projects.length > 0) {
+          cache.setProjects(res.projects);
+          setProjects(res.projects);
+          setError(undefined);
+          return;
+        }
+
+        const known = await listKnownRepos(config, controller.signal);
+        const discoveredProjects = known.repos.flatMap((repo) => (
+          repo.projects.map((project) => ({
+            ...project,
+            repoRoot: repo.repoRoot
+          }))
+        ));
+        setProjects(discoveredProjects);
+        setError(undefined);
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'Unable to reach local Teambridge daemon.');
+        }
+      }
+    };
+
+    void loadProjects();
+    const refreshId = window.setInterval(() => {
+      void loadProjects();
+    }, PROJECT_LIST_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(refreshId);
+      controller.abort();
+    };
   }, [config, cache]);
 
-  function handleSelect(project: Project) {
+  function handleSelect(project: ProjectCard) {
     setLastProjectId(project.id);
-    navigate(`/projects/${project.id}`);
+    const params = new URLSearchParams(window.location.search);
+    if (project.repoRoot) {
+      params.set('repoRoot', project.repoRoot);
+    }
+    if (config.daemonBaseUrl) {
+      params.set('daemonBaseUrl', config.daemonBaseUrl);
+    }
+    const query = params.toString();
+    navigate(`/projects/${project.id}${query ? `?${query}` : ''}`);
   }
 
   return (
@@ -60,9 +97,9 @@ export function ProjectSelectionPage() {
           </div>
         ) : projects.length === 0 ? (
           <div className="rounded-lg border border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
-            No projects found — run the seed script to populate demo data.
+            No projects found for the current repo yet.
             <br />
-            <code className="mt-2 block text-xs text-muted-foreground/60">pnpm seed</code>
+            <code className="mt-2 block text-xs text-muted-foreground/60">Run teambridge init and project create in a repo.</code>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

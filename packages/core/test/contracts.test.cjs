@@ -10,7 +10,8 @@ const {
   StartWorkspaceResponseSchema,
   TeambridgeConfigSchema,
   VaultContextSchema,
-  WorkspaceManifestSchema
+  WorkspaceManifestSchema,
+  WorkspaceStatusResponseSchema
 } = require('../dist');
 const contracts = require('@teambridge/core/contracts');
 
@@ -50,6 +51,30 @@ test('WorkspaceManifestSchema accepts the Phase 1 manifest shape', () => {
 test('ParticipantSchema keeps participant fields stable', () => {
   assert.deepEqual(ParticipantSchema.parse(participant), participant);
   assert.throws(() => ParticipantSchema.parse({ ...participant, status: 'busy' }));
+});
+
+test('WorkspaceStatusResponseSchema includes participants and worktrees', () => {
+  const status = {
+    workspace: { ...manifest, participants: undefined, schemaVersion: undefined },
+    participants: [participant],
+    worktrees: [
+      {
+        workspaceId: 'ws_123',
+        userId: 'user_nihal',
+        path: '/tmp/repo/.teambridge/worktrees/billing-refactor/nihal',
+        branch: 'teambridge/billing-refactor/nihal',
+        baseCommit: 'abc123',
+        currentCommit: 'abc123',
+        dirty: false
+      }
+    ],
+    lastSeq: 2
+  };
+  delete status.workspace.participants;
+  delete status.workspace.schemaVersion;
+
+  assert.deepEqual(WorkspaceStatusResponseSchema.parse(status), status);
+  assert.throws(() => WorkspaceStatusResponseSchema.parse({ ...status, worktrees: undefined }));
 });
 
 test('PublishEventSchema accepts only publish events with target files', () => {

@@ -8,6 +8,7 @@ import { runPublish } from './commands/publish';
 import { runVault } from './commands/vault';
 import { runWs } from './commands/ws';
 import { runStatus } from './commands/status';
+import { runDaemon } from './commands/daemon';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
 function usage(): void {
@@ -26,6 +27,7 @@ Usage:
   teambridge vault context
   teambridge vault search <QUERY>
   teambridge ws show|who|branches <NAME>
+  teambridge daemon start|status|stop [--port PORT]
   teambridge status
 
 Environment:
@@ -106,6 +108,11 @@ async function main(): Promise<void> {
 
     if (command === 'status') {
       await runStatus(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'daemon') {
+      await runDaemon(argv.slice(1), options);
       return;
     }
 

@@ -26,6 +26,7 @@ function makeRepo() {
 function stubDaemon({ displayName, baseCommit, startTrackImpl }) {
   const originalGetUserProfile = daemonClient.getUserProfile;
   const originalStartTrack = daemonClient.startTrack;
+  const originalRegisterWorktree = daemonClient.registerWorktree;
   daemonClient.getUserProfile = async () => ({
     ok: true,
     data: { profile: { displayName, defaultProjectId: 'proj_1' } }
@@ -39,9 +40,14 @@ function stubDaemon({ displayName, baseCommit, startTrackImpl }) {
         worktree: {}
       }
     }));
+  daemonClient.registerWorktree = async (_options, workspaceId, worktree) => ({
+    ok: true,
+    data: { worktree: { workspaceId, ...worktree, dirty: worktree.dirty ?? false } }
+  });
   return () => {
     daemonClient.getUserProfile = originalGetUserProfile;
     daemonClient.startTrack = originalStartTrack;
+    daemonClient.registerWorktree = originalRegisterWorktree;
   };
 }
 

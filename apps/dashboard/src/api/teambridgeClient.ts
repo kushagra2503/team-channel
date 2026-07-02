@@ -1,12 +1,15 @@
 import type {
   ApiResult,
   LocalUserProfileResponse,
+  Project,
   ProjectListResponse,
   ProjectMemberListResponse,
   RepoContextResponse,
   TrackListResponse,
   VaultAnnotateResponseBody,
   VaultContextResponse,
+  VaultReadResponse,
+  VaultSearchResponse,
   VaultItemAnnotation,
   WorkspaceListResponse,
   WorkspaceStatusResponse
@@ -21,6 +24,33 @@ export type TeambridgeClientConfig = {
   daemonBaseUrl?: string;
   repoRoot?: string;
 };
+
+export type KnownRepo = {
+  repoRoot: string;
+  lastSeenAt: string;
+  projects: Project[];
+};
+
+function normalizeDaemonBaseUrl(value: string | null | undefined): string {
+  if (!value) {
+    return DEFAULT_DAEMON_BASE_URL;
+  }
+
+  let current = value;
+  for (let i = 0; i < 2 && current.includes('%'); i += 1) {
+    try {
+      current = decodeURIComponent(current);
+    } catch {
+      break;
+    }
+  }
+
+  try {
+    return new URL(current).toString().replace(/\/$/, '');
+  } catch {
+    return DEFAULT_DAEMON_BASE_URL;
+  }
+}
 
 export function buildTeambridgeUrl(
   path: string,
@@ -66,9 +96,23 @@ export function getDefaultClientConfig(): TeambridgeClientConfig {
   const env = import.meta.env;
   const query = new URLSearchParams(window.location.search);
   return {
-    daemonBaseUrl: query.get('daemonBaseUrl') ?? env.VITE_TEAMBRIDGE_DAEMON_URL ?? DEFAULT_DAEMON_BASE_URL,
+    daemonBaseUrl: normalizeDaemonBaseUrl(query.get('daemonBaseUrl') ?? env.VITE_TEAMBRIDGE_DAEMON_URL),
     repoRoot: query.get('repoRoot') ?? env.VITE_TEAMBRIDGE_REPO_ROOT
   };
+}
+
+export function listKnownRepos(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<{ repos: KnownRepo[] }> {
+  return getJson<{ repos: KnownRepo[] }>('/repos', { daemonBaseUrl: config.daemonBaseUrl }, undefined, signal);
+}
+
+export async function registerRepo(config: TeambridgeClientConfig, repoRoot: string, signal?: AbortSignal): Promise<{ repoRoot: string }> {
+  const response = await fetch(buildTeambridgeUrl('/repos/register', { daemonBaseUrl: config.daemonBaseUrl }), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ repoRoot }),
+    signal
+  });
+  return unwrapApiResult<{ repoRoot: string }>(response);
 }
 
 export function listWorkspaces(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<WorkspaceListResponse> {
@@ -146,6 +190,34 @@ export function getVaultContext(
     `/workspaces/${encodeURIComponent(workspaceId)}/vault/context`,
     config,
     undefined,
+    signal
+  );
+}
+
+export function readVaultFile(
+  workspaceId: string,
+  path: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<VaultReadResponse> {
+  return getJson<VaultReadResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/vault/read`,
+    config,
+    { path },
+    signal
+  );
+}
+
+export function searchVault(
+  workspaceId: string,
+  query: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<VaultSearchResponse> {
+  return getJson<VaultSearchResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/vault/search`,
+    config,
+    { q: query },
     signal
   );
 }

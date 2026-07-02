@@ -23,6 +23,8 @@ import { preloadAvatars } from '@/lib/avatar-cache';
 import { readCachedLocalIdentity, writeCachedLocalIdentity } from '@/lib/local-profile-cache';
 
 const LAST_PROJECT_KEY = 'tb_last_project';
+const PROJECT_REFRESH_MS = 5000;
+const TRACK_REFRESH_MS = 3000;
 
 function setLastProjectId(id: string): void {
   try { sessionStorage.setItem(LAST_PROJECT_KEY, id); } catch { /* ignore */ }
@@ -103,50 +105,64 @@ export function DashboardPage() {
     abortRef.current = controller;
     setTracksError(undefined);
 
-    if (!project) {
-      void listProjects(clientConfig, controller.signal).then((res) => {
-        cache.setProjects(res.projects);
-        const found = res.projects.find((p) => p.id === projectId);
-        if (!found) {
-          navigate('/projects', { replace: true });
-          return;
-        }
-        setProject(found);
-      });
-    }
-
-    void Promise.all([
-      getProjectTracks(projectId, clientConfig, controller.signal)
-        .then((res) => {
-          const updated = cache.workspaces.filter((w) => w.projectId !== projectId).concat(res.tracks);
-          cache.setWorkspaces(updated);
-          setTracks(res.tracks);
-          setSelectedTrackIdState((current) => {
-            const next = current && res.tracks.some((t) => t.id === current)
-              ? current
-              : res.tracks[0]?.id;
-            if (next) cache.setSelectedWorkspaceId(next);
-            return next;
-          });
-        })
-        .catch((err) => {
-          if (!controller.signal.aborted) {
-            setTracksError(err instanceof Error ? err.message : 'Unable to load tracks.');
+    const loadProjectData = async () => {
+      if (!project) {
+        try {
+          const res = await listProjects(clientConfig, controller.signal);
+          cache.setProjects(res.projects);
+          const found = res.projects.find((p) => p.id === projectId);
+          if (found) {
+            setProject(found);
           }
-        }),
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            setTracksError(error instanceof Error ? error.message : 'Unable to load project.');
+          }
+        }
+      }
 
-      getProjectMembers(projectId, clientConfig, controller.signal)
-        .then((res) => {
-          cache.setProjectMembers(projectId, res.members);
-          setMembers(res.members);
-          setLocalUser(res.localUser);
-          setLocalAvatarVersion(res.localAvatarVersion);
-          writeCachedLocalIdentity(daemonUrl, res.localUser, res.localAvatarVersion);
-        })
-        .catch(() => { /* non-fatal */ })
-    ]);
+      await Promise.all([
+        getProjectTracks(projectId, clientConfig, controller.signal)
+          .then((res) => {
+            const updated = cache.workspaces.filter((w) => w.projectId !== projectId).concat(res.tracks);
+            cache.setWorkspaces(updated);
+            setTracks(res.tracks);
+            setTracksError(undefined);
+            setSelectedTrackIdState((current) => {
+              const next = current && res.tracks.some((t) => t.id === current)
+                ? current
+                : res.tracks[0]?.id;
+              if (next) cache.setSelectedWorkspaceId(next);
+              return next;
+            });
+          })
+          .catch((err) => {
+            if (!controller.signal.aborted) {
+              setTracksError(err instanceof Error ? err.message : 'Unable to load tracks.');
+            }
+          }),
 
-    return () => controller.abort();
+        getProjectMembers(projectId, clientConfig, controller.signal)
+          .then((res) => {
+            cache.setProjectMembers(projectId, res.members);
+            setMembers(res.members);
+            setLocalUser(res.localUser);
+            setLocalAvatarVersion(res.localAvatarVersion);
+            writeCachedLocalIdentity(daemonUrl, res.localUser, res.localAvatarVersion);
+          })
+          .catch(() => { /* non-fatal */ })
+      ]);
+    };
+
+    void loadProjectData();
+    const refreshId = window.setInterval(() => {
+      void loadProjectData();
+    }, PROJECT_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(refreshId);
+      controller.abort();
+    };
   }, [projectId, clientConfig, cache, navigate, project, daemonUrl]);
 
   useEffect(() => {
@@ -160,30 +176,42 @@ export function DashboardPage() {
     setDetailsError(undefined);
     setVaultError(undefined);
 
-    void Promise.all([
-      getWorkspaceStatus(selectedTrackId, clientConfig, controller.signal)
-        .then((response) => {
-          cache.setStatus(selectedTrackId, response);
-          setWorkspaceStatus(response);
-        })
-        .catch((error) => {
-          if (!controller.signal.aborted) {
-            setDetailsError(error instanceof Error ? error.message : 'Unable to load track.');
-          }
-        }),
-      getVaultContext(selectedTrackId, clientConfig, controller.signal)
-        .then((response) => {
-          cache.setVault(selectedTrackId, response.context);
-          setVaultContext(response.context);
-        })
-        .catch((error) => {
-          if (!controller.signal.aborted) {
-            setVaultError(error instanceof Error ? error.message : 'Unable to load vault context.');
-          }
-        })
-    ]);
+    const loadTrackData = async () => {
+      await Promise.all([
+        getWorkspaceStatus(selectedTrackId, clientConfig, controller.signal)
+          .then((response) => {
+            cache.setStatus(selectedTrackId, response);
+            setWorkspaceStatus(response);
+            setDetailsError(undefined);
+          })
+          .catch((error) => {
+            if (!controller.signal.aborted) {
+              setDetailsError(error instanceof Error ? error.message : 'Unable to load track.');
+            }
+          }),
+        getVaultContext(selectedTrackId, clientConfig, controller.signal)
+          .then((response) => {
+            cache.setVault(selectedTrackId, response.context);
+            setVaultContext(response.context);
+            setVaultError(undefined);
+          })
+          .catch((error) => {
+            if (!controller.signal.aborted) {
+              setVaultError(error instanceof Error ? error.message : 'Unable to load vault context.');
+            }
+          })
+      ]);
+    };
 
-    return () => controller.abort();
+    void loadTrackData();
+    const refreshId = window.setInterval(() => {
+      void loadTrackData();
+    }, TRACK_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(refreshId);
+      controller.abort();
+    };
   }, [clientConfig, selectedTrackId, cache]);
 
   const selectedTrack = workspaceStatus?.workspace ?? tracks.find((t) => t.id === selectedTrackId);
@@ -260,6 +288,7 @@ export function DashboardPage() {
               context={vaultContext}
               error={vaultError}
               participants={workspaceStatus?.participants}
+              workspaceId={selectedTrackId}
               daemonBaseUrl={clientConfig.daemonBaseUrl}
               repoRoot={clientConfig.repoRoot}
               avatarRev={avatarRev}

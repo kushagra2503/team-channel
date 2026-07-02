@@ -73,6 +73,7 @@ export type StartWorkspaceResponse = {
 export type WorkspaceStatusResponse = {
   workspace: Workspace;
   participants: Participant[];
+  worktrees: WorktreeInfo[];
   lastSeq: number;
   latestCheckpoint?: VaultCheckpoint;
 };

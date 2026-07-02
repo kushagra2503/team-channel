@@ -32,12 +32,12 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
 
 ### Phase 1 Execution Order
 
-- [ ] Step 1, everyone: agree on the current contract shapes in `packages/core/src/contracts/`.
-- [ ] Step 2, everyone in parallel:
+- [x] Step 1, everyone: agree on the current contract shapes in `packages/core/src/contracts/`.
+- [x] Step 2, everyone in parallel:
   - [x] Nihal: add `packages/core`, `packages/daemon`, and `packages/vault`.
   - [x] Kushagra: add `packages/cli` and CLI command parser skeleton.
   - [x] Ronish: add `packages/mcp` and `apps/dashboard` skeletons.
-- [ ] Step 3, Nihal first:
+- [x] Step 3, Nihal first:
   - [x] Add TypeScript build setup for core/backend packages.
   - [x] Convert contract types into runtime-validated schemas where needed.
   - [x] Add contract tests for workspace manifest shape, participant shape, publish event shape, vault context shape, and API result shape.
@@ -45,7 +45,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Implement local config discovery.
   - [x] Implement local SQLite state using a Phase 1 SQLite adapter.
   - [x] Implement local workspace store.
-- [ ] Step 4, Kushagra after daemon health/config exist:
+- [x] Step 4, Kushagra after daemon health/config exist:
   - [x] Implement `teambridge init` (profile + avatar via daemon).
   - [x] Implement `teambridge status`.
   - [x] Implement `teambridge project create` and `teambridge project list`.
@@ -55,13 +55,13 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Implement `teambridge ws show <session_name>`.
   - [x] Implement `teambridge ws who <session_name>`.
   - [x] Implement `teambridge ws branches <session_name>`.
-  - [ ] Keep daemon startup generic; normal users should not have to start the daemon with `--repo` (auto-detect shipped; background service / IDE launch still pending).
+  - [x] Keep daemon startup generic; normal users should not have to start the daemon with `--repo` (`teambridge daemon start|status|stop` manages a background daemon for Phase 1; IDE/OS launch can come later).
 - [x] Step 5, Nihal backend workspace APIs:
   - [x] Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
   - [x] Local user profile APIs (`GET/POST /user/profile`, flower avatar on init). (moved from Step 9 — backend API work, not dashboard UI)
   - [x] `POST /projects` + roster member upsert; start/join link tracks to projects. (moved from Step 9 — backend API work, not dashboard UI)
   - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`). (moved from Step 9 — done early; real MCP server work is Phase 3 Step 2)
-- [ ] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
+- [x] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
   - [x] Ronish/Kushagra: implement `teambridge track start [NAME]` (wraps `/workspaces/start`, links `projectId`, uses local profile).
   - [x] Kushagra: implement `teambridge start <session_name> [base_ref]` (north-star alias / full worktree+branch flow) — creates a real worktree/branch for the starter, symmetric with `track join`.
   - [x] Kushagra: implement `teambridge track join [NAME] --as <display_name>` — uses recorded `base_commit`, creates an isolated git worktree + branch `teambridge/<session>/<safeName>` under `.teambridge/worktrees/`, idempotent re-join. See `docs/cli-worktrees.md`.
@@ -78,7 +78,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Kushagra: implement `teambridge vault read <path>`.
   - [x] Kushagra: implement `teambridge vault search <query>` — backed by a real SQLite FTS5 index (`vault_search_index` in `state.sqlite`), kept consistent through `vault rebuild`. See `packages/daemon/src/index.ts` (`reindexVaultFile`) and the `GET /workspaces/:id/vault/search` route.
   - [x] Kushagra: implement `teambridge vault context`.
-- [ ] Step 9, Ronish after daemon read endpoints exist:
+- [x] Step 9, Ronish after daemon read endpoints exist:
   - [x] Stub dashboard API client against daemon response contracts.
   - [x] Show local workspace list (project picker + track sidebar).
   - [x] Show local participants (project members sidebar) — display name/status only; branch/agent are fetched but not rendered (see Dashboard milestone follow-ups below).
@@ -88,7 +88,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Vault chip first-name display (`participantFirstName`).
   - [x] Root ergonomics: `pnpm teambridge`, `pnpm dashboard:preview`, `VITE_TEAMBRIDGE_REPO_ROOT` baked at dashboard build.
   - [x] CLI integration tests in `tests/integration/` (`pnpm test:integration`).
-- [ ] Step 10, everyone: prove the local pass example below.
+- [x] Step 10, everyone: prove the local pass example below.
 
 ### Dashboard milestone (Jun 2026)
 
@@ -104,12 +104,12 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
 - [x] Topbar cleanup (removed teammate count + note # chips)
 
-Still pending: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, packaged installer / auto-start daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — but the dashboard was not updated alongside them, so it has no UI for several of these yet:
+Still pending: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces:
 
-- [ ] Ronish: render participant `branch` and `agent` in `TrackParticipantsPanel.tsx` — the daemon's `/workspaces/:id/status` response already includes both per participant; the dashboard fetches but silently drops them today.
-- [ ] Ronish: add a vault search UI (search box + ranked results list) calling the new `GET /workspaces/:id/vault/search` route — this SQLite FTS5-backed endpoint currently has zero dashboard consumer; `teambridge vault search` is CLI-only.
-- [ ] Ronish: add a single-file vault viewer calling `GET /workspaces/:id/vault/read` — the dashboard only ever renders the concatenated `vault/context` blob (`VaultHighlights.tsx`), never an individual file; `teambridge vault read <path>` is CLI-only.
-- [ ] Ronish: surface each participant's worktree path (or an "Enter" affordance) in the dashboard, mirroring `teambridge enter <session_name>` — currently only reachable from the CLI, no worktree-path concept exists in the UI.
+- [x] Ronish: render participant `branch` and `agent` in `TrackParticipantsPanel.tsx` — the daemon's `/workspaces/:id/status` response includes both per participant.
+- [x] Ronish: add a vault search UI (search box + ranked results list) calling the new `GET /workspaces/:id/vault/search` route.
+- [x] Ronish: add a single-file vault viewer calling `GET /workspaces/:id/vault/read`.
+- [x] Ronish: surface each participant's worktree path (or an "Enter" affordance) in the dashboard, mirroring `teambridge enter <session_name>`.
 
 CLI + dashboard dogfood (no seed):
 
@@ -148,7 +148,7 @@ teambridge vault context
 
 Pass when:
 
-- [ ] Three local participants have separate branches from the same `base_commit`. (Proven for two participants in `tests/integration/vault-flow.test.mjs`; not yet run with three.)
+- [x] Three local participants have separate branches from the same `base_commit`. (Automated in `tests/integration/vault-flow.test.mjs` with Kushagra, Ronish, and Nihal.)
 - [x] A `publish` event with `targetFile` updates the correct flat vault file.
 - [x] Filtering can work by `targetFile` for Phase 1.
 - [x] `vault context` returns a concatenated flat-vault context with `includedPaths`, `lastSeq`, and `truncated`.
@@ -160,7 +160,7 @@ Partial progress:
 - [x] Single-participant CLI bootstrap + track start against live daemon (covered by `tests/integration/cli-flow.test.mjs`).
 - [x] Dashboard reads vault context and annotations for seeded or CLI-created tracks.
 - [x] Daemon implements publish materialization + vault rebuild APIs.
-- [x] CLI publish/vault read/vault context/vault search all implemented and covered by `tests/integration/vault-flow.test.mjs` (two participants, `start` + `track join`, publish → read/context/search, `ws who`/`ws branches`).
+- [x] CLI publish/vault read/vault context/vault search all implemented and covered by `tests/integration/vault-flow.test.mjs` (three participants, `start` + `track join`, publish → read/context/search, `ws who`/`ws branches`).
 
 ## Phase 2: Supabase Relay and Cross-Device Sync
 
@@ -263,7 +263,7 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - [ ] Show recent teammate deltas and latest vault highlights.
 - [ ] Step 5, Nihal while integrations land:
   - [x] Add end-to-end tests for CLI init → project → track → status (`tests/integration/`).
-  - [ ] Add end-to-end tests for two local participants.
+  - [x] Add end-to-end tests for two local participants. (Now covers three local participants in `tests/integration/vault-flow.test.mjs`.)
   - [ ] Add end-to-end tests for offline/reconnect sync.
   - [ ] Add end-to-end tests for new joiner bootstrap.
 - [ ] Step 6, Kushagra + everyone:

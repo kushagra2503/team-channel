@@ -162,6 +162,24 @@ export async function getWorkspaceStatus(
   return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/status`, options));
 }
 
+export async function registerWorktree(
+  options: ClientOptions,
+  workspaceId: string,
+  body: {
+    userId: string;
+    path: string;
+    branch: string;
+    baseCommit: string;
+    currentCommit?: string;
+    dirty?: boolean;
+  }
+): Promise<ApiResult<{ worktree: StartWorkspaceResponse['worktree'] }>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/worktrees/register`, options), {
+    method: 'POST',
+    body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
+}
+
 export async function setDefaultProject(
   options: ClientOptions,
   profile: LocalUserProfile,

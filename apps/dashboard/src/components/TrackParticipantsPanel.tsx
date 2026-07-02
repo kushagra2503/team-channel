@@ -1,8 +1,9 @@
 import { motion } from 'motion/react';
-import type { Participant, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Participant, WorktreeInfo, WorkspaceStatusResponse } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
+import { openRepoPath, type TeambridgeClientConfig } from '@/api/teambridgeClient';
 import { prettyParticipantName, displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 
@@ -38,20 +39,31 @@ type MemberRowData = {
   status: 'active' | 'idle' | 'offline';
   isYou?: boolean;
   avatarRev?: string;
+  branch?: string;
+  agent?: string;
+  worktreePath?: string;
 };
 
 function MemberRow({
   row,
   avatarUrl,
   index,
-  columnIndex
+  columnIndex,
+  config
 }: {
   row: MemberRowData;
   avatarUrl?: string;
   index: number;
   columnIndex: number;
+  config: TeambridgeClientConfig;
 }) {
   const showDot = row.status !== 'offline';
+  const meta = [row.agent, row.branch].filter(Boolean).join(' · ');
+
+  const handleOpenWorktree = () => {
+    if (!row.worktreePath) return;
+    void openRepoPath(config, row.worktreePath);
+  };
 
   return (
     <motion.div
@@ -74,19 +86,32 @@ function MemberRow({
           {row.isYou ? <span className="text-muted-foreground"> (You)</span> : null}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{STATUS_LABEL[row.status]}</span>
+        {meta ? <span className="block truncate text-[11px] text-muted-foreground/80">{meta}</span> : null}
       </div>
+      {row.worktreePath ? (
+        <button
+          type="button"
+          onClick={handleOpenWorktree}
+          className="shrink-0 rounded-md border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title={row.worktreePath}
+        >
+          Enter
+        </button>
+      ) : null}
     </motion.div>
   );
 }
 
 function buildMemberRows(
   participants: Participant[],
+  worktrees: WorktreeInfo[] = [],
   localUser?: PinnedLocalUser | null,
   localAvatarVersion?: string
 ): {
   online: MemberRowData[];
   offline: MemberRowData[];
 } {
+  const worktreeByUserId = new Map(worktrees.map((worktree) => [worktree.userId, worktree]));
   const roster = localUser
     ? participants.filter((p) => !displayNamesMatch(p.displayName, localUser.displayName))
     : participants;
@@ -95,12 +120,16 @@ function buildMemberRows(
   const offline: MemberRowData[] = [];
 
   if (localUser) {
+    const matchingParticipant = participants.find((p) => displayNamesMatch(p.displayName, localUser.displayName));
     const youRow: MemberRowData = {
-      key: '__local_user__',
+      key: matchingParticipant?.id ?? '__local_user__',
       displayName: localUser.displayName,
       status: localUser.status,
       isYou: true,
-      avatarRev: localAvatarVersion
+      avatarRev: localAvatarVersion,
+      branch: matchingParticipant?.branch,
+      agent: matchingParticipant?.agent,
+      worktreePath: matchingParticipant ? worktreeByUserId.get(matchingParticipant.id)?.path : undefined
     };
     if (localUser.status === 'offline') {
       offline.push(youRow);
@@ -113,7 +142,10 @@ function buildMemberRows(
     const row: MemberRowData = {
       key: participant.id,
       displayName: participant.displayName,
-      status: participant.status
+      status: participant.status,
+      branch: participant.branch,
+      agent: participant.agent,
+      worktreePath: worktreeByUserId.get(participant.id)?.path
     };
     if (participant.status === 'offline') {
       offline.push(row);
@@ -151,7 +183,7 @@ export function TrackParticipantsPanel({
     );
   }
 
-  const { online, offline } = buildMemberRows(status.participants, localUser, localAvatarVersion);
+  const { online, offline } = buildMemberRows(status.participants, status.worktrees, localUser, localAvatarVersion);
   const trackId = status.workspace.id;
   const config = { daemonBaseUrl, repoRoot };
   const urlFor = (row: MemberRowData) =>
@@ -174,6 +206,7 @@ export function TrackParticipantsPanel({
                 avatarUrl={urlFor(row)}
                 index={i}
                 columnIndex={columnIndex}
+                config={config}
               />
             ))}
           </div>
@@ -198,6 +231,7 @@ export function TrackParticipantsPanel({
                 avatarUrl={urlFor(row)}
                 index={offlineStartIndex + i}
                 columnIndex={columnIndex}
+                config={config}
               />
             ))}
           </div>
