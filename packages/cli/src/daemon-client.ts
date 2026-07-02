@@ -6,6 +6,7 @@ import type {
   ProjectListResponse,
   StartWorkspaceResponse,
   TrackListResponse,
+  WorkspaceEvent,
   WorkspaceStatusResponse
 } from '@teambridge/core';
 import { apiFail, buildDaemonUrl } from '@teambridge/core';
@@ -110,6 +111,21 @@ export async function joinWorkspace(
   return request(buildDaemonUrl('/workspaces/join', options), {
     method: 'POST',
     body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
+}
+
+export async function publishEvent(
+  options: ClientOptions,
+  workspaceId: string,
+  body: { targetFile: string; text: string }
+): Promise<ApiResult<{ event: WorkspaceEvent }>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/events`, options), {
+    method: 'POST',
+    body: JSON.stringify({
+      targetFile: body.targetFile,
+      payload: { text: body.text },
+      repoRoot: options.repoRoot
+    })
   });
 }
 
