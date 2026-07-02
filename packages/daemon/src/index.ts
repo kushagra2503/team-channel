@@ -38,6 +38,8 @@ import type {
   VaultAnnotateResponseBody,
   VaultContextResponse,
   VaultReadResponse,
+  VaultSearchResponse,
+  VaultSearchResult,
   Workspace,
   WorkspaceEvent,
   WorkspaceListResponse,
@@ -61,6 +63,7 @@ import {
   createVaultContext,
   initializePhaseOneVault,
   materializePublishEvent,
+  PHASE_ONE_VAULT_FILES,
   readEventsJsonl,
   readVaultFile,
   rebuildPhaseOneVault
@@ -558,7 +561,69 @@ function initializeStateDb(repoRoot: string): string {
     );
   `);
 
+  // Separate statement (and try/catch): if this sqlite3 build lacks FTS5, every
+  // other Phase 1 table above must still be created. `vault search` degrades to
+  // a clear error (see FTS5_UNAVAILABLE_MESSAGE) rather than the daemon crashing.
+  try {
+    runSql(dbPath, `
+      create virtual table if not exists vault_search_index using fts5(
+        workspace_id unindexed,
+        path unindexed,
+        line unindexed,
+        seq unindexed,
+        text
+      );
+    `);
+  } catch (error) {
+    console.error(
+      `[teambridge] vault search index unavailable — this sqlite3 build lacks FTS5:\n  ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+
   return dbPath;
+}
+
+const FTS5_UNAVAILABLE_MESSAGE =
+  'Vault search is unavailable: the local sqlite3 build does not support FTS5. Install a sqlite3 build with FTS5 enabled to use `vault search`.';
+
+function hasVaultSearchIndex(dbPath: string): boolean {
+  const rows = querySql<{ name: string }>(
+    dbPath,
+    "select name from sqlite_master where type = 'table' and name = 'vault_search_index'"
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Delete-and-reinsert every non-blank line of ONE vault file. This is the same
+ * shape of operation whether triggered by a single publish (one file) or a
+ * full `/vault/rebuild` (every Phase 1 file) — so index rebuild inherits
+ * exactly the same consistency guarantee as the vault files themselves.
+ */
+function reindexVaultFile(dbPath: string, workspaceId: string, path: string, content: string, seq: number): void {
+  if (!hasVaultSearchIndex(dbPath)) {
+    return;
+  }
+
+  runSql(
+    dbPath,
+    `delete from vault_search_index where workspace_id = ${sqlValue(workspaceId)} and path = ${sqlValue(path)};`
+  );
+
+  const lines = content.split('\n');
+  const inserts = lines
+    .map((text, index) => ({ text: text.trim(), line: index + 1 }))
+    .filter((entry) => entry.text.length > 0)
+    .map(
+      (entry) =>
+        `insert into vault_search_index (workspace_id, path, line, seq, text) values (${sqlValue(workspaceId)}, ${sqlValue(path)}, ${entry.line}, ${seq}, ${sqlValue(entry.text)});`
+    );
+
+  if (inserts.length > 0) {
+    runSql(dbPath, inserts.join('\n'));
+  }
 }
 
 function rowToWorkspace(row: Record<string, unknown>): Workspace {
@@ -1276,6 +1341,9 @@ async function appendPublishEvent(
   await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
   await materializePublishEvent(vaultDir, event);
 
+  const updatedContent = await readFile(join(vaultDir, body.targetFile), 'utf8').catch(() => '');
+  reindexVaultFile(dbPath, workspace.id, body.targetFile, updatedContent, seq);
+
   return event;
 }
 
@@ -1578,6 +1646,43 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  const vaultSearchMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/search$/);
+  if (method === 'GET' && vaultSearchMatch) {
+    const workspaceIdentifier = decodeURIComponent(vaultSearchMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const query = url.searchParams.get('q');
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    if (!query?.trim()) {
+      sendJson(response, 400, fail('INVALID_REQUEST', 'q query parameter is required'));
+      return;
+    }
+
+    const dbPath = initializeStateDb(repoRoot);
+    if (!hasVaultSearchIndex(dbPath)) {
+      sendJson(response, 500, fail('INTERNAL_ERROR', FTS5_UNAVAILABLE_MESSAGE));
+      return;
+    }
+
+    // Wrap the whole query as one FTS5 phrase (escaping embedded quotes) so
+    // arbitrary user input — including FTS5 operators like `*`, `-`, `AND` —
+    // is always treated as literal search text, never as query syntax.
+    const ftsPhrase = `"${query.trim().replace(/"/g, '""')}"`;
+    const rows = querySql<{ path: string; line: number; text: string }>(
+      dbPath,
+      `select path, line, text from vault_search_index
+       where workspace_id = ${sqlValue(workspace.id)} and vault_search_index match ${sqlValue(ftsPhrase)}
+       order by rank
+       limit 50;`
+    );
+    const results: VaultSearchResult[] = rows.map((row) => ({ path: row.path, line: row.line, text: row.text }));
+    sendJson<VaultSearchResponse>(response, 200, ok({ results }));
+    return;
+  }
+
   const vaultAnnotateMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/vault\/annotate$/);
   if (method === 'POST' && vaultAnnotateMatch) {
     const workspaceIdentifier = decodeURIComponent(vaultAnnotateMatch[1]);
@@ -1624,6 +1729,13 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
     const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
     const result = await rebuildPhaseOneVault(vaultDir, eventsPath);
+
+    const dbPath = initializeStateDb(repoRoot);
+    for (const file of PHASE_ONE_VAULT_FILES) {
+      const content = await readFile(join(vaultDir, file), 'utf8').catch(() => '');
+      reindexVaultFile(dbPath, workspace.id, file, content, result.lastSeq);
+    }
+
     sendJson(response, 200, ok({ rebuilt: true, lastSeq: result.lastSeq }));
     return;
   }
