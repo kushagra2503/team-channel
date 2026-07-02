@@ -79,7 +79,7 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`).
   - [x] Stub dashboard API client against daemon response contracts.
   - [x] Show local workspace list (project picker + track sidebar).
-  - [x] Show local participants/branches (project members sidebar).
+  - [x] Show local participants (project members sidebar) — display name/status only; branch/agent are fetched but not rendered (see Dashboard milestone follow-ups below).
   - [x] Show vault file highlights (with color/assign annotations).
   - [x] CLI scaffold aligned with dashboard (`teambridge init`, `project create`, `track start` → same daemon data).
   - [x] Sidebar repo context panel (`GET /repo/context`, `POST /repo/open-path` — remote, branch, local path, last push + commit link).
@@ -104,7 +104,12 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
 - [x] Topbar cleanup (removed teammate count + note # chips)
 
-Still pending: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, packaged installer / auto-start daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs`.
+Still pending: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, packaged installer / auto-start daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — but the dashboard was not updated alongside them, so it has no UI for several of these yet:
+
+- [ ] Ronish: render participant `branch` and `agent` in `TrackParticipantsPanel.tsx` — the daemon's `/workspaces/:id/status` response already includes both per participant; the dashboard fetches but silently drops them today.
+- [ ] Ronish: add a vault search UI (search box + ranked results list) calling the new `GET /workspaces/:id/vault/search` route — this SQLite FTS5-backed endpoint currently has zero dashboard consumer; `teambridge vault search` is CLI-only.
+- [ ] Ronish: add a single-file vault viewer calling `GET /workspaces/:id/vault/read` — the dashboard only ever renders the concatenated `vault/context` blob (`VaultHighlights.tsx`), never an individual file; `teambridge vault read <path>` is CLI-only.
+- [ ] Ronish: surface each participant's worktree path (or an "Enter" affordance) in the dashboard, mirroring `teambridge enter <session_name>` — currently only reachable from the CLI, no worktree-path concept exists in the UI.
 
 CLI + dashboard dogfood (no seed):
 
