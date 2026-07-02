@@ -13,14 +13,14 @@ import {
 } from './git';
 import { branchForParticipant, worktreePathFor } from './naming';
 
-export type JoinerWorktreeParams = {
+export type ParticipantWorktreeParams = {
   repoRoot: string;
   sessionName: string; // raw, already validated
   displayName: string;
   baseCommit: string;
 };
 
-export type JoinerWorktreeResult = {
+export type ParticipantWorktreeResult = {
   path: string;
   branch: string;
   /** True only when this invocation created the git worktree (drives scoped rollback). */
@@ -52,10 +52,10 @@ function ensureTeambridgeIgnored(git: GitRunner, repoRoot: string): void {
  * immutable base commit on branch `teambridge/<session>/<safeName>`. Read-only
  * preflight first; never clobbers an existing path it doesn't recognize.
  */
-export function prepareJoinerWorktree(
-  params: JoinerWorktreeParams,
+export function prepareParticipantWorktree(
+  params: ParticipantWorktreeParams,
   git: GitRunner = new ExecGitRunner()
-): JoinerWorktreeResult {
+): ParticipantWorktreeResult {
   const { repoRoot, sessionName, displayName, baseCommit } = params;
   const branch = branchForParticipant(sessionName, displayName);
   const path = worktreePathFor(repoRoot, sessionName, displayName);
@@ -97,7 +97,7 @@ export function prepareJoinerWorktree(
 }
 
 /** Undo a worktree + branch that THIS invocation created (never on duplicate-name). */
-export function rollbackJoinerWorktree(
+export function rollbackParticipantWorktree(
   params: { repoRoot: string; path: string; branch: string },
   git: GitRunner = new ExecGitRunner()
 ): void {
