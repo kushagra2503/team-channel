@@ -54,6 +54,38 @@ test('resolveRepoRoot resolves to the main repo root from a subdirectory nested 
   }
 });
 
+test('resolveRepoRoot returns the submodule\'s own toplevel, not its internal .git/modules path', () => {
+  const mainRepo = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'tb-repo-main-')));
+  const subRepo = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'tb-repo-sub-')));
+  try {
+    git(['init', '-b', 'main'], subRepo);
+    git(['config', 'user.email', 'test@local'], subRepo);
+    git(['config', 'user.name', 'Test'], subRepo);
+    execFileSync('sh', ['-c', 'echo sub > f.txt'], { cwd: subRepo });
+    git(['add', 'f.txt'], subRepo);
+    git(['commit', '-m', 'sub init'], subRepo);
+
+    git(['init', '-b', 'main'], mainRepo);
+    git(['config', 'user.email', 'test@local'], mainRepo);
+    git(['config', 'user.name', 'Test'], mainRepo);
+    execFileSync('sh', ['-c', 'echo main > m.txt'], { cwd: mainRepo });
+    git(['add', 'm.txt'], mainRepo);
+    git(['commit', '-m', 'main init'], mainRepo);
+    execFileSync(
+      'git',
+      ['-c', 'protocol.file.allow=always', 'submodule', 'add', subRepo, 'vendor/lib'],
+      { cwd: mainRepo, stdio: 'ignore' }
+    );
+    git(['commit', '-m', 'add submodule'], mainRepo);
+
+    const submodulePath = path.join(mainRepo, 'vendor', 'lib');
+    assert.equal(resolveRepoRoot(submodulePath), submodulePath);
+  } finally {
+    rmSync(mainRepo, { recursive: true, force: true });
+    rmSync(subRepo, { recursive: true, force: true });
+  }
+});
+
 test('resolveRepoRoot throws a clear error outside any git repository', () => {
   const dir = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'tb-notrepo-')));
   try {
