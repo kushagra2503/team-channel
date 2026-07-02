@@ -1,6 +1,6 @@
 ---
 title: "feat: Complete Kushagra's remaining Phase 1 CLI surface (start/enter/publish/vault/ws)"
-status: active
+status: completed
 date: 2026-07-02
 type: feat
 origin: null
