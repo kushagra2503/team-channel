@@ -146,6 +146,13 @@ export function getProjectTracks(
   return getJson<TrackListResponse>(`/projects/${encodeURIComponent(projectId)}/tracks`, config, undefined, signal);
 }
 
+export function listRelaySessions(
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<{ sessions: TrackListResponse['tracks'] }> {
+  return getJson<{ sessions: TrackListResponse['tracks'] }>('/relay/sessions', config, undefined, signal);
+}
+
 export function getRepoContext(
   config: TeambridgeClientConfig,
   workspaceId?: string,

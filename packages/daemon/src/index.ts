@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
+import { hostname } from 'node:os';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -80,6 +81,7 @@ import {
 } from './pfp';
 
 const DEFAULT_PORT = 9473;
+const RELAY_SYNC_INTERVAL_MS = Number(process.env.TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS ?? 5000);
 
 const StartRequestBodySchema = StartWorkspaceRequestSchema.extend({
   repoRoot: z.string().min(1).optional()
@@ -156,6 +158,16 @@ const RegisterWorktreeBodySchema = z.object({
   baseCommit: z.string().min(1),
   currentCommit: z.string().min(1).optional(),
   dirty: z.boolean().optional()
+});
+
+const AuthLoginBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  email: z.string().email(),
+  password: z.string().min(1)
+});
+
+const RelayRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional()
 });
 
 const DEFAULT_CONFIG: TeambridgeConfig = {
@@ -574,6 +586,38 @@ function initializeStateDb(repoRoot: string): string {
     create table if not exists known_repos (
       repo_root text primary key,
       last_seen_at text not null
+    );
+
+    create table if not exists remote_identity (
+      relay_url text primary key,
+      user_id text not null,
+      email text,
+      access_token text not null,
+      refresh_token text,
+      expires_at text,
+      updated_at text not null
+    );
+
+    create table if not exists remote_sync_state (
+      workspace_id text primary key references tracks(id),
+      last_remote_seq integer not null default 0,
+      last_synced_at text,
+      relay_status text not null default 'offline',
+      last_error text
+    );
+
+    create table if not exists pending_remote_events (
+      local_id text primary key,
+      workspace_id text not null references tracks(id),
+      actor_id text not null,
+      device_id text not null,
+      type text not null,
+      target_file text,
+      payload_json text not null,
+      dedupe_key text not null unique,
+      retry_count integer not null default 0,
+      created_at text not null,
+      last_error text
     );
   `);
 
@@ -1103,6 +1147,8 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
     await ensureAvatarForDisplayName(repoRoot, displayName);
   }
 
+  await maybeMirrorWorkspaceToRelay(repoRoot, workspace, participant, profile);
+
   return {
     manifest,
     worktree: {
@@ -1160,6 +1206,196 @@ function listKnownRepos(registryRoot: string): Array<{ repoRoot: string; lastSee
       }
     })
     .filter((entry): entry is { repoRoot: string; lastSeenAt: string; projects: Project[] } => Boolean(entry));
+}
+
+type RelayConfig = {
+  supabaseUrl: string;
+  restUrl: string;
+  anonKey: string;
+  serviceRoleKey: string;
+};
+
+type RemoteIdentity = {
+  relayUrl: string;
+  userId: string;
+  email?: string;
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  updatedAt: string;
+};
+
+type RemoteWorkspaceRow = {
+  id: string;
+  project_id: string | null;
+  session_name: string;
+  repo_remote: string | null;
+  repo_root_hash: string | null;
+  base_ref: string;
+  base_commit: string;
+  scope_json: string[] | string;
+  created_by_participant_id: string | null;
+  created_by_user_id: string;
+  status: 'active' | 'archived';
+  relay_mode: 'supabase';
+  created_at: string;
+};
+
+type RemoteParticipantRow = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  display_name: string;
+  branch: string;
+  agent?: Participant['agent'] | null;
+  status: Participant['status'];
+  last_seen_at: string;
+  created_at?: string;
+};
+
+type RemoteEventRow = {
+  id: string;
+  workspace_id: string;
+  seq: number;
+  type: WorkspaceEvent['type'];
+  actor_id: string;
+  device_id: string;
+  target_file?: string | null;
+  payload: unknown;
+  dedupe_key?: string | null;
+  created_at: string;
+};
+
+function relayConfig(): RelayConfig | null {
+  const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
+  const restUrl = (process.env.SUPABASE_REST_URL ?? (supabaseUrl ? `${supabaseUrl}/rest/v1` : '')).replace(/\/$/, '');
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !restUrl || !anonKey || !serviceRoleKey) {
+    return null;
+  }
+
+  return { supabaseUrl, restUrl, anonKey, serviceRoleKey };
+}
+
+function requireRelayConfig(): RelayConfig {
+  const config = relayConfig();
+  if (!config) {
+    throw new Error('Supabase relay env is missing. Set SUPABASE_URL, SUPABASE_REST_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY.');
+  }
+  return config;
+}
+
+async function supabaseRest<T>(
+  config: RelayConfig,
+  path: string,
+  init: RequestInit = {},
+  query?: Record<string, string>
+): Promise<T> {
+  const url = new URL(`${config.restUrl}/${path.replace(/^\//, '')}`);
+  for (const [key, value] of Object.entries(query ?? {})) {
+    url.searchParams.set(key, value);
+  }
+
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      apikey: config.serviceRoleKey,
+      authorization: `Bearer ${config.serviceRoleKey}`,
+      'content-type': 'application/json',
+      prefer: 'return=representation',
+      ...(init.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Supabase REST ${path} failed (${response.status}): ${text}`);
+  }
+  return (text ? JSON.parse(text) : null) as T;
+}
+
+async function supabaseRpc<T>(config: RelayConfig, name: string, body: unknown): Promise<T> {
+  return supabaseRest<T>(config, `/rpc/${name}`, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+async function supabaseAuthPassword(
+  config: RelayConfig,
+  email: string,
+  password: string
+): Promise<{ access_token: string; refresh_token?: string; expires_at?: number; user: { id: string; email?: string } }> {
+  const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: {
+      apikey: config.anonKey,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ email, password })
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Supabase login failed (${response.status}): ${text}`);
+  }
+  return JSON.parse(text);
+}
+
+function saveRemoteIdentity(repoRoot: string, identity: RemoteIdentity): void {
+  const dbPath = initializeStateDb(repoRoot);
+  runSql(dbPath, `
+    insert into remote_identity (
+      relay_url, user_id, email, access_token, refresh_token, expires_at, updated_at
+    ) values (
+      ${sqlValue(identity.relayUrl)},
+      ${sqlValue(identity.userId)},
+      ${sqlValue(identity.email ?? null)},
+      ${sqlValue(identity.accessToken)},
+      ${sqlValue(identity.refreshToken ?? null)},
+      ${sqlValue(identity.expiresAt ?? null)},
+      ${sqlValue(identity.updatedAt)}
+    )
+    on conflict(relay_url) do update set
+      user_id = excluded.user_id,
+      email = excluded.email,
+      access_token = excluded.access_token,
+      refresh_token = excluded.refresh_token,
+      expires_at = excluded.expires_at,
+      updated_at = excluded.updated_at;
+  `);
+}
+
+function getRemoteIdentity(repoRoot: string): RemoteIdentity | null {
+  const config = relayConfig();
+  if (!config) return null;
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from remote_identity where relay_url = ${sqlValue(config.supabaseUrl)} limit 1`
+  );
+  if (!row) return null;
+  return {
+    relayUrl: String(row.relay_url),
+    userId: String(row.user_id),
+    email: row.email ? String(row.email) : undefined,
+    accessToken: String(row.access_token),
+    refreshToken: row.refresh_token ? String(row.refresh_token) : undefined,
+    expiresAt: row.expires_at ? String(row.expires_at) : undefined,
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function requireRemoteIdentity(repoRoot: string): RemoteIdentity {
+  const identity = getRemoteIdentity(repoRoot);
+  if (!identity) {
+    throw new Error('Not logged in to Teambridge relay. Run `teambridge login` first.');
+  }
+  return identity;
+}
+
+function relayDeviceId(repoRoot: string, userId: string): string {
+  return `dev_${getRepoRootHash(`${repoRoot}:${userId}:${hostname()}`).slice(0, 24)}`;
 }
 
 function getProjectById(repoRoot: string, projectId: string): Project | undefined {
@@ -1247,6 +1483,392 @@ function registerWorktree(
   };
 }
 
+function remoteEventToWorkspaceEvent(row: RemoteEventRow): WorkspaceEvent {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    seq: Number(row.seq),
+    type: row.type,
+    actorId: row.actor_id,
+    deviceId: row.device_id,
+    targetFile: row.target_file ?? undefined,
+    payload: row.payload,
+    dedupeKey: row.dedupe_key ?? undefined,
+    createdAt: row.created_at
+  };
+}
+
+function remoteWorkspaceToWorkspace(row: RemoteWorkspaceRow): Workspace {
+  return {
+    id: row.id,
+    sessionName: row.session_name,
+    repoRemote: row.repo_remote,
+    repoRootHash: row.repo_root_hash ?? '',
+    baseRef: row.base_ref,
+    baseCommit: row.base_commit,
+    scope: Array.isArray(row.scope_json) ? row.scope_json.map(String) : JSON.parse(String(row.scope_json ?? '[]')),
+    createdBy: row.created_by_participant_id ?? '',
+    createdAt: row.created_at,
+    status: row.status === 'archived' ? 'archived' : 'active',
+    relayMode: 'local',
+    projectId: row.project_id
+  };
+}
+
+async function upsertSupabaseRows<T>(config: RelayConfig, table: string, rows: unknown[], onConflict: string): Promise<T[]> {
+  return supabaseRest<T[]>(config, table, {
+    method: 'POST',
+    headers: {
+      prefer: 'resolution=merge-duplicates,return=representation'
+    },
+    body: JSON.stringify(rows)
+  }, { on_conflict: onConflict });
+}
+
+async function ensureRelayIdentity(repoRoot: string, profile?: LocalUserProfile | null): Promise<{ config: RelayConfig; identity: RemoteIdentity; deviceId: string }> {
+  const config = requireRelayConfig();
+  const identity = requireRemoteIdentity(repoRoot);
+  const deviceId = relayDeviceId(repoRoot, identity.userId);
+  const displayName = profile?.displayName ?? identity.email ?? identity.userId;
+
+  await upsertSupabaseRows(config, 'tc_profiles', [{
+    user_id: identity.userId,
+    display_name: displayName,
+    updated_at: new Date().toISOString()
+  }], 'user_id');
+
+  await upsertSupabaseRows(config, 'tc_devices', [{
+    id: deviceId,
+    user_id: identity.userId,
+    hostname: hostname(),
+    daemon_version: '0.0.0',
+    last_seen_at: new Date().toISOString()
+  }], 'id');
+
+  return { config, identity, deviceId };
+}
+
+async function mirrorProjectToRelay(repoRoot: string, projectId: string | null, profile: LocalUserProfile | null | undefined): Promise<void> {
+  if (!projectId) return;
+  const project = getProjectById(repoRoot, projectId);
+  if (!project) return;
+  const { config, identity } = await ensureRelayIdentity(repoRoot, profile);
+  await upsertSupabaseRows(config, 'tc_projects', [{
+    id: project.id,
+    name: project.name,
+    description: project.description,
+    status: project.status,
+    created_by: identity.userId,
+    created_at: project.createdAt
+  }], 'id');
+
+  if (profile) {
+    await upsertSupabaseRows(config, 'tc_project_members', [{
+      project_id: project.id,
+      user_id: identity.userId,
+      display_name: profile.displayName,
+      role: 'owner',
+      status: 'active',
+      last_seen_at: new Date().toISOString()
+    }], 'project_id,user_id');
+  }
+}
+
+async function mirrorWorkspaceToRelay(repoRoot: string, workspace: Workspace, participant: Participant, profile: LocalUserProfile | null | undefined): Promise<void> {
+  const { config, identity } = await ensureRelayIdentity(repoRoot, profile);
+  await mirrorProjectToRelay(repoRoot, workspace.projectId, profile);
+
+  await upsertSupabaseRows(config, 'tc_workspaces', [{
+    id: workspace.id,
+    project_id: workspace.projectId,
+    session_name: workspace.sessionName,
+    repo_remote: workspace.repoRemote,
+    repo_root_hash: workspace.repoRootHash,
+    base_ref: workspace.baseRef,
+    base_commit: workspace.baseCommit,
+    scope_json: workspace.scope,
+    created_by_participant_id: null,
+    created_by_user_id: identity.userId,
+    status: workspace.status,
+    relay_mode: 'supabase',
+    created_at: workspace.createdAt
+  }], 'id');
+
+  await upsertSupabaseRows(config, 'tc_participants', [{
+    id: participant.id,
+    workspace_id: workspace.id,
+    user_id: identity.userId,
+    display_name: participant.displayName,
+    branch: participant.branch,
+    agent: participant.agent ?? 'unknown',
+    status: participant.status,
+    last_seen_at: participant.lastSeenAt
+  }], 'id');
+
+  await supabaseRest(config, 'tc_workspaces', {
+    method: 'PATCH',
+    body: JSON.stringify({ created_by_participant_id: participant.id })
+  }, { id: `eq.${workspace.id}` });
+}
+
+async function maybeMirrorWorkspaceToRelay(repoRoot: string, workspace: Workspace, participant: Participant, profile: LocalUserProfile | null | undefined): Promise<void> {
+  if (!relayConfig() || !getRemoteIdentity(repoRoot)) return;
+  try {
+    await mirrorWorkspaceToRelay(repoRoot, workspace, participant, profile);
+  } catch (error) {
+    console.error(`[teambridge] relay mirror failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function setRemoteSyncState(repoRoot: string, workspaceId: string, patch: { lastSeq?: number; status?: string; error?: string | null }): void {
+  const dbPath = initializeStateDb(repoRoot);
+  const existing = querySql<{ last_remote_seq?: number }>(
+    dbPath,
+    `select last_remote_seq from remote_sync_state where workspace_id = ${sqlValue(workspaceId)} limit 1`
+  )[0];
+  const lastSeq = patch.lastSeq ?? Number(existing?.last_remote_seq ?? 0);
+  runSql(dbPath, `
+    insert into remote_sync_state (workspace_id, last_remote_seq, last_synced_at, relay_status, last_error)
+    values (
+      ${sqlValue(workspaceId)},
+      ${lastSeq},
+      ${sqlValue(new Date().toISOString())},
+      ${sqlValue(patch.status ?? 'online')},
+      ${sqlValue(patch.error ?? null)}
+    )
+    on conflict(workspace_id) do update set
+      last_remote_seq = excluded.last_remote_seq,
+      last_synced_at = excluded.last_synced_at,
+      relay_status = excluded.relay_status,
+      last_error = excluded.last_error;
+  `);
+}
+
+function queuePendingRemoteEvent(repoRoot: string, event: WorkspaceEvent): void {
+  const dbPath = initializeStateDb(repoRoot);
+  runSql(dbPath, `
+    insert or ignore into pending_remote_events (
+      local_id, workspace_id, actor_id, device_id, type, target_file,
+      payload_json, dedupe_key, created_at
+    ) values (
+      ${sqlValue(event.id)},
+      ${sqlValue(event.workspaceId)},
+      ${sqlValue(event.actorId)},
+      ${sqlValue(event.deviceId)},
+      ${sqlValue(event.type)},
+      ${sqlValue(event.targetFile ?? null)},
+      ${sqlValue(JSON.stringify(event.payload))},
+      ${sqlValue(event.dedupeKey ?? event.id)},
+      ${sqlValue(event.createdAt)}
+    );
+  `);
+}
+
+async function rebuildWorkspaceFromEvents(repoRoot: string, workspace: Workspace): Promise<number> {
+  const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
+  const result = await rebuildPhaseOneVault(vaultDir, eventsPath);
+  const dbPath = initializeStateDb(repoRoot);
+  runSql(dbPath, `
+    insert into local_sequences (workspace_id, last_seq)
+    values (${sqlValue(workspace.id)}, ${result.lastSeq})
+    on conflict(workspace_id) do update set last_seq = excluded.last_seq;
+  `);
+  for (const file of PHASE_ONE_VAULT_FILES) {
+    const content = await readFile(join(vaultDir, file), 'utf8').catch(() => '');
+    reindexVaultFile(dbPath, workspace.id, file, content, result.lastSeq);
+  }
+  return result.lastSeq;
+}
+
+async function applyCanonicalRemoteEvent(repoRoot: string, workspace: Workspace, event: WorkspaceEvent): Promise<void> {
+  const paths = getWorkspacePaths(repoRoot, workspace);
+  const events = await readEventsJsonl(paths.eventsPath).catch(() => []);
+  const byId = new Map(events.map((entry) => [entry.id, entry]));
+  byId.set(event.id, event);
+  const canonical = [...byId.values()].sort((a, b) => a.seq - b.seq || a.createdAt.localeCompare(b.createdAt));
+  await writeFile(paths.eventsPath, canonical.map((entry) => JSON.stringify(entry)).join('\n') + (canonical.length ? '\n' : ''));
+  await rebuildWorkspaceFromEvents(repoRoot, workspace);
+  setRemoteSyncState(repoRoot, workspace.id, { lastSeq: Math.max(...canonical.map((entry) => entry.seq), event.seq), status: 'online' });
+}
+
+async function appendRemoteEvent(repoRoot: string, workspace: Workspace, event: WorkspaceEvent): Promise<WorkspaceEvent> {
+  const config = requireRelayConfig();
+  requireRemoteIdentity(repoRoot);
+  const rows = await supabaseRpc<RemoteEventRow[] | RemoteEventRow>(config, 'tc_append_event', {
+    p_event_id: event.id,
+    p_workspace_id: workspace.id,
+    p_type: event.type,
+    p_actor_id: event.actorId,
+    p_device_id: event.deviceId,
+    p_target_file: event.targetFile ?? null,
+    p_payload: event.payload,
+    p_dedupe_key: event.dedupeKey ?? event.id
+  });
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  return remoteEventToWorkspaceEvent(row);
+}
+
+async function pushPendingRemoteEvents(repoRoot: string): Promise<number> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return 0;
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(dbPath, 'select * from pending_remote_events order by created_at asc');
+  let pushed = 0;
+  for (const row of rows) {
+    const workspace = getWorkspaceByIdentifier(repoRoot, String(row.workspace_id));
+    if (!workspace) continue;
+    try {
+      const event: WorkspaceEvent = {
+        id: String(row.local_id),
+        workspaceId: String(row.workspace_id),
+        seq: getLastSeq(repoRoot, String(row.workspace_id)) + 1,
+        type: String(row.type) as WorkspaceEvent['type'],
+        actorId: String(row.actor_id),
+        deviceId: String(row.device_id),
+        targetFile: row.target_file ? String(row.target_file) : undefined,
+        payload: JSON.parse(String(row.payload_json)),
+        dedupeKey: String(row.dedupe_key),
+        createdAt: String(row.created_at)
+      };
+      const remote = await appendRemoteEvent(repoRoot, workspace, event);
+      await applyCanonicalRemoteEvent(repoRoot, workspace, remote);
+      runSql(dbPath, `delete from pending_remote_events where local_id = ${sqlValue(event.id)};`);
+      pushed += 1;
+    } catch (error) {
+      runSql(dbPath, `
+        update pending_remote_events
+        set retry_count = retry_count + 1,
+            last_error = ${sqlValue(error instanceof Error ? error.message : String(error))}
+        where local_id = ${sqlValue(String(row.local_id))};
+      `);
+      setRemoteSyncState(repoRoot, String(row.workspace_id), { status: 'error', error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return pushed;
+}
+
+async function pullRemoteEvents(repoRoot: string): Promise<number> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return 0;
+  const dbPath = initializeStateDb(repoRoot);
+  let pulled = 0;
+  for (const workspace of listWorkspaces(repoRoot)) {
+    const [state] = querySql<{ last_remote_seq?: number }>(
+      dbPath,
+      `select last_remote_seq from remote_sync_state where workspace_id = ${sqlValue(workspace.id)} limit 1`
+    );
+    const lastSeq = Number(state?.last_remote_seq ?? 0);
+    try {
+      const rows = await supabaseRest<RemoteEventRow[]>(config, 'tc_workspace_events', {}, {
+        workspace_id: `eq.${workspace.id}`,
+        seq: `gt.${lastSeq}`,
+        order: 'seq.asc'
+      });
+      for (const row of rows) {
+        await applyCanonicalRemoteEvent(repoRoot, workspace, remoteEventToWorkspaceEvent(row));
+        pulled += 1;
+      }
+      if (rows.length === 0) {
+        setRemoteSyncState(repoRoot, workspace.id, { lastSeq, status: 'online' });
+      }
+    } catch (error) {
+      setRemoteSyncState(repoRoot, workspace.id, { status: 'error', error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return pulled;
+}
+
+async function syncRelay(repoRoot: string): Promise<{ pushed: number; pulled: number }> {
+  const pushed = await pushPendingRemoteEvents(repoRoot);
+  const pulled = await pullRemoteEvents(repoRoot);
+  return { pushed, pulled };
+}
+
+function startRelayPolling(state: AppState): void {
+  if (!relayConfig()) return;
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const repos = [state.defaultRepoRoot, ...listKnownRepos(state.defaultRepoRoot).map((repo) => repo.repoRoot)];
+      for (const repoRoot of [...new Set(repos)]) {
+        if (getRemoteIdentity(repoRoot)) {
+          await syncRelay(repoRoot);
+        }
+      }
+    } catch (error) {
+      console.error(`[teambridge] relay poll failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      running = false;
+    }
+  };
+  setInterval(() => { void tick(); }, RELAY_SYNC_INTERVAL_MS);
+  void tick();
+}
+
+async function listRelaySessions(repoRoot: string): Promise<Workspace[]> {
+  const config = requireRelayConfig();
+  requireRemoteIdentity(repoRoot);
+  const remote = getRepoRemote(repoRoot);
+  const query: Record<string, string> = {
+    order: 'created_at.desc'
+  };
+  if (remote) {
+    query.repo_remote = `eq.${remote}`;
+  } else {
+    query.repo_root_hash = `eq.${getRepoRootHash(repoRoot)}`;
+  }
+  const rows = await supabaseRest<RemoteWorkspaceRow[]>(config, 'tc_workspaces', {}, query);
+  return rows.map(remoteWorkspaceToWorkspace);
+}
+
+async function importRelayWorkspace(repoRoot: string, sessionName: string): Promise<Workspace | undefined> {
+  if (!relayConfig() || !getRemoteIdentity(repoRoot)) return undefined;
+  const remote = (await listRelaySessions(repoRoot)).find((workspace) => workspace.sessionName === sessionName);
+  if (!remote) return undefined;
+
+  const dbPath = initializeStateDb(repoRoot);
+  const workspace: Workspace = {
+    ...remote,
+    projectId: null,
+    createdBy: remote.createdBy || 'remote',
+    relayMode: 'local'
+  };
+  const workspaceDir = getWorkspaceDir(repoRoot, workspace.sessionName);
+  const vaultDir = join(workspaceDir, 'vault');
+  await mkdir(workspaceDir, { recursive: true });
+  await initializePhaseOneVault(vaultDir);
+  await writeFile(join(workspaceDir, 'events.jsonl'), '', { flag: 'a' });
+
+  runSql(dbPath, `
+    insert or ignore into tracks (
+      id, session_name, repo_remote, repo_root_hash, base_ref, base_commit,
+      scope_json, created_by, created_at, status, relay_mode, project_id
+    ) values (
+      ${sqlValue(workspace.id)},
+      ${sqlValue(workspace.sessionName)},
+      ${sqlValue(workspace.repoRemote)},
+      ${sqlValue(workspace.repoRootHash)},
+      ${sqlValue(workspace.baseRef)},
+      ${sqlValue(workspace.baseCommit)},
+      ${sqlValue(JSON.stringify(workspace.scope))},
+      ${sqlValue(workspace.createdBy)},
+      ${sqlValue(workspace.createdAt)},
+      ${sqlValue(workspace.status)},
+      'local',
+      null
+    );
+
+    insert or ignore into local_sequences (workspace_id, last_seq)
+    values (${sqlValue(workspace.id)}, 0);
+  `);
+
+  await writeWorkspaceManifest(repoRoot, workspace);
+  await pullRemoteEvents(repoRoot);
+  return getWorkspaceByIdentifier(repoRoot, workspace.id) ?? workspace;
+}
+
 function findLegacyAvatarIdsForSlug(repoRoot: string, slug: string): string[] {
   const dbPath = initializeStateDb(repoRoot);
   const rows = querySql<Record<string, unknown>>(dbPath, 'select id, display_name from participants');
@@ -1320,7 +1942,10 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
   const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
   await ensureTeambridgeDirs(repoRoot);
 
-  const workspace = getWorkspaceByIdentifier(repoRoot, body.sessionName.trim());
+  let workspace = getWorkspaceByIdentifier(repoRoot, body.sessionName.trim());
+  if (!workspace) {
+    workspace = await importRelayWorkspace(repoRoot, body.sessionName.trim());
+  }
   if (!workspace) {
     throw new Error(`Workspace not found: ${body.sessionName}`);
   }
@@ -1381,6 +2006,8 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
     await ensureAvatarForDisplayName(repoRoot, displayName);
   }
 
+  await maybeMirrorWorkspaceToRelay(repoRoot, workspace, participant, profile);
+
   return {
     manifest,
     worktree: {
@@ -1416,6 +2043,8 @@ async function appendPublishEvent(
   }
 
   const dbPath = initializeStateDb(repoRoot);
+  const identity = getRemoteIdentity(repoRoot);
+  const deviceId = identity ? relayDeviceId(repoRoot, identity.userId) : undefined;
   runSql(
     dbPath,
     `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
@@ -1428,12 +2057,26 @@ async function appendPublishEvent(
     seq,
     type: 'publish',
     actorId: body.actorId ?? workspace.createdBy,
-    deviceId: body.deviceId ?? 'device_local',
+    deviceId: body.deviceId ?? deviceId ?? 'device_local',
     targetFile: body.targetFile,
     payload,
-    dedupeKey: body.dedupeKey,
+    dedupeKey: body.dedupeKey ?? `${workspace.id}:${deviceId ?? 'device_local'}:${randomUUID()}`,
     createdAt: new Date().toISOString()
   };
+
+  if (relayConfig() && identity) {
+    try {
+      const remoteEvent = await appendRemoteEvent(repoRoot, workspace, event);
+      await applyCanonicalRemoteEvent(repoRoot, workspace, remoteEvent);
+      return remoteEvent as WorkspaceEvent<PublishEventPayload>;
+    } catch (error) {
+      queuePendingRemoteEvent(repoRoot, event);
+      setRemoteSyncState(repoRoot, workspace.id, {
+        status: 'queued',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
 
   const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
   await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
@@ -1456,6 +2099,76 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
 
   if (method === 'GET' && url.pathname === '/health') {
     sendJson(response, 200, ok({ status: 'ok' }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/auth/login') {
+    const body = AuthLoginBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const config = requireRelayConfig();
+    const result = await supabaseAuthPassword(config, body.email, body.password);
+    const identity: RemoteIdentity = {
+      relayUrl: config.supabaseUrl,
+      userId: result.user.id,
+      email: result.user.email ?? body.email,
+      accessToken: result.access_token,
+      refreshToken: result.refresh_token,
+      expiresAt: result.expires_at ? new Date(result.expires_at * 1000).toISOString() : undefined,
+      updatedAt: new Date().toISOString()
+    };
+    saveRemoteIdentity(repoRoot, identity);
+    const profile = await readLocalUserProfile(repoRoot);
+    await ensureRelayIdentity(repoRoot, profile);
+    sendJson(response, 200, ok({ userId: identity.userId, email: identity.email, relayUrl: identity.relayUrl }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/auth/status') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const identity = getRemoteIdentity(repoRoot);
+    sendJson(response, 200, ok({
+      loggedIn: Boolean(identity),
+      userId: identity?.userId,
+      email: identity?.email,
+      relayUrl: identity?.relayUrl
+    }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/auth/logout') {
+    const body = RelayRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const config = relayConfig();
+    if (config) {
+      const dbPath = initializeStateDb(repoRoot);
+      runSql(dbPath, `delete from remote_identity where relay_url = ${sqlValue(config.supabaseUrl)};`);
+    }
+    sendJson(response, 200, ok({ loggedOut: true }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/relay/sessions') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const sessions = await listRelaySessions(repoRoot);
+    sendJson(response, 200, ok({ sessions }));
+    return;
+  }
+
+  if (method === 'GET' && url.pathname === '/relay/status') {
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const dbPath = initializeStateDb(repoRoot);
+    const identity = getRemoteIdentity(repoRoot);
+    const pending = querySql<{ count: number }>(dbPath, 'select count(*) as count from pending_remote_events')[0]?.count ?? 0;
+    const sync = querySql<Record<string, unknown>>(dbPath, 'select * from remote_sync_state order by last_synced_at desc');
+    sendJson(response, 200, ok({ configured: Boolean(relayConfig()), loggedIn: Boolean(identity), pending, sync }));
+    return;
+  }
+
+  if (method === 'POST' && url.pathname === '/relay/sync') {
+    const body = RelayRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const result = await syncRelay(repoRoot);
+    sendJson(response, 200, ok(result));
     return;
   }
 
@@ -2004,6 +2717,7 @@ function main(): void {
     console.log(`teambridge daemon listening on http://127.0.0.1:${port}`);
     console.log(`default repo: ${repoRoot}`);
   });
+  startRelayPolling({ defaultRepoRoot: repoRoot });
 }
 
 main();

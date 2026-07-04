@@ -9,6 +9,7 @@ import { runVault } from './commands/vault';
 import { runWs } from './commands/ws';
 import { runStatus } from './commands/status';
 import { runDaemon } from './commands/daemon';
+import { runLogin, runRelayStatus, runSessions, runSync } from './commands/relay';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
 function usage(): void {
@@ -20,6 +21,10 @@ Usage:
   teambridge project list
   teambridge start [NAME] [BASE_REF] [--project PROJECT_ID]
   teambridge join [NAME] [--as DISPLAY_NAME]
+  teambridge login --email EMAIL --password PASSWORD
+  teambridge sessions
+  teambridge list
+  teambridge sync
   teambridge enter <NAME>
   teambridge publish <TARGET_FILE> <TEXT>
   teambridge vault read <PATH>
@@ -77,6 +82,21 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (command === 'login') {
+      await runLogin(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'sessions' || command === 'list') {
+      await runSessions(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'sync') {
+      await runSync(argv.slice(1), options);
+      return;
+    }
+
     if (command === 'enter') {
       await runEnter(argv.slice(1), options);
       return;
@@ -98,7 +118,11 @@ async function main(): Promise<void> {
     }
 
     if (command === 'status') {
-      await runStatus(argv.slice(1), options);
+      if (argv[1] === 'relay') {
+        await runRelayStatus(argv.slice(2), options);
+      } else {
+        await runStatus(argv.slice(1), options);
+      }
       return;
     }
 

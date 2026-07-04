@@ -1,6 +1,6 @@
 import type { ApiOk, LocalUserProfile, StartWorkspaceResponse } from '@teambridge/core';
 import type { ClientOptions } from '../daemon-client';
-import { getUserProfile, joinWorkspace, listProjects, listTracks, startTrack } from '../daemon-client';
+import { getUserProfile, joinWorkspace, listProjects, listRelaySessions, listTracks, startTrack } from '../daemon-client';
 import { ask, parseFlag } from '../prompt';
 import { assertValidSessionName } from '../lib/naming';
 import { prepareParticipantWorktree, rollbackParticipantWorktree } from '../lib/worktree';
@@ -116,9 +116,15 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
   if (!tracks.ok) {
     throw new Error(tracks.error.message);
   }
-  const track = tracks.data.tracks.find((candidate) => candidate.sessionName === sessionName);
+  let track = tracks.data.tracks.find((candidate) => candidate.sessionName === sessionName);
   if (!track) {
-    throw new Error(`Session "${sessionName}" not found. Start it first: \`teambridge start ${sessionName}\`.`);
+    const remote = await listRelaySessions(options);
+    if (remote.ok) {
+      track = remote.data.sessions.find((candidate) => candidate.sessionName === sessionName);
+    }
+  }
+  if (!track) {
+    throw new Error(`Session "${sessionName}" not found. Start it first or run \`teambridge sessions\` after \`teambridge login\`.`);
   }
   if (track.status === 'archived') {
     throw new Error(`Session "${sessionName}" is archived.`);

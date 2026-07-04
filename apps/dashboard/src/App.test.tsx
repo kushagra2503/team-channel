@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   DEFAULT_DAEMON_BASE_URL: 'http://127.0.0.1:9473',
   listProjects: vi.fn(),
   listKnownRepos: vi.fn(),
+  listRelaySessions: vi.fn(),
   getProjectMembers: vi.fn(),
   getProjectTracks: vi.fn(),
   listWorkspaces: vi.fn(),
@@ -45,6 +46,7 @@ describe('ProjectSelectionPage', () => {
     sessionStorage.clear();
     api.getDefaultClientConfig.mockReturnValue({});
     api.listKnownRepos.mockResolvedValue({ repos: [] });
+    api.listRelaySessions.mockResolvedValue({ sessions: [] });
   });
 
   it('shows a list of projects fetched from the API', async () => {

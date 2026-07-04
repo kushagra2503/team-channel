@@ -165,29 +165,58 @@ Partial progress:
 
 Goal: two or more real devices can sync context through Supabase, recover after offline work, and bootstrap late joiners from checkpoint + event replay.
 
+### Phase 2 Status Snapshot (Jul 2026)
+
+Implemented and live-verified:
+
+- [x] Supabase migration exists at `supabase/migrations/001_teambridge_relay.sql`.
+- [x] `tc_` Supabase tables, indexes, RLS helpers/policies, private checkpoint storage bucket, and Realtime publication are applied in Supabase.
+- [x] `tc_append_event` RPC assigns canonical per-workspace `seq` and dedupes by `dedupeKey`.
+- [x] Daemon relay identity/device registration is implemented.
+- [x] Daemon mirrors local projects, sessions, and participants to Supabase after login.
+- [x] Daemon queues failed remote publishes in `pending_remote_events`.
+- [x] Daemon push/pull sync exists, with autonomous polling via `TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS` and manual `teambridge sync`.
+- [x] Remote canonical events rebuild/materialize the local vault.
+- [x] CLI commands exist: `teambridge login`, `teambridge sessions`, `teambridge list`, `teambridge sync`, and `teambridge status relay`.
+- [x] `teambridge join <session>` can discover/import a remote relay session before creating the local worktree.
+- [x] Dashboard calls `/relay/sessions` and merges relay sessions with local sessions.
+- [x] Live verification passed against Supabase for schema reachability, storage bucket, append RPC, CLI login/start/sessions/sync/status, and CLI publish reaching Supabase.
+
+Still pending after the relay MVP:
+
+- [ ] Websocket Supabase Realtime client subscription in the daemon. Polling/manual sync is currently the correctness path.
+- [ ] Checkpoint upload/download implementation using `tc_workspace_vault_checkpoints` and `teambridge-checkpoints`.
+- [ ] Checkpoint lease acquisition/failover behavior using `tc_checkpoint_leases`.
+- [ ] Late joiner bootstrap from checkpoint + replay. Current remote join imports the workspace and replays events; checkpoint acceleration is pending.
+- [ ] Conflict detection/resolution plumbing and dashboard/CLI conflict UX.
+- [ ] Polished dashboard relay UI for sync health, presence, checkpoints, and conflicts.
+
 ### Phase 2 Execution Order
 
-- [ ] Step 1, Nihal first:
-  - Create Supabase project.
-  - Define Postgres tables: `workspaces`, `participants`, `devices`, `workspace_events`, `workspace_vault_checkpoints`, `checkpoint_leases`, `inbox_messages`, `presence`.
-  - Add Row Level Security policies.
-  - Implement auth/session validation for daemon relay calls.
-  - Implement canonical event insert with per-workspace monotonic `seq`.
+- [x] Step 1, Nihal first:
+  - [x] Create/apply Supabase project schema.
+  - [x] Define Postgres tables with `tc_` prefix: `tc_projects`, `tc_project_members`, `tc_workspaces`, `tc_participants`, `tc_devices`, `tc_workspace_events`, `tc_workspace_vault_checkpoints`, `tc_checkpoint_leases`, `tc_inbox_messages`, `tc_presence`, `tc_conflicts`, `tc_profiles`.
+  - [x] Add Row Level Security policies.
+  - [x] Implement minimal auth/session validation for daemon relay calls.
+  - [x] Implement canonical event insert with per-workspace monotonic `seq` via `tc_append_event`.
 - [ ] Step 2, Kushagra + Ronish in parallel while Nihal finishes relay internals:
-  - Kushagra: implement CLI auth/login flow against mocked or early relay responses.
+  - [x] Kushagra: implement CLI auth/login flow against relay responses.
   - Kushagra: add relay mode configuration to `teambridge init`.
-  - Kushagra: design `teambridge status` output for online/offline state, last synced `seq`, and pending local events.
-  - Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked events.
+  - [x] Kushagra: add `teambridge status relay` output for relay configured/logged-in/pending state.
+  - [x] Kushagra: add `teambridge sessions` / `teambridge list` for remote session discovery.
+  - Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked/live events.
+  - [x] Ronish: merge remote relay sessions into the dashboard session list.
   - Ronish: update MCP resource contracts to include relay-backed workspace state.
 - [ ] Step 3, Nihal next:
-  - Implement Supabase Realtime subscriptions.
-  - Implement offline queue and retry behavior.
-  - Implement event dedupe via `dedupeKey`.
+  - Implement Supabase Realtime websocket subscriptions. (Realtime publication is enabled; daemon currently uses polling/manual sync.)
+  - [x] Implement offline queue and retry behavior for publishes that fail remote append.
+  - [x] Implement event dedupe via `dedupeKey`.
+  - [x] Implement polling pull-after-last-remote-seq and vault rematerialization.
 - [ ] Step 4, Kushagra after relay event APIs exist:
-  - Update `teambridge start` to register workspace remotely when relay is enabled.
-  - Update `teambridge join` to fetch remote manifest/checkpoint/events.
-  - Update `teambridge status` to show real sync state.
-  - Add clear CLI messages for reconnect/retry behavior.
+  - [x] Update `teambridge start` to register workspace remotely when logged into relay.
+  - [x] Update `teambridge join` to fetch/import remote workspace/events before creating the local worktree.
+  - [x] Update `teambridge status relay` to show real sync state.
+  - Add clearer CLI messages for reconnect/retry behavior.
 - [ ] Step 5, Nihal + Ronish in parallel:
   - Nihal: implement checkpoint upload/download.
   - Nihal: implement checkpoint builder lease and failover.

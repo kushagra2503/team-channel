@@ -100,6 +100,45 @@ export async function listTracks(options: ClientOptions): Promise<ApiResult<Trac
   return request(buildDaemonUrl('/tracks', options));
 }
 
+export async function loginRelay(
+  options: ClientOptions,
+  body: { email: string; password: string }
+): Promise<ApiResult<{ userId: string; email?: string; relayUrl: string }>> {
+  return request(buildDaemonUrl('/auth/login', options), {
+    method: 'POST',
+    body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
+}
+
+export async function getRelayAuthStatus(options: ClientOptions): Promise<ApiResult<{
+  loggedIn: boolean;
+  userId?: string;
+  email?: string;
+  relayUrl?: string;
+}>> {
+  return request(buildDaemonUrl('/auth/status', options));
+}
+
+export async function listRelaySessions(options: ClientOptions): Promise<ApiResult<{ sessions: TrackListResponse['tracks'] }>> {
+  return request(buildDaemonUrl('/relay/sessions', options));
+}
+
+export async function syncRelay(options: ClientOptions): Promise<ApiResult<{ pushed: number; pulled: number }>> {
+  return request(buildDaemonUrl('/relay/sync', options), {
+    method: 'POST',
+    body: JSON.stringify({ repoRoot: options.repoRoot })
+  });
+}
+
+export async function getRelayStatus(options: ClientOptions): Promise<ApiResult<{
+  configured: boolean;
+  loggedIn: boolean;
+  pending: number;
+  sync: unknown[];
+}>> {
+  return request(buildDaemonUrl('/relay/status', options));
+}
+
 export async function joinWorkspace(
   options: ClientOptions,
   body: {

@@ -8,6 +8,7 @@ import {
   getProjectTracks,
   getVaultContext,
   getWorkspaceStatus,
+  listRelaySessions,
   listProjects,
   DEFAULT_DAEMON_BASE_URL,
   type TeambridgeClientConfig
@@ -122,16 +123,30 @@ export function DashboardPage() {
       }
 
       await Promise.all([
-        getProjectTracks(projectId, clientConfig, controller.signal)
-          .then((res) => {
-            const updated = cache.workspaces.filter((w) => w.projectId !== projectId).concat(res.tracks);
+        Promise.allSettled([
+          getProjectTracks(projectId, clientConfig, controller.signal),
+          listRelaySessions(clientConfig, controller.signal)
+        ])
+          .then(([localResult, relayResult]) => {
+            if (localResult.status === 'rejected') {
+              throw localResult.reason;
+            }
+            const localTracks = localResult.value.tracks;
+            const relayTracks = relayResult.status === 'fulfilled'
+              ? (relayResult.value?.sessions ?? []).filter((track) => track.projectId === projectId)
+              : [];
+            const merged = new Map<string, Workspace>();
+            for (const track of relayTracks) merged.set(track.id, track);
+            for (const track of localTracks) merged.set(track.id, track);
+            const nextTracks = [...merged.values()];
+            const updated = cache.workspaces.filter((w) => w.projectId !== projectId).concat(nextTracks);
             cache.setWorkspaces(updated);
-            setTracks(res.tracks);
+            setTracks(nextTracks);
             setTracksError(undefined);
             setSelectedTrackIdState((current) => {
-              const next = current && res.tracks.some((t) => t.id === current)
+              const next = current && nextTracks.some((t) => t.id === current)
                 ? current
-                : res.tracks[0]?.id;
+                : nextTracks[0]?.id;
               if (next) cache.setSelectedWorkspaceId(next);
               return next;
             });

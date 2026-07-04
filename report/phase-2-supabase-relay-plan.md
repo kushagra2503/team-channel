@@ -2,9 +2,47 @@
 
 This is Nihal's Phase 2 backend plan. It explains what "Supabase relay" means, which database objects are needed, and how the daemon should use them.
 
+## Current Implementation Status (Jul 2026)
+
+The relay MVP from this plan is implemented and live-verified.
+
+Implemented:
+
+- Supabase migration: `supabase/migrations/001_teambridge_relay.sql`.
+- `tc_` tables, indexes, RLS helpers/policies, checkpoint storage bucket, and Realtime publication.
+- `tc_append_event` RPC for canonical per-workspace `seq` assignment and `dedupeKey` dedupe.
+- Daemon Supabase relay client using REST/RPC.
+- Minimal `teambridge login` auth flow with local daemon identity storage.
+- Device registration in `tc_devices`.
+- Project/session/participant mirroring to Supabase when logged in.
+- Remote publish path from `teambridge publish` through daemon to Supabase.
+- Local `pending_remote_events` queue for failed remote appends.
+- Manual `teambridge sync` and autonomous polling via `TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS`.
+- Pull-after-last-remote-seq and local vault rematerialization from canonical remote events.
+- Remote session discovery through `teambridge sessions` / `teambridge list`.
+- `teambridge join <session>` can import a remote workspace and then create the local Git worktree.
+- Dashboard calls daemon `/relay/sessions` and merges remote relay sessions with local sessions.
+
+Verified:
+
+- All `tc_` tables are reachable through Supabase REST.
+- `teambridge-checkpoints` storage bucket is reachable.
+- `tc_append_event` assigns `seq = 1, 2...` and dedupes duplicate `dedupeKey` values.
+- Live CLI/daemon relay smoke passed: login, start, sessions/list, sync, status relay.
+- Live `teambridge publish` reached Supabase with canonical `seq = 1` and the expected payload.
+- Local verification still passes: `pnpm build`, `pnpm test`, `pnpm test:integration`, dashboard test/build.
+
+Still pending:
+
+- Supabase Realtime websocket subscription client in the daemon. Realtime publication exists, but polling/manual sync is currently the correctness path.
+- Checkpoint upload/download implementation and checkpoint lease/failover behavior.
+- Late joiner bootstrap from checkpoint + replay. Current join imports remote workspace and replays events; checkpoint acceleration is pending.
+- Conflict detection/resolution primitives beyond schema/event type support.
+- Dashboard UI for sync health, presence, checkpoints, conflicts, and richer remote-session state.
+
 ## Read This First
 
-This plan is ready to read as the Phase 2 backend blueprint. Treat the SQL as the first migration draft: it should be applied in a Supabase dev project, tested with RLS/advisors, then adjusted if Supabase reports policy or performance issues.
+This plan started as the Phase 2 backend blueprint. The migration has now been applied and the relay MVP has been verified live against Supabase. Keep using this document for the remaining Phase 2 work, especially realtime websocket subscriptions, checkpoints, late-join bootstrap, and conflicts.
 
 Current Phase 1 command surface is:
 
@@ -78,10 +116,12 @@ Use Supabase Auth for real users, but keep it minimal in Phase 2.
 Recommended Phase 2 dev flow:
 
 ```bash
-teambridge login
-teambridge init --relay supabase
+teambridge login --email <email> --password <password>
+teambridge init
 teambridge start billing-refactor main
+teambridge sessions
 teambridge join billing-refactor
+teambridge sync
 ```
 
 Daemon auth rules:
