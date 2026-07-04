@@ -51,7 +51,7 @@ test('ws show prints a workspace summary', async () => {
   const capture = captureStdout();
   try {
     await runWs(['show', 'auth-redesign'], OPTIONS);
-    assert.match(capture.output, /Track:\s+auth-redesign/);
+    assert.match(capture.output, /Session:\s+auth-redesign/);
     assert.match(capture.output, /Participants:\s+2/);
     assert.match(capture.output, /Last seq:\s+5/);
   } finally {

@@ -58,7 +58,7 @@ Written via `POST /workspaces/:id/vault/annotate`. Survives vault rebuild (extra
 - Stored at `.teambridge/user.json` after `teambridge init` (first name, last name, computed `displayName`).
 - Same `displayName` is used for project roster rows and track participants when using the CLI.
 - Avatar PNG is generated immediately via the daemon (`name_{slug}`); dashboard loads it through `/avatars/by-name/:slug`.
-- Optional `defaultProjectId` — CLI sets this when you create a project so `teambridge track start` links tracks to the right project sidebar.
+- Optional `defaultProjectId` — CLI sets this when you create a project so `teambridge start` links sessions to the right project sidebar.
 
 ## Phase 1 vs later
 
@@ -66,7 +66,7 @@ Written via `POST /workspaces/:id/vault/annotate`. Survives vault rebuild (extra
 |-----------------|---------|
 | Daemon HTTP API, flat vault, `publish` events | Full CLI (publish, join, enter, vault search) |
 | Dashboard: projects, tracks, vault highlights | MCP HTTP server wiring (resource/tool stubs exist) |
-| CLI: `init`, `project create`, `track start`, `status` | Supabase relay, inbox, conflicts UI |
+| CLI: `init`, `project create`, `start`, `join`, `status` | Supabase relay, inbox, conflicts UI |
 | Seed script (`pnpm seed`) | Full `/tracks/*` API rename |
 | Name-based avatars, vault annotations | |
 

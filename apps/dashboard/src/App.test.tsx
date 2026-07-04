@@ -97,6 +97,31 @@ describe('ProjectSelectionPage', () => {
     expect(await screen.findByText('Dummy Repo')).toBeTruthy();
     expect(screen.getByText('Local test repo')).toBeTruthy();
   });
+
+  it('shows discovered repo projects even when the current repo has projects', async () => {
+    api.listProjects.mockResolvedValue({
+      projects: [
+        { id: 'proj_current', name: 'Current Repo', description: 'Default repo project', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
+      ]
+    });
+    api.listKnownRepos.mockResolvedValue({
+      repos: [
+        {
+          repoRoot: '/tmp/teambridge-dummy-repo',
+          lastSeenAt: '2026-01-01T00:00:00.000Z',
+          projects: [
+            { id: 'proj_dummy', name: 'Dummy Repo', description: 'Local test repo', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
+          ]
+        }
+      ]
+    });
+
+    renderAtRoute('/projects', <ProjectSelectionPage />);
+
+    expect(await screen.findByText('Current Repo')).toBeTruthy();
+    expect(screen.getByText('Dummy Repo')).toBeTruthy();
+    expect(screen.getByText('/tmp/teambridge-dummy-repo')).toBeTruthy();
+  });
 });
 
 describe('DashboardPage', () => {

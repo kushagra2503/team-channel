@@ -19,7 +19,7 @@ pnpm dashboard       # UI on http://127.0.0.1:5173
 ```bash
 pnpm teambridge init
 pnpm teambridge project create --name "My App"
-pnpm teambridge track start my-track
+pnpm teambridge start my-track
 ```
 
 Optional: add `PEXELS_API_KEY` to `.env` for flower profile photos.

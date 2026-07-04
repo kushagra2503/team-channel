@@ -11,7 +11,7 @@ import {
   startTestDaemon
 } from './helpers.mjs';
 
-test('CLI init → project create → track start → status against a live daemon', async (t) => {
+test('CLI init → project create → start → status against a live daemon', async (t) => {
   const repoRoot = await createTempGitRepo();
   t.after(async () => {
     await removeTempDir(repoRoot);
@@ -67,12 +67,12 @@ test('CLI init → project create → track start → status against a live daem
   assert.equal(list.exitCode, 0, list.stderr || list.stdout);
   assert.match(list.stdout, new RegExp(`${projectId}\\s+Integration App`));
 
-  const track = runCli(['track', 'start', 'billing-refactor', '--project', projectId, '--base-ref', 'HEAD'], {
+  const track = runCli(['start', 'billing-refactor', 'HEAD', '--project', projectId], {
     repoRoot,
     baseUrl: daemon.baseUrl
   });
   assert.equal(track.exitCode, 0, track.stderr || track.stdout);
-  assert.match(track.stdout, /Started track "billing-refactor"/);
+  assert.match(track.stdout, /Started session "billing-refactor"/);
   const workspaceId = parseStartedWorkspaceId(track.stdout);
 
   const status = runCli(['status'], { repoRoot, baseUrl: daemon.baseUrl });
@@ -103,10 +103,10 @@ test('CLI init → project create → track start → status against a live daem
   });
   assert.equal(scopedContext.response.status, 200);
   assert.equal(scopedContext.body.ok, true);
-  assert.equal(scopedContext.body.data.context.branch, 'main');
+  assert.equal(scopedContext.body.data.context.branch, 'teambridge/billing-refactor/ada-lovelace');
 });
 
-test('CLI track start picks the only project when --project is omitted', async (t) => {
+test('CLI start picks the only project when --project is omitted', async (t) => {
   const repoRoot = await createTempGitRepo();
   t.after(async () => {
     await removeTempDir(repoRoot);
@@ -126,9 +126,9 @@ test('CLI track start picks the only project when --project is omitted', async (
   assert.equal(create.exitCode, 0, create.stderr || create.stdout);
   parseCreatedProjectId(create.stdout);
 
-  const track = runCli(['track', 'start', 'solo-track'], { repoRoot, baseUrl: daemon.baseUrl });
+  const track = runCli(['start', 'solo-track'], { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(track.exitCode, 0, track.stderr || track.stdout);
-  assert.match(track.stdout, /Started track "solo-track"/);
+  assert.match(track.stdout, /Started session "solo-track"/);
 
   const status = runCli(['status'], { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(status.exitCode, 0, status.stderr || status.stdout);

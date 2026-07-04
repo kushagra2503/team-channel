@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { runInit } from './commands/init';
 import { runProjectCreate, runProjectList } from './commands/project';
-import { runTrackJoin, runTrackStart } from './commands/track';
+import { runTrackJoin } from './commands/track';
 import { runStart } from './commands/start';
 import { runEnter } from './commands/enter';
 import { runPublish } from './commands/publish';
@@ -18,9 +18,8 @@ Usage:
   teambridge init [--first-name NAME] [--last-name NAME] [--agent cursor|claude-code|codex]
   teambridge project create [--name NAME] [--description TEXT]
   teambridge project list
-  teambridge track start [NAME] [--project PROJECT_ID] [--base-ref REF]
-  teambridge track join [NAME] [--as DISPLAY_NAME]
-  teambridge start [NAME] [--project PROJECT_ID] [--base-ref REF]
+  teambridge start [NAME] [BASE_REF] [--project PROJECT_ID]
+  teambridge join [NAME] [--as DISPLAY_NAME]
   teambridge enter <NAME>
   teambridge publish <TARGET_FILE> <TEXT>
   teambridge vault read <PATH>
@@ -68,21 +67,13 @@ async function main(): Promise<void> {
       throw new Error('Usage: teambridge project create|list');
     }
 
-    if (command === 'track') {
-      const sub = argv[1];
-      if (sub === 'start') {
-        await runTrackStart(argv.slice(2), options);
-        return;
-      }
-      if (sub === 'join') {
-        await runTrackJoin(argv.slice(2), options);
-        return;
-      }
-      throw new Error('Usage: teambridge track start|join [NAME]');
-    }
-
     if (command === 'start') {
       await runStart(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'join') {
+      await runTrackJoin(argv.slice(1), options);
       return;
     }
 

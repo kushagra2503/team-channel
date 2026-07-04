@@ -6,10 +6,24 @@ import { assertValidSessionName } from '../lib/naming';
 import { prepareParticipantWorktree, rollbackParticipantWorktree } from '../lib/worktree';
 import { writeWorktreePointer } from '../lib/pointers';
 
+function positionalArgs(argv: string[], flagsWithValues: Set<string>): string[] {
+  const result: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (flagsWithValues.has(arg)) {
+      i += 1;
+      continue;
+    }
+    if (!arg.startsWith('-')) {
+      result.push(arg);
+    }
+  }
+  return result;
+}
+
 /**
- * Shared by `track start` and `start` (which additionally creates a worktree
- * for the starter — see commands/start.ts). Resolves the profile/project
- * inputs and registers the track with the daemon; does not touch git.
+ * Shared by `start` and the internal registration flow. Resolves the
+ * profile/project inputs and registers the session with the daemon.
  */
 export async function registerTrackStart(
   argv: string[],
@@ -23,16 +37,17 @@ export async function registerTrackStart(
     throw new Error('Run `teambridge init` first to set your name and avatar.');
   }
 
-  let sessionName = parseFlag(argv, '--name') ?? argv.find((arg) => !arg.startsWith('-'));
+  const positionals = positionalArgs(argv, new Set(['--name', '--project', '--base-ref', '--base']));
+  let sessionName = parseFlag(argv, '--name') ?? positionals[0];
   let projectId = parseFlag(argv, '--project');
-  const baseRef = parseFlag(argv, '--base-ref') ?? parseFlag(argv, '--base') ?? 'HEAD';
+  const baseRef = parseFlag(argv, '--base-ref') ?? parseFlag(argv, '--base') ?? positionals[1] ?? 'HEAD';
 
   if (!sessionName) {
-    sessionName = await ask('Track name (shown in dashboard sidebar, e.g. auth-redesign)');
+    sessionName = await ask('Session name (shown in dashboard sidebar, e.g. auth-redesign)');
   }
 
   if (!sessionName?.trim()) {
-    throw new Error('Track name is required.');
+    throw new Error('Session name is required.');
   }
 
   if (!projectId) {
@@ -73,14 +88,6 @@ export async function registerTrackStart(
   return { profile: profile.data.profile, projectId, started };
 }
 
-export async function runTrackStart(argv: string[], options: ClientOptions): Promise<void> {
-  const { started, projectId } = await registerTrackStart(argv, options);
-
-  console.log(`Started track "${started.data.manifest.sessionName}" on project ${projectId}`);
-  console.log(`Workspace id: ${started.data.manifest.id}`);
-  console.log('Dashboard will show this track under the project sidebar.');
-}
-
 export async function runTrackJoin(argv: string[], options: ClientOptions): Promise<void> {
   const profile = await getUserProfile(options);
   if (!profile.ok) {
@@ -90,12 +97,13 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
     throw new Error('Run `teambridge init` first to set your name and avatar.');
   }
 
-  let sessionName = parseFlag(argv, '--name') ?? argv.find((arg) => !arg.startsWith('-'));
+  const positionals = positionalArgs(argv, new Set(['--name', '--as']));
+  let sessionName = parseFlag(argv, '--name') ?? positionals[0];
   if (!sessionName) {
-    sessionName = await ask('Track name to join');
+    sessionName = await ask('Session name to join');
   }
   if (!sessionName?.trim()) {
-    throw new Error('Track name is required.');
+    throw new Error('Session name is required.');
   }
   sessionName = sessionName.trim();
   assertValidSessionName(sessionName);
@@ -110,10 +118,10 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
   }
   const track = tracks.data.tracks.find((candidate) => candidate.sessionName === sessionName);
   if (!track) {
-    throw new Error(`Track "${sessionName}" not found. Start it first: \`teambridge track start ${sessionName}\`.`);
+    throw new Error(`Session "${sessionName}" not found. Start it first: \`teambridge start ${sessionName}\`.`);
   }
   if (track.status === 'archived') {
-    throw new Error(`Track "${sessionName}" is archived.`);
+    throw new Error(`Session "${sessionName}" is archived.`);
   }
 
   // Git-first: create the isolated worktree before registering with the daemon,
@@ -136,7 +144,7 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
     // Duplicate display name on this track: the worktree may be legitimate prior
     // work, so surface it and do NOT roll back (daemon ask #5 is only partial).
     if (/unique constraint failed:\s*participants/i.test(joined.error.message)) {
-      console.log(`You are already a participant in "${track.sessionName}" as ${displayName}.`);
+      console.log(`You are already a participant in session "${track.sessionName}" as ${displayName}.`);
       console.log(`Worktree: ${worktree.path}`);
       console.log(`Enter it with: cd "${worktree.path}" && claude`);
       return;
@@ -159,7 +167,7 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
   });
 
   const verb = worktree.reused ? 'Re-attached to' : 'Joined';
-  console.log(`${verb} track "${track.sessionName}" as ${displayName}.`);
+  console.log(`${verb} session "${track.sessionName}" as ${displayName}.`);
   console.log(`Branch:   ${worktree.branch}`);
   console.log(`Worktree: ${worktree.path}`);
   console.log(`Enter it with: cd "${worktree.path}" && claude`);

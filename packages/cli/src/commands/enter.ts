@@ -27,7 +27,7 @@ export async function runEnter(argv: string[], options: ClientOptions): Promise<
   const pointer = readWorktreePointer(options.repoRoot, sessionName.trim(), displayName);
   if (!pointer) {
     throw new Error(
-      `No worktree found for "${sessionName}" as ${displayName}. Run \`teambridge start ${sessionName}\` or \`teambridge track join ${sessionName}\` first.`
+      `No worktree found for "${sessionName}" as ${displayName}. Run \`teambridge start ${sessionName}\` or \`teambridge join ${sessionName}\` first.`
     );
   }
 

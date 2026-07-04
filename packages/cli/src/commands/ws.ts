@@ -8,7 +8,7 @@ async function resolveWorkspaceBySessionName(sessionName: string, options: Clien
   }
   const track = tracks.data.tracks.find((candidate) => candidate.sessionName === sessionName);
   if (!track) {
-    throw new Error(`Track "${sessionName}" not found. Start it first: \`teambridge track start ${sessionName}\`.`);
+    throw new Error(`Session "${sessionName}" not found. Start it first: \`teambridge start ${sessionName}\`.`);
   }
   return track;
 }
@@ -30,7 +30,7 @@ async function runWsShow(argv: string[], options: ClientOptions): Promise<void> 
   }
 
   const { workspace, participants, lastSeq } = status.data;
-  console.log(`Track:        ${workspace.sessionName}`);
+  console.log(`Session:      ${workspace.sessionName}`);
   console.log(`Workspace id: ${workspace.id}`);
   console.log(`Status:       ${workspace.status}`);
   console.log(`Base commit:  ${workspace.baseCommit}`);

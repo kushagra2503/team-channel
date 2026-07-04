@@ -37,7 +37,7 @@ export async function resolveCurrentTrack(options: ClientOptions, cwd: string = 
   }
   const track = tracks.data.tracks.find((candidate) => candidate.sessionName === sessionName);
   if (!track) {
-    throw new Error(`Track "${sessionName}" (from the current branch) was not found by the daemon.`);
+    throw new Error(`Session "${sessionName}" (from the current branch) was not found by the daemon.`);
   }
   return track;
 }

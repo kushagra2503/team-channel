@@ -32,7 +32,7 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
 
   const start = runCli(['start', 'auth-redesign', '--project', projectId], ctx);
   assert.equal(start.exitCode, 0, start.stderr || start.stdout);
-  assert.match(start.stdout, /Started track "auth-redesign"/);
+  assert.match(start.stdout, /Started session "auth-redesign"/);
   const kushagraWorktree = parseWorktreePath(start.stdout);
 
   const entered = runCli(['enter', 'auth-redesign'], ctx);
@@ -41,13 +41,13 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
 
   // Ronish joins the same track under a different display name (still the same
   // local profile/daemon — Phase 1 dogfood simulates multiple participants
-  // locally via `--as`, same pattern as track.ts#runTrackJoin's own tests).
-  const join = runCli(['track', 'join', 'auth-redesign', '--as', 'Ronish'], ctx);
+  // locally via `--as`.
+  const join = runCli(['join', 'auth-redesign', '--as', 'Ronish'], ctx);
   assert.equal(join.exitCode, 0, join.stderr || join.stdout);
   const ronishWorktree = parseWorktreePath(join.stdout);
   assert.notEqual(ronishWorktree, kushagraWorktree);
 
-  const joinNihal = runCli(['track', 'join', 'auth-redesign', '--as', 'Nihal'], ctx);
+  const joinNihal = runCli(['join', 'auth-redesign', '--as', 'Nihal'], ctx);
   assert.equal(joinNihal.exitCode, 0, joinNihal.stderr || joinNihal.stdout);
   const nihalWorktree = parseWorktreePath(joinNihal.stdout);
   assert.notEqual(nihalWorktree, kushagraWorktree);

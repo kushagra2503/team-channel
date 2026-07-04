@@ -12,6 +12,20 @@ type ProjectCard = Project & {
   repoRoot?: string;
 };
 
+function mergeProjectCards(currentProjects: Project[], discoveredProjects: ProjectCard[]): ProjectCard[] {
+  const merged = new Map<string, ProjectCard>();
+
+  for (const project of currentProjects) {
+    merged.set(`current:${project.id}`, project);
+  }
+
+  for (const project of discoveredProjects) {
+    merged.set(`${project.repoRoot ?? 'unknown'}:${project.id}`, project);
+  }
+
+  return [...merged.values()];
+}
+
 function setLastProjectId(id: string): void {
   try { sessionStorage.setItem(LAST_PROJECT_KEY, id); } catch { /* ignore */ }
 }
@@ -37,13 +51,6 @@ export function ProjectSelectionPage() {
     const loadProjects = async () => {
       try {
         const res = await listProjects(config, controller.signal);
-        if (res.projects.length > 0) {
-          cache.setProjects(res.projects);
-          setProjects(res.projects);
-          setError(undefined);
-          return;
-        }
-
         const known = await listKnownRepos(config, controller.signal);
         const discoveredProjects = known.repos.flatMap((repo) => (
           repo.projects.map((project) => ({
@@ -51,7 +58,9 @@ export function ProjectSelectionPage() {
             repoRoot: repo.repoRoot
           }))
         ));
-        setProjects(discoveredProjects);
+        const nextProjects = mergeProjectCards(res.projects, discoveredProjects);
+        cache.setProjects(res.projects);
+        setProjects(nextProjects);
         setError(undefined);
       } catch (err) {
         if (!controller.signal.aborted) {
@@ -105,7 +114,7 @@ export function ProjectSelectionPage() {
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (
               <button
-                key={project.id}
+                key={`${project.repoRoot ?? 'current'}:${project.id}`}
                 type="button"
                 onClick={() => handleSelect(project)}
                 className="flex h-full w-full cursor-pointer flex-col items-start justify-start rounded-lg border border-border bg-card px-4 py-3.5 text-left transition-[background-color] duration-150 hover:bg-muted/60"
@@ -113,6 +122,11 @@ export function ProjectSelectionPage() {
                 <span className="text-sm font-medium leading-none">{project.name}</span>
                 {project.description ? (
                   <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
+                ) : null}
+                {project.repoRoot ? (
+                  <span className="mt-2 block max-w-full truncate text-xs text-muted-foreground/60">
+                    {project.repoRoot}
+                  </span>
                 ) : null}
               </button>
             ))}

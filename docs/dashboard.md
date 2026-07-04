@@ -20,10 +20,10 @@ pnpm dashboard       # Vite dev server (default host 127.0.0.1)
 ```bash
 pnpm teambridge init
 pnpm teambridge project create --name "My App" --description "Optional"
-pnpm teambridge track start my-track
+pnpm teambridge start my-track
 ```
 
-`project create` sets your default project so `track start` links the track to the correct project sidebar without passing `--project`.
+`project create` sets your default project so `start` links the session to the correct project sidebar without passing `--project`.
 
 Then open the dashboard — your project, track name, roster avatar, and vault shell appear without seed.
 
@@ -80,5 +80,5 @@ Browser cache key: `tb_cache_v2_${daemonUrl}` (tracks, status, vault context). H
 
 ```bash
 pnpm --filter @teambridge/dashboard test
-pnpm test:integration   # repo root — CLI init → project → track against live daemon
+pnpm test:integration   # repo root — CLI init → project → session against live daemon
 ```
