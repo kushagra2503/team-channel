@@ -63,7 +63,7 @@ export function EventFeed({ events, error, members = [], config, avatarRev, maxI
           {visible.map((event, i) => {
             const typeStyle = getEventTypeStyle(event.type);
             const member = members.find((m) => m.id === event.actorId);
-            const displayName = member?.displayName ?? event.actorId;
+            const displayName = member?.displayName ?? event.actorId.replace(/^user_/, '');
             const avatarUrl = config ? avatarUrlForDisplayName(displayName, config, avatarRev) : undefined;
 
             return (
@@ -72,7 +72,7 @@ export function EventFeed({ events, error, members = [], config, avatarRev, maxI
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i * 0.02, 0.15) }}
-                className="flex items-center gap-2 py-1 text-xs"
+                className="flex items-center gap-2 px-2 py-1 text-xs"
               >
                 <span
                   className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', typeStyle.className)}

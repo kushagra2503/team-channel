@@ -68,7 +68,7 @@ export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="flex items-center gap-2 py-1 text-xs"
+                className="flex items-center gap-2 px-2 py-1 text-xs"
               >
                 <span className="truncate text-muted-foreground">{entry.workspaceId}</span>
                 <span className="shrink-0 tabular-nums text-muted-foreground/60">
