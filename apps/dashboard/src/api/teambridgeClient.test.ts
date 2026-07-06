@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildTeambridgeUrl, getDefaultClientConfig, readVaultFile, searchVault, unwrapApiResult } from './teambridgeClient';
+import { buildTeambridgeUrl, getDefaultClientConfig, getRelayStatus, getWorkspaceEvents, readVaultFile, searchVault, unwrapApiResult } from './teambridgeClient';
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -97,5 +97,61 @@ describe('teambridgeClient', () => {
       daemonBaseUrl: 'http://127.0.0.1:9473',
       repoRoot: '/env/repo'
     });
+  });
+
+  it('fetches relay status from the daemon', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const relayStatus = {
+      configured: true,
+      loggedIn: true,
+      pending: 2,
+      sync: [
+        {
+          workspaceId: 'ws_123',
+          lastRemoteSeq: 5,
+          lastSyncedAt: '2026-07-06T12:00:00.000Z',
+          relayStatus: 'online',
+          lastError: null
+        }
+      ]
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: relayStatus }));
+
+    await expect(getRelayStatus({ repoRoot: '/tmp/repo' })).resolves.toEqual(relayStatus);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:9473/relay/status?repoRoot=%2Ftmp%2Frepo');
+  });
+
+  it('fetches workspace events from the daemon', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const events = {
+      events: [
+        {
+          id: 'evt_001',
+          workspaceId: 'ws_123',
+          seq: 1,
+          type: 'publish',
+          actorId: 'user_ronish',
+          deviceId: 'device_local',
+          payload: { text: 'Decision made' },
+          targetFile: 'decisions.md',
+          createdAt: '2026-07-06T12:00:00.000Z'
+        }
+      ]
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, data: events }));
+
+    await expect(getWorkspaceEvents('ws_123', { repoRoot: '/tmp/repo' })).resolves.toEqual(events);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      'http://127.0.0.1:9473/workspaces/ws_123/events?repoRoot=%2Ftmp%2Frepo'
+    );
+  });
+
+  it('propagates relay status error messages', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'Daemon error' } })
+    );
+
+    await expect(getRelayStatus({})).rejects.toThrow('Daemon error');
   });
 });
