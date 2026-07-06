@@ -105,15 +105,12 @@ export function RepoContextPanel({ workspaceId, clientConfig }: RepoContextPanel
 
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true);
     setError(undefined);
-    setContext(null);
 
     void getRepoContext(clientConfig, workspaceId, controller.signal)
       .then((res) => setContext(res.context))
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
-        setContext(null);
         setError(err instanceof Error ? err.message : 'Failed to load repo context');
       })
       .finally(() => {
