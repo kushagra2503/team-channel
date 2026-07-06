@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
-import type { LocalUserProfile, WorkspaceStatusResponse } from '@teambridge/core';
+import type { LocalUserProfile, RelayStatusResponse, VaultCheckpoint, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 import type { ProjectMember } from '@teambridge/core';
 import { motion } from 'motion/react';
 import { SidebarContent } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { ProjectMemberSidebar } from './ProjectMemberSidebar';
 import { TrackParticipantsPanel } from './TrackParticipantsPanel';
+import { RelaySyncHealth } from './RelaySyncHealth';
+import { EventFeed } from './EventFeed';
+import { CheckpointState } from './CheckpointState';
 import { displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 
-export type MembersView = 'all' | 'track';
+export type MembersView = 'all' | 'track' | 'relay';
 
 export type TeamSidebarProps = {
   open: boolean;
@@ -24,6 +27,11 @@ export type TeamSidebarProps = {
   onAvatarRev?: () => void;
   columnIndex?: number;
   staggerKey?: string;
+  relayStatus?: RelayStatusResponse;
+  relayError?: string;
+  events?: WorkspaceEvent[];
+  eventsError?: string;
+  latestCheckpoint?: VaultCheckpoint;
 };
 
 const TEAM_SIDEBAR_WIDTH = 288; // w-72
@@ -32,7 +40,8 @@ const tabSpring = { type: 'spring' as const, duration: 0.28, bounce: 0.12 };
 
 const TABS: { id: MembersView; label: string }[] = [
   { id: 'all', label: 'All Members' },
-  { id: 'track', label: 'This Track' }
+  { id: 'track', label: 'This Track' },
+  { id: 'relay', label: 'Relay' }
 ];
 
 function MembersViewTabs({
@@ -46,7 +55,7 @@ function MembersViewTabs({
     <div
       role="tablist"
       aria-label="Members view"
-      className="grid shrink-0 grid-cols-2 gap-1 p-2"
+      className="grid shrink-0 grid-cols-3 gap-1 p-2"
     >
       {TABS.map((tab) => {
         const selected = view === tab.id;
@@ -89,13 +98,18 @@ export function TeamSidebar({
   localAvatarVersion,
   avatarRev,
   columnIndex,
-  staggerKey
+  staggerKey,
+  relayStatus,
+  relayError,
+  events,
+  eventsError,
+  latestCheckpoint
 }: TeamSidebarProps) {
   const [view, setView] = useState<MembersView>('all');
 
   const pinnedLocalUser = useMemo<PinnedLocalUser | null>(() => {
     if (!localUser) return null;
-    if (view === 'all') {
+    if (view === 'all' || view === 'relay') {
       const member = members?.find((m) => displayNamesMatch(m.displayName, localUser.displayName));
       return { displayName: localUser.displayName, status: member?.status ?? 'active' };
     }
@@ -128,7 +142,7 @@ export function TeamSidebar({
               columnIndex={columnIndex}
               staggerKey={staggerKey}
             />
-          ) : (
+          ) : view === 'track' ? (
             <TrackParticipantsPanel
               status={trackStatus}
               localUser={pinnedLocalUser}
@@ -139,6 +153,12 @@ export function TeamSidebar({
               avatarRev={avatarRev}
               columnIndex={columnIndex}
             />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <RelaySyncHealth status={relayStatus} error={relayError} />
+              <EventFeed events={events} error={eventsError} />
+              <CheckpointState latestCheckpoint={latestCheckpoint} />
+            </div>
           )}
         </SidebarContent>
       </div>
