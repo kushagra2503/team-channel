@@ -112,3 +112,18 @@ export type RepoContextResponse = {
   context: RepoContext;
 };
 
+export type SyncStateEntry = {
+  workspaceId: string;
+  lastRemoteSeq: number;
+  lastSyncedAt: string | null;
+  relayStatus: string;
+  lastError: string | null;
+};
+
+export type RelayStatusResponse = {
+  configured: boolean;
+  loggedIn: boolean;
+  pending: number;
+  sync: SyncStateEntry[];
+};
+

@@ -14,7 +14,7 @@ export const ParticipantSchema = z.object({
 });
 
 export const WorkspaceStatusSchema = z.enum(['active', 'archived']);
-export const RelayModeSchema = z.literal('local');
+export const RelayModeSchema = z.enum(['local', 'supabase']);
 
 export const TeambridgeConfigSchema = z.object({
   schemaVersion: z.literal(1),
@@ -204,4 +204,19 @@ export const VaultReadResponseSchema = z.object({
 
 export const VaultContextResponseSchema = z.object({
   context: VaultContextSchema
+});
+
+export const SyncStateEntrySchema = z.object({
+  workspaceId: z.string().min(1),
+  lastRemoteSeq: z.number().int().nonnegative(),
+  lastSyncedAt: z.string().nullable(),
+  relayStatus: z.string(),
+  lastError: z.string().nullable()
+});
+
+export const RelayStatusResponseSchema = z.object({
+  configured: z.boolean(),
+  loggedIn: z.boolean(),
+  pending: z.number().int().nonnegative(),
+  sync: z.array(SyncStateEntrySchema)
 });
