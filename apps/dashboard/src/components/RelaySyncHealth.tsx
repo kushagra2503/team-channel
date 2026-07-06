@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import type { RelayStatusResponse } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/relative-time';
 
 export type RelaySyncHealthProps = {
   status?: RelayStatusResponse;
@@ -20,14 +21,8 @@ function getBadgeStyle(status: RelayStatusResponse): { label: string; className:
   return BADGE_STYLES.connected;
 }
 
-function formatRelativeTime(iso: string | null): string {
-  if (!iso) return 'Never';
-  const diff = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(diff)) return 'Unknown';
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
+function syncTimeLabel(iso: string | null): string {
+  return formatRelativeTime(iso) || 'Never';
 }
 
 export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
@@ -83,7 +78,7 @@ export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
                 </div>
                 <div className="mt-0.5 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-muted-foreground/70">
-                    {formatRelativeTime(entry.lastSyncedAt)}
+                    {syncTimeLabel(entry.lastSyncedAt)}
                   </span>
                   <span
                     className={cn(

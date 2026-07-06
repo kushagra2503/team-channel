@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import type { WorkspaceEvent, WorkspaceEventType } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/relative-time';
 
 export type EventFeedProps = {
   events?: WorkspaceEvent[];
@@ -21,15 +22,6 @@ const EVENT_TYPE_STYLES: Partial<Record<WorkspaceEventType, { label: string; cla
 
 function getEventTypeStyle(type: WorkspaceEventType): { label: string; className: string } {
   return EVENT_TYPE_STYLES[type] ?? { label: type, className: 'bg-muted text-muted-foreground' };
-}
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(diff)) return '';
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
 export function EventFeed({ events, error, maxItems = 20 }: EventFeedProps) {

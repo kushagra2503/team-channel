@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import type { VaultCheckpoint } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { formatRelativeTime } from '@/lib/relative-time';
 
 export type CheckpointStateProps = {
   latestCheckpoint?: VaultCheckpoint;
@@ -10,34 +11,6 @@ export type CheckpointStateProps = {
 
 const ENTER = { opacity: 0, y: 8 };
 const ANIMATE = { opacity: 1, y: 0 };
-
-/** Format an ISO timestamp as a short "X ago" string, mirroring sidebar panel copy. */
-export function formatRelativeTime(iso: string, now: number = Date.now()): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) {
-    return 'recently';
-  }
-
-  const diff = Math.max(0, now - then);
-  const seconds = Math.floor(diff / 1000);
-
-  if (seconds < 60) {
-    return 'just now';
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours}h ago`;
-  }
-
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
 
 /** Truncate a checkpoint hash to its first 8 characters for display. */
 export function truncateHash(hash: string): string {
@@ -68,6 +41,7 @@ export function CheckpointState({ latestCheckpoint, className }: CheckpointState
 
   const { seq, createdAt, hash, createdByDeviceId } = latestCheckpoint;
   const deviceId = createdByDeviceId.trim() ? createdByDeviceId : 'Unknown device';
+  const createdLabel = formatRelativeTime(createdAt) || 'recently';
 
   return (
     <section aria-label="Checkpoint state" className={cn('py-2', className)}>
@@ -85,7 +59,7 @@ export function CheckpointState({ latestCheckpoint, className }: CheckpointState
           </div>
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">Created</dt>
-            <dd className="text-muted-foreground/90">{formatRelativeTime(createdAt)}</dd>
+            <dd className="text-muted-foreground/90">{createdLabel}</dd>
           </div>
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground">Hash</dt>

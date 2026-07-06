@@ -126,4 +126,3 @@ export type RelayStatusResponse = {
   pending: number;
   sync: SyncStateEntry[];
 };
-

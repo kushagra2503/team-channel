@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VaultCheckpoint } from '@teambridge/core';
-import { CheckpointState, formatRelativeTime, truncateHash } from './CheckpointState';
+import { CheckpointState, truncateHash } from './CheckpointState';
+import { formatRelativeTime } from '@/lib/relative-time';
 
 const FIXED_NOW = new Date('2026-07-06T12:00:00.000Z').getTime();
 
@@ -42,7 +43,7 @@ describe('CheckpointState', () => {
     render(<CheckpointState latestCheckpoint={checkpoint} />);
 
     expect(screen.getByText(String(checkpoint.seq))).toBeTruthy();
-    expect(screen.getByText(formatRelativeTime(checkpoint.createdAt, FIXED_NOW))).toBeTruthy();
+    expect(screen.getByText(formatRelativeTime(checkpoint.createdAt))).toBeTruthy();
     expect(screen.getByText(truncateHash(checkpoint.hash))).toBeTruthy();
     expect(screen.getByText(checkpoint.createdByDeviceId)).toBeTruthy();
   });
