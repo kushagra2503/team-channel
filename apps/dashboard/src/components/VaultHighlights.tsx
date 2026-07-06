@@ -456,7 +456,7 @@ export function VaultHighlights({
       ) : null}
 
       {filteredSections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{searchQuery.trim() ? 'No matching notes.' : 'No published notes yet.'}</p>
+        <p className="border-b border-border p-4 text-sm text-muted-foreground">{searchQuery.trim() ? 'No matching notes.' : 'No published notes yet.'}</p>
       ) : (
         filteredSections.map((section, i) => (
           <motion.article
