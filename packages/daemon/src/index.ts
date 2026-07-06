@@ -33,6 +33,7 @@ import type {
   RepoContextResponse,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
+  SyncStateEntry,
   TeambridgeConfig,
   TeambridgeErrorCode,
   TrackListResponse,
@@ -732,6 +733,16 @@ function rowToParticipant(row: Record<string, unknown>): Participant {
     agent: row.agent ? (String(row.agent) as Participant['agent']) : undefined,
     status: row.status === 'idle' || row.status === 'offline' ? row.status : 'active',
     lastSeenAt: String(row.last_seen_at)
+  };
+}
+
+function rowToSyncState(row: Record<string, unknown>): SyncStateEntry {
+  return {
+    workspaceId: String(row.workspace_id),
+    lastRemoteSeq: Number(row.last_remote_seq ?? 0),
+    lastSyncedAt: row.last_synced_at ? String(row.last_synced_at) : null,
+    relayStatus: String(row.relay_status ?? 'offline'),
+    lastError: row.last_error ? String(row.last_error) : null
   };
 }
 
@@ -2159,7 +2170,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const dbPath = initializeStateDb(repoRoot);
     const identity = getRemoteIdentity(repoRoot);
     const pending = querySql<{ count: number }>(dbPath, 'select count(*) as count from pending_remote_events')[0]?.count ?? 0;
-    const sync = querySql<Record<string, unknown>>(dbPath, 'select * from remote_sync_state order by last_synced_at desc');
+    const sync = querySql<Record<string, unknown>>(dbPath, 'select * from remote_sync_state order by last_synced_at desc').map(rowToSyncState);
     sendJson(response, 200, ok({ configured: Boolean(relayConfig()), loggedIn: Boolean(identity), pending, sync }));
     return;
   }
