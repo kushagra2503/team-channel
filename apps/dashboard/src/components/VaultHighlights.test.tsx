@@ -19,9 +19,8 @@ describe('VaultHighlights', () => {
 
     render(<VaultHighlights context={context} workspaceId="ws_123" participants={[{ id: 'user_ronish', displayName: 'ronish', workspaceId: 'ws_123', branch: 'main', agent: 'cursor', status: 'active', lastSeenAt: createdAt }]} />);
 
-    expect(screen.getByText('Vault tools')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Read' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Search vault' })).toBeTruthy();
+    expect(screen.getByText(/seq/)).toBeTruthy();
     expect(screen.getAllByText('decisions.md').length).toBeGreaterThan(0);
     expect(screen.getByText(/Backend owns invoice state/)).toBeTruthy();
     expect(screen.getByText(/Assigned to/)).toBeTruthy();

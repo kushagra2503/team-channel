@@ -1,9 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Participant, VaultContext, VaultFile, VaultItemAnnotation, VaultSearchResult } from '@teambridge/core';
+import type { Participant, VaultContext, VaultItemAnnotation, VaultSearchResult } from '@teambridge/core';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { IconSearch, IconLoader2 } from '@tabler/icons-react';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
-import { readVaultFile, searchVault } from '@/api/teambridgeClient';
+import { searchVault } from '@/api/teambridgeClient';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName, prettyParticipantName } from './participantDisplay';
@@ -326,8 +328,6 @@ function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, part
 const ENTER = COLUMN_ENTER;
 const HIDE = COLUMN_HIDE;
 
-const DEFAULT_FILE_PATH = 'decisions.md';
-
 export function VaultHighlights({
   context,
   error,
@@ -348,10 +348,8 @@ export function VaultHighlights({
   const [openMenus, setOpenMenus] = useState<OpenMenus | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<VaultSearchResult[] | null>(null);
-  const [filePath, setFilePath] = useState(DEFAULT_FILE_PATH);
-  const [file, setFile] = useState<VaultFile | null>(null);
   const [toolError, setToolError] = useState<string>();
-  const [toolLoading, setToolLoading] = useState<'search' | 'read' | null>(null);
+  const [toolLoading, setToolLoading] = useState(false);
 
   useEffect(() => {
     setRowStates(persistedStates);
@@ -391,7 +389,7 @@ export function VaultHighlights({
 
   const runSearch = useCallback(async () => {
     if (!workspaceId || !searchQuery.trim()) return;
-    setToolLoading('search');
+    setToolLoading(true);
     setToolError(undefined);
     try {
       const response = await searchVault(workspaceId, searchQuery.trim(), config);
@@ -399,23 +397,9 @@ export function VaultHighlights({
     } catch (err) {
       setToolError(err instanceof Error ? err.message : 'Vault search failed.');
     } finally {
-      setToolLoading(null);
+      setToolLoading(false);
     }
   }, [workspaceId, searchQuery, config]);
-
-  const runRead = useCallback(async () => {
-    if (!workspaceId || !filePath.trim()) return;
-    setToolLoading('read');
-    setToolError(undefined);
-    try {
-      const response = await readVaultFile(workspaceId, filePath.trim(), config);
-      setFile(response.file);
-    } catch (err) {
-      setToolError(err instanceof Error ? err.message : 'Vault read failed.');
-    } finally {
-      setToolLoading(null);
-    }
-  }, [workspaceId, filePath, config]);
 
   if (error) return <p role="alert" className="text-xs text-destructive">{error}</p>;
   if (!context) return null;
@@ -434,78 +418,62 @@ export function VaultHighlights({
           transition={columnEnterTransition(columnIndex, 0)}
           className="border-b border-border p-4"
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-medium">Vault tools</h3>
-              <p className="text-xs text-muted-foreground">Search the indexed vault or inspect one file.</p>
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-2">
+              <IconSearch className="size-4 shrink-0 text-muted-foreground" stroke={1.5} />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void runSearch();
+                }}
+                placeholder="Search vault"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+              <Badge variant="outline" className="shrink-0 tabular-nums">seq {context.lastSeq ?? 0}</Badge>
             </div>
-            <Badge variant="outline">seq {context.lastSeq ?? 0}</Badge>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void runSearch();
-                  }}
-                  placeholder="Search vault"
-                  className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => void runSearch()}
-                  className="rounded-md border px-3 py-2 text-sm hover:bg-muted"
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => void runSearch()}
+              disabled={toolLoading || !searchQuery.trim()}
+              aria-label="Search vault"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={toolLoading ? 'loading' : 'idle'}
+                  initial={{ opacity: 0, scale: 0.7 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.7 }}
+                  transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
                 >
-                  {toolLoading === 'search' ? 'Searching...' : 'Search'}
-                </button>
-              </div>
-              {searchResults ? (
-                <div className="max-h-40 overflow-auto rounded-md border bg-muted/20 p-2">
-                  {searchResults.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No matches.</p>
+                  {toolLoading ? (
+                    <IconLoader2 className="size-4 animate-spin" stroke={1.5} />
                   ) : (
-                    <ul className="space-y-1 text-xs">
-                      {searchResults.map((result) => (
-                        <li key={`${result.path}-${result.line}-${result.text}`} className="rounded px-2 py-1 hover:bg-muted">
-                          <span className="font-medium">{result.path}:{result.line}</span>{' '}
-                          <span className="text-muted-foreground">{result.text}</span>
-                        </li>
-                      ))}
-                    </ul>
+                    <IconSearch className="size-4" stroke={1.5} />
                   )}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  value={filePath}
-                  onChange={(event) => setFilePath(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void runRead();
-                  }}
-                  placeholder="decisions.md"
-                  className="min-w-0 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => void runRead()}
-                  className="rounded-md border px-3 py-2 text-sm hover:bg-muted"
-                >
-                  {toolLoading === 'read' ? 'Reading...' : 'Read'}
-                </button>
-              </div>
-              {file ? (
-                <pre className="max-h-40 overflow-auto rounded-md border bg-muted/20 p-3 text-xs whitespace-pre-wrap">
-                  {file.content}
-                </pre>
-              ) : null}
-            </div>
+                </motion.span>
+              </AnimatePresence>
+            </Button>
           </div>
+
+          {searchResults ? (
+            <div className="mt-2 max-h-40 overflow-auto rounded-md border bg-muted/20 p-2">
+              {searchResults.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No matches.</p>
+              ) : (
+                <ul className="space-y-1 text-xs">
+                  {searchResults.map((result) => (
+                    <li key={`${result.path}-${result.line}-${result.text}`} className="rounded px-2 py-1 hover:bg-muted">
+                      <span className="font-medium">{result.path}:{result.line}</span>{' '}
+                      <span className="text-muted-foreground">{result.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
 
           {toolError ? <p role="alert" className="mt-2 text-xs text-destructive">{toolError}</p> : null}
         </motion.div>
