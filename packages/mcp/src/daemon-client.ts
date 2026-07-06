@@ -2,6 +2,7 @@ import type {
   ApiResult,
   DaemonClientOptions,
   DaemonQueryParams,
+  RelayStatusResponse,
   VaultContextResponse,
   VaultReadResponse,
   WorkspaceListResponse,
@@ -44,4 +45,10 @@ export function getVaultContext(
   return getJson<VaultContextResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/vault/context`, options, {
     maxBytes
   });
+}
+
+export function getRelayStatus(
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<RelayStatusResponse>> {
+  return getJson<RelayStatusResponse>('/relay/status', options);
 }

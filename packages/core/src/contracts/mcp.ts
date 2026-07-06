@@ -66,4 +66,3 @@ export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
 export type McpWorkspaceResourceResponse = WorkspaceStatusResponse & {
   relayStatus?: RelayStatusResponse;
 };
-
