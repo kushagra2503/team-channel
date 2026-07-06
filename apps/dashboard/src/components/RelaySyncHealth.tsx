@@ -37,7 +37,7 @@ export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
   if (!status) {
     return (
       <section aria-label="Relay sync health" className="py-2">
-        <p className="px-3 text-xs text-muted-foreground">Loading relay status…</p>
+        <p className="text-xs text-muted-foreground">Loading relay status…</p>
       </section>
     );
   }
@@ -46,8 +46,8 @@ export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
   const showSyncList = status.configured && status.sync.length > 0;
 
   return (
-    <section aria-label="Relay sync health" className="flex flex-col gap-2 py-2">
-      <div className="flex items-center gap-2 px-3">
+    <section aria-label="Relay sync health" className="flex flex-col py-2">
+      <div className="flex items-center gap-2">
         <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', badge.className)}>
           {badge.label}
         </span>
@@ -61,40 +61,36 @@ export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
       {showSyncList ? (
         <SidebarGroup className="py-1">
           <SidebarGroupLabel>Sync State</SidebarGroupLabel>
-          <div className="flex flex-col gap-1.5 px-2">
+          <div className="flex flex-col">
             {status.sync.map((entry, i) => (
               <motion.div
                 key={entry.workspaceId}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="rounded-md px-2 py-1.5 text-xs"
+                className="flex items-center gap-2 py-1 text-xs"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-muted-foreground">{entry.workspaceId}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground/70">
-                    seq {entry.lastRemoteSeq}
-                  </span>
-                </div>
-                <div className="mt-0.5 flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-muted-foreground/70">
-                    {syncTimeLabel(entry.lastSyncedAt)}
-                  </span>
-                  <span
-                    className={cn(
-                      'text-[11px]',
-                      entry.relayStatus === 'online' && 'text-emerald-600',
-                      entry.relayStatus === 'offline' && 'text-red-500',
-                      entry.relayStatus === 'error' && 'text-red-500',
-                      entry.relayStatus === 'queued' && 'text-amber-600',
-                      !['online', 'offline', 'error', 'queued'].includes(entry.relayStatus) && 'text-muted-foreground/60'
-                    )}
-                  >
-                    {entry.relayStatus}
-                  </span>
-                </div>
+                <span className="truncate text-muted-foreground">{entry.workspaceId}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground/60">
+                  seq {entry.lastRemoteSeq}
+                </span>
+                <span
+                  className={cn(
+                    'shrink-0 text-[11px]',
+                    entry.relayStatus === 'online' && 'text-emerald-600',
+                    entry.relayStatus === 'offline' && 'text-red-500',
+                    entry.relayStatus === 'error' && 'text-red-500',
+                    entry.relayStatus === 'queued' && 'text-amber-600',
+                    !['online', 'offline', 'error', 'queued'].includes(entry.relayStatus) && 'text-muted-foreground/60'
+                  )}
+                >
+                  {entry.relayStatus}
+                </span>
+                <span className="ml-auto shrink-0 text-[11px] text-muted-foreground/50">
+                  {syncTimeLabel(entry.lastSyncedAt)}
+                </span>
                 {entry.lastError ? (
-                  <p className="mt-1 truncate text-[11px] text-destructive">{entry.lastError}</p>
+                  <span className="truncate text-[11px] text-destructive">{entry.lastError}</span>
                 ) : null}
               </motion.div>
             ))}

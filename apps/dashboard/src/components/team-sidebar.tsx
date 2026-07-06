@@ -10,6 +10,7 @@ import { RelaySyncHealth } from './RelaySyncHealth';
 import { EventFeed } from './EventFeed';
 import { CheckpointState } from './CheckpointState';
 import { displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
+import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 
 export type MembersView = 'all' | 'track' | 'relay';
 
@@ -156,7 +157,13 @@ export function TeamSidebar({
           ) : (
             <div className="flex flex-col gap-2">
               <RelaySyncHealth status={relayStatus} error={relayError} />
-              <EventFeed events={events} error={eventsError} />
+              <EventFeed
+                events={events}
+                error={eventsError}
+                members={members}
+                config={{ daemonBaseUrl, repoRoot } as TeambridgeClientConfig}
+                avatarRev={avatarRev}
+              />
               <CheckpointState latestCheckpoint={latestCheckpoint} />
             </div>
           )}
