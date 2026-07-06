@@ -42,6 +42,8 @@ Local state lives in `.teambridge/` at the git root.
 | Doc | Contents |
 |-----|----------|
 | [agent.md](./agent.md) | Vision and mental model |
+| [CLAUDE.md](./CLAUDE.md) | Agent working guide (build, test, conventions) |
+| [PROGRESS.md](./PROGRESS.md) | What's built vs. pending, by phase |
 | [docs/CONCEPTS.md](./docs/CONCEPTS.md) | Projects, tracks, vault |
 | [docs/daemon-api.md](./docs/daemon-api.md) | HTTP API |
 | [docs/dashboard.md](./docs/dashboard.md) | Dashboard setup |
