@@ -47,7 +47,7 @@ export function RelaySyncHealth({ status, error }: RelaySyncHealthProps) {
 
   return (
     <section aria-label="Relay sync health" className="flex flex-col py-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 px-2">
         <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium', badge.className)}>
           {badge.label}
         </span>
