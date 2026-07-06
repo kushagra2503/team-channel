@@ -1,4 +1,4 @@
-import type { Participant, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 
 export const createdAt = '2026-06-22T00:00:00.000Z';
 
@@ -61,6 +61,42 @@ export function makeVaultContext(overrides: Partial<VaultContext> = {}): VaultCo
     truncated: false,
     maxBytes: 24000,
     lastSeq: 2,
+    ...overrides
+  };
+}
+
+export function makeSyncStateEntry(overrides: Partial<SyncStateEntry> = {}): SyncStateEntry {
+  return {
+    workspaceId: 'ws_123',
+    lastRemoteSeq: 5,
+    lastSyncedAt: '2026-07-06T12:00:00.000Z',
+    relayStatus: 'online',
+    lastError: null,
+    ...overrides
+  };
+}
+
+export function makeRelayStatus(overrides: Partial<RelayStatusResponse> = {}): RelayStatusResponse {
+  return {
+    configured: true,
+    loggedIn: true,
+    pending: 0,
+    sync: [makeSyncStateEntry()],
+    ...overrides
+  };
+}
+
+export function makeWorkspaceEvent(overrides: Partial<WorkspaceEvent> = {}): WorkspaceEvent {
+  return {
+    id: 'evt_001',
+    workspaceId: 'ws_123',
+    seq: 1,
+    type: 'publish',
+    actorId: 'user_ronish',
+    deviceId: 'device_local',
+    payload: { text: 'Decision made' },
+    targetFile: 'decisions.md',
+    createdAt: '2026-07-06T12:00:00.000Z',
     ...overrides
   };
 }
