@@ -1,11 +1,9 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Participant, VaultContext, VaultItemAnnotation, VaultSearchResult } from '@teambridge/core';
+import type { Participant, VaultContext, VaultItemAnnotation } from '@teambridge/core';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { IconSearch, IconLoader2 } from '@tabler/icons-react';
+import { IconSearch } from '@tabler/icons-react';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
-import { searchVault } from '@/api/teambridgeClient';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName, prettyParticipantName } from './participantDisplay';
@@ -96,6 +94,25 @@ function hashString(value: string): number {
   return hash;
 }
 
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const ql = q.toLowerCase();
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let idx = lower.indexOf(ql);
+  let key = 0;
+  while (idx !== -1) {
+    if (idx > cursor) parts.push(<span key={key++}>{text.slice(cursor, idx)}</span>);
+    parts.push(<mark key={key++} className="rounded-sm bg-amber-500/20 px-0.5 text-foreground">{text.slice(idx, idx + q.length)}</mark>);
+    cursor = idx + q.length;
+    idx = lower.indexOf(ql, cursor);
+  }
+  if (cursor < text.length) parts.push(<span key={key++}>{text.slice(cursor)}</span>);
+  return <>{parts}</>;
+}
+
 function VaultParticipantAvatar({ participant, config, avatarRev, size = 20 }: {
   participant: Participant; config: TeambridgeClientConfig; avatarRev?: number; size?: number;
 }) {
@@ -147,11 +164,12 @@ const ICON_CHECK = (
 );
 
 
-function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, participants, config, avatarRev, openMenus, onToggleMenu }: {
+function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, participants, config, avatarRev, openMenus, onToggleMenu, highlightQuery }: {
   item: VaultEntry; participant?: Participant; rowState: RowState;
   onColor: (c: string | undefined) => void; onAssign: (slug: string | undefined) => void; onCopy: () => void;
   participants: Participant[]; config: TeambridgeClientConfig; avatarRev?: number;
   openMenus: OpenMenus | null; onToggleMenu: (t: 'color' | 'assign') => void; onCloseAll: () => void;
+  highlightQuery: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -174,7 +192,7 @@ function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, part
       className="-mx-4 flex min-h-[2rem] items-center gap-1.5 px-4 py-1.5 transition-[background-color] duration-150 ease-out hover:bg-muted/60"
       style={rowStyle}
     >
-      <span className="text-sm">{item.text}</span>
+      <span className="text-sm"><HighlightedText text={item.text} query={highlightQuery} /></span>
 
       {participant ? (
         <AuthorChip participant={participant} config={config} avatarRev={avatarRev} />
@@ -347,9 +365,6 @@ export function VaultHighlights({
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [openMenus, setOpenMenus] = useState<OpenMenus | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<VaultSearchResult[] | null>(null);
-  const [toolError, setToolError] = useState<string>();
-  const [toolLoading, setToolLoading] = useState(false);
 
   useEffect(() => {
     setRowStates(persistedStates);
@@ -387,19 +402,16 @@ export function VaultHighlights({
     void navigator.clipboard.writeText(text);
   }, []);
 
-  const runSearch = useCallback(async () => {
-    if (!workspaceId || !searchQuery.trim()) return;
-    setToolLoading(true);
-    setToolError(undefined);
-    try {
-      const response = await searchVault(workspaceId, searchQuery.trim(), config);
-      setSearchResults(response.results);
-    } catch (err) {
-      setToolError(err instanceof Error ? err.message : 'Vault search failed.');
-    } finally {
-      setToolLoading(false);
-    }
-  }, [workspaceId, searchQuery, config]);
+  const filteredSections = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return sections;
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => item.text.toLowerCase().includes(query))
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [sections, searchQuery]);
 
   if (error) return <p role="alert" className="text-xs text-destructive">{error}</p>;
   if (!context) return null;
@@ -418,71 +430,35 @@ export function VaultHighlights({
           transition={columnEnterTransition(columnIndex, 0)}
           className="border-b border-border p-4"
         >
-          <div className="flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border bg-background px-3 py-2">
-              <IconSearch className="size-4 shrink-0 text-muted-foreground" stroke={1.5} />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void runSearch();
-                }}
-                placeholder="Search vault"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-              <Badge variant="outline" className="shrink-0 tabular-nums">seq {context.lastSeq ?? 0}</Badge>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => void runSearch()}
-              disabled={toolLoading || !searchQuery.trim()}
-              aria-label="Search vault"
-            >
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.span
-                  key={toolLoading ? 'loading' : 'idle'}
-                  initial={{ opacity: 0, scale: 0.7 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.7 }}
-                  transition={{ duration: 0.15, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  {toolLoading ? (
-                    <IconLoader2 className="size-4 animate-spin" stroke={1.5} />
-                  ) : (
-                    <IconSearch className="size-4" stroke={1.5} />
-                  )}
-                </motion.span>
-              </AnimatePresence>
-            </Button>
+          <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+            <IconSearch className="size-4 shrink-0 text-muted-foreground" stroke={1.5} />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Filter notes"
+              aria-label="Filter vault notes"
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Clear filter"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            ) : null}
           </div>
-
-          {searchResults ? (
-            <div className="mt-2 max-h-40 overflow-auto rounded-md border bg-muted/20 p-2">
-              {searchResults.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No matches.</p>
-              ) : (
-                <ul className="space-y-1 text-xs">
-                  {searchResults.map((result) => (
-                    <li key={`${result.path}-${result.line}-${result.text}`} className="rounded px-2 py-1 hover:bg-muted">
-                      <span className="font-medium">{result.path}:{result.line}</span>{' '}
-                      <span className="text-muted-foreground">{result.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ) : null}
-
-          {toolError ? <p role="alert" className="mt-2 text-xs text-destructive">{toolError}</p> : null}
         </motion.div>
       ) : null}
 
-      {sections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No published notes yet.</p>
+      {filteredSections.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{searchQuery.trim() ? 'No matching notes.' : 'No published notes yet.'}</p>
       ) : (
-        sections.map((section, i) => (
+        filteredSections.map((section, i) => (
           <motion.article
             key={staggerKey ? `${staggerKey}-${section.path}` : section.path}
             initial={HIDE} animate={ENTER}
@@ -517,6 +493,7 @@ export function VaultHighlights({
                       return { ...base, [type]: !base[type] };
                     })}
                     onCloseAll={() => setOpenMenus(null)}
+                    highlightQuery={searchQuery}
                   />
                 );
               })}
