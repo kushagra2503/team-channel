@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { EventFeed } from './EventFeed';
 import { makeWorkspaceEvent } from '@/test/factories';
-import type { ProjectMember } from '@teambridge/core';
+import type { Participant } from '@teambridge/core';
 
-const members: ProjectMember[] = [
-  { id: 'user_ronish', projectId: 'p1', displayName: 'ronish', status: 'active', lastSeenAt: '2026-07-06T12:00:00.000Z' },
-  { id: 'user_nihal', projectId: 'p1', displayName: 'nihal', status: 'active', lastSeenAt: '2026-07-06T12:00:00.000Z' }
+const participants: Participant[] = [
+  { id: 'user_ronish', displayName: 'ronish', workspaceId: 'ws_123', branch: 'main', agent: 'cursor', status: 'active', lastSeenAt: '2026-07-06T12:00:00.000Z' },
+  { id: 'user_nihal', displayName: 'nihal', workspaceId: 'ws_123', branch: 'main', agent: 'cursor', status: 'active', lastSeenAt: '2026-07-06T12:00:00.000Z' }
 ];
 
 describe('EventFeed', () => {
@@ -16,7 +16,7 @@ describe('EventFeed', () => {
       makeWorkspaceEvent({ id: 'evt_2', seq: 5 }),
       makeWorkspaceEvent({ id: 'evt_3', seq: 1 })
     ];
-    render(<EventFeed events={events} members={members} />);
+    render(<EventFeed events={events} participants={participants} />);
     const items = screen.getAllByText(/Ronish/);
     expect(items).toHaveLength(3);
   });
@@ -32,13 +32,13 @@ describe('EventFeed', () => {
   });
 
   it('shows event type badge with label for publish events', () => {
-    render(<EventFeed events={[makeWorkspaceEvent({ type: 'publish' })]} members={members} />);
+    render(<EventFeed events={[makeWorkspaceEvent({ type: 'publish' })]} participants={participants} />);
     expect(screen.getByText('publish')).toBeTruthy();
   });
 
   it('shows target file and actor first name for publish events', () => {
     render(
-      <EventFeed events={[makeWorkspaceEvent({ targetFile: 'decisions.md', actorId: 'user_nihal' })]} members={members} />
+      <EventFeed events={[makeWorkspaceEvent({ targetFile: 'decisions.md', actorId: 'user_nihal' })]} participants={participants} />
     );
     expect(screen.getByText('decisions.md')).toBeTruthy();
     expect(screen.getByText('Nihal')).toBeTruthy();
@@ -48,7 +48,7 @@ describe('EventFeed', () => {
     const events = Array.from({ length: 12 }, (_, i) =>
       makeWorkspaceEvent({ id: `evt_${i}`, seq: i + 1 })
     );
-    render(<EventFeed events={events} members={members} />);
+    render(<EventFeed events={events} participants={participants} />);
     const items = screen.getAllByText(/Ronish/);
     expect(items).toHaveLength(8);
     expect(screen.getByText(/Show all/)).toBeTruthy();
@@ -59,7 +59,7 @@ describe('EventFeed', () => {
     const events = Array.from({ length: 12 }, (_, i) =>
       makeWorkspaceEvent({ id: `evt_${i}`, seq: i + 1 })
     );
-    render(<EventFeed events={events} members={members} />);
+    render(<EventFeed events={events} participants={participants} />);
     expect(screen.getAllByText(/Ronish/)).toHaveLength(8);
     fireEvent.click(screen.getByText(/Show all/));
     expect(screen.getAllByText(/Ronish/)).toHaveLength(12);
@@ -72,7 +72,7 @@ describe('EventFeed', () => {
           makeWorkspaceEvent({ id: 'evt_c', seq: 2, type: 'conflict_detected' }),
           makeWorkspaceEvent({ id: 'evt_k', seq: 1, type: 'checkpoint_created' })
         ]}
-        members={members}
+        participants={participants}
       />
     );
     expect(screen.getByText('conflict')).toBeTruthy();

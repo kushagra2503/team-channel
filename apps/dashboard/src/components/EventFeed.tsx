@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import type { ProjectMember, WorkspaceEvent, WorkspaceEventType } from '@teambridge/core';
+import type { Participant, WorkspaceEvent, WorkspaceEventType } from '@teambridge/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/relative-time';
@@ -12,7 +12,7 @@ import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 export type EventFeedProps = {
   events?: WorkspaceEvent[];
   error?: string;
-  members?: ProjectMember[];
+  participants?: Participant[];
   config?: TeambridgeClientConfig;
   avatarRev?: number;
   maxItems?: number;
@@ -32,7 +32,7 @@ function getEventTypeStyle(type: WorkspaceEventType): { label: string; className
   return EVENT_TYPE_STYLES[type] ?? { label: type, className: 'bg-muted text-muted-foreground' };
 }
 
-export function EventFeed({ events, error, members = [], config, avatarRev, maxItems = 8 }: EventFeedProps) {
+export function EventFeed({ events, error, participants = [], config, avatarRev, maxItems = 8 }: EventFeedProps) {
   const [showAll, setShowAll] = useState(false);
 
   if (error) {
@@ -62,8 +62,8 @@ export function EventFeed({ events, error, members = [], config, avatarRev, maxI
         <div className="flex flex-col">
           {visible.map((event, i) => {
             const typeStyle = getEventTypeStyle(event.type);
-            const member = members.find((m) => m.id === event.actorId);
-            const displayName = member?.displayName ?? event.actorId.replace(/^user_/, '');
+            const participant = participants.find((p) => p.id === event.actorId);
+            const displayName = participant?.displayName ?? event.actorId.replace(/^user_/, '');
             const avatarUrl = config ? avatarUrlForDisplayName(displayName, config, avatarRev) : undefined;
 
             return (

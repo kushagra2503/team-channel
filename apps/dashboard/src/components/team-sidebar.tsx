@@ -160,7 +160,7 @@ export function TeamSidebar({
               <EventFeed
                 events={events}
                 error={eventsError}
-                members={members}
+                participants={trackStatus?.participants}
                 config={{ daemonBaseUrl, repoRoot } as TeambridgeClientConfig}
                 avatarRev={avatarRev}
               />
