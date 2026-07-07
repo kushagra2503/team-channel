@@ -22,6 +22,11 @@ Implemented:
 - Remote session discovery through `teambridge sessions` / `teambridge list`.
 - `teambridge join <session>` can import a remote workspace and then create the local Git worktree.
 - Dashboard calls daemon `/relay/sessions` and merges remote relay sessions with local sessions.
+- Supabase Realtime websocket subscription in the daemon, with polling/manual sync kept as fallback.
+- Checkpoint upload/download using `tc_workspace_vault_checkpoints` and `teambridge-checkpoints`.
+- Checkpoint lease acquisition/release/failover using `tc_checkpoint_leases`.
+- Late-joiner bootstrap from checkpoint + replay.
+- Presence heartbeat through `tc_presence`, reflected back into local participant status.
 
 Verified:
 
@@ -30,19 +35,17 @@ Verified:
 - `tc_append_event` assigns `seq = 1, 2...` and dedupes duplicate `dedupeKey` values.
 - Live CLI/daemon relay smoke passed: login, start, sessions/list, sync, status relay.
 - Live `teambridge publish` reached Supabase with canonical `seq = 1` and the expected payload.
+- Live two-user verification with `nihal@test.com` and `kush@test.com` passed: sessions, join, checkpoint bootstrap, realtime receive, presence, and remote events.
 - Local verification still passes: `pnpm build`, `pnpm test`, `pnpm test:integration`, dashboard test/build.
 
 Still pending:
 
-- Supabase Realtime websocket subscription client in the daemon. Realtime publication exists, but polling/manual sync is currently the correctness path.
-- Checkpoint upload/download implementation and checkpoint lease/failover behavior.
-- Late joiner bootstrap from checkpoint + replay. Current join imports remote workspace and replays events; checkpoint acceleration is pending.
 - Conflict detection/resolution primitives beyond schema/event type support.
-- Dashboard UI for sync health, presence, checkpoints, conflicts, and richer remote-session state.
+- Conflict-specific dashboard/CLI UX.
 
 ## Read This First
 
-This plan started as the Phase 2 backend blueprint. The migration has now been applied and the relay MVP has been verified live against Supabase. Keep using this document for the remaining Phase 2 work, especially realtime websocket subscriptions, checkpoints, late-join bootstrap, and conflicts.
+This plan started as the Phase 2 backend blueprint. The migration has now been applied and the relay/checkpoint/realtime path has been verified live against Supabase. Keep using this document for the remaining Phase 2 work, especially conflict detection/resolution.
 
 Current Phase 1 command surface is:
 
@@ -143,6 +146,10 @@ SUPABASE_REST_URL=
 SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_JWT_SECRET=
+TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS=5000
+TEAMBRIDGE_RELAY_PRESENCE_INTERVAL_MS=15000
+TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS=50
+TEAMBRIDGE_CHECKPOINT_LEASE_MS=60000
 ```
 
 For the final app, prefer publishable/anon key for user auth and keep `SUPABASE_SERVICE_ROLE_KEY` restricted to trusted local daemon or server-side relay operations only.
@@ -980,7 +987,7 @@ CLI should still call daemon only. Dashboard should still call daemon only.
 
 ## Implementation Order
 
-### Nihal Step 1: Supabase Setup
+### Nihal Step 1: Supabase Setup — done
 
 1. Create Supabase project.
 2. Add tables/indexes from this plan.
@@ -990,7 +997,7 @@ CLI should still call daemon only. Dashboard should still call daemon only.
 6. Enable Realtime publication on relay tables.
 7. Run Supabase advisors and fix warnings.
 
-### Nihal Step 2: Auth and Relay Client
+### Nihal Step 2: Auth and Relay Client — done
 
 1. Add daemon relay config fields.
 2. Add login/session storage.
@@ -998,14 +1005,14 @@ CLI should still call daemon only. Dashboard should still call daemon only.
 4. Add device registration.
 5. Add profile upsert.
 
-### Nihal Step 3: Canonical Event Insert
+### Nihal Step 3: Canonical Event Insert — done
 
 1. Implement `append-event` relay operation.
 2. Ensure atomic `seq` assignment.
 3. Ensure dedupe works.
 4. Add tests for concurrent inserts and retry dedupe.
 
-### Nihal Step 4: Sync Loop
+### Nihal Step 4: Sync Loop — done
 
 1. Add local `pending_remote_events`.
 2. Add upload retry loop.
@@ -1013,7 +1020,7 @@ CLI should still call daemon only. Dashboard should still call daemon only.
 4. Add Realtime subscription.
 5. Rebuild local vault from canonical events when needed.
 
-### Nihal Step 5: Checkpoints
+### Nihal Step 5: Checkpoints — done
 
 1. Add checkpoint lease acquisition.
 2. Add checkpoint serialization and hash.
@@ -1021,7 +1028,7 @@ CLI should still call daemon only. Dashboard should still call daemon only.
 4. Insert checkpoint row.
 5. Implement download + replay bootstrap.
 
-### Nihal Step 6: Conflicts
+### Nihal Step 6: Conflicts — pending
 
 1. Add conflict table access through daemon.
 2. Add basic detector hooks around replay/materialization/worktree creation.
@@ -1058,8 +1065,8 @@ Pass when:
 
 ## Open Decisions Before Implementation
 
-1. Whether Phase 2 dev stores Supabase tokens in local SQLite or OS keychain. SQLite is faster for MVP; keychain is safer.
-2. Whether canonical append is implemented as a Supabase Edge Function or a Postgres RPC. Edge Function is recommended because it can safely run privileged transaction logic without broad client insert policies.
+1. Whether Phase 2 dev stores Supabase tokens in local SQLite or OS keychain. SQLite is implemented for MVP; keychain remains safer later.
+2. Canonical append is implemented as the Postgres RPC `tc_append_event`.
 3. Whether projects require explicit invitations in Phase 2, or whether any authenticated user with a workspace invite/session name can join. For MVP, explicit project/workspace membership is safer.
 4. How much pending offline content should be shown in the vault before it receives canonical `seq`. Recommended: show it locally with pending status, then rebuild after sync.
 

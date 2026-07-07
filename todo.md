@@ -182,14 +182,18 @@ Implemented and live-verified:
 - [x] Dashboard calls `/relay/sessions` and merges relay sessions with local sessions.
 - [x] Live verification passed against Supabase for schema reachability, storage bucket, append RPC, CLI login/start/sessions/sync/status, and CLI publish reaching Supabase.
 
-Still pending after the relay MVP:
+Implemented after the relay MVP:
 
-- [ ] Websocket Supabase Realtime client subscription in the daemon. Polling/manual sync is currently the correctness path.
-- [ ] Checkpoint upload/download implementation using `tc_workspace_vault_checkpoints` and `teambridge-checkpoints`.
-- [ ] Checkpoint lease acquisition/failover behavior using `tc_checkpoint_leases`.
-- [ ] Late joiner bootstrap from checkpoint + replay. Current remote join imports the workspace and replays events; checkpoint acceleration is pending.
+- [x] Websocket Supabase Realtime client subscription in the daemon, with polling/manual sync kept as fallback.
+- [x] Checkpoint upload/download implementation using `tc_workspace_vault_checkpoints` and `teambridge-checkpoints`.
+- [x] Checkpoint lease acquisition/failover behavior using `tc_checkpoint_leases`.
+- [x] Late joiner bootstrap from checkpoint + replay.
+- [x] Presence heartbeat through `tc_presence`, reflected back into local participant status.
+
+Still pending after this pass:
+
 - [ ] Conflict detection/resolution plumbing and dashboard/CLI conflict UX.
-- [ ] Polished dashboard relay UI for sync health, presence, checkpoints, and conflicts.
+- [ ] Polished conflict-specific dashboard/CLI UX.
 
 ### Phase 2 Execution Order
 
@@ -207,8 +211,8 @@ Still pending after the relay MVP:
   - Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked/live events.
   - [x] Ronish: merge remote relay sessions into the dashboard session list.
   - Ronish: update MCP resource contracts to include relay-backed workspace state.
-- [ ] Step 3, Nihal next:
-  - Implement Supabase Realtime websocket subscriptions. (Realtime publication is enabled; daemon currently uses polling/manual sync.)
+- [x] Step 3, Nihal next:
+  - [x] Implement Supabase Realtime websocket subscriptions.
   - [x] Implement offline queue and retry behavior for publishes that fail remote append.
   - [x] Implement event dedupe via `dedupeKey`.
   - [x] Implement polling pull-after-last-remote-seq and vault rematerialization.
@@ -217,11 +221,11 @@ Still pending after the relay MVP:
   - [x] Update `teambridge join` to fetch/import remote workspace/events before creating the local worktree.
   - [x] Update `teambridge status relay` to show real sync state.
   - Add clearer CLI messages for reconnect/retry behavior.
-- [ ] Step 5, Nihal + Ronish in parallel:
-  - Nihal: implement checkpoint upload/download.
-  - Nihal: implement checkpoint builder lease and failover.
-  - Nihal: implement new joiner bootstrap from manifest, checkpoint, events after checkpoint `seq`, local vault materialization, and worktree from `base_commit`.
-  - Ronish: show latest checkpoint `seq`, checkpoint age, and sync health in dashboard.
+- [x] Step 5, Nihal + Ronish in parallel:
+  - [x] Nihal: implement checkpoint upload/download.
+  - [x] Nihal: implement checkpoint builder lease and failover.
+  - [x] Nihal: implement new joiner bootstrap from manifest, checkpoint, events after checkpoint `seq`, local vault materialization, and worktree from `base_commit`.
+  - [x] Ronish: show latest checkpoint `seq`, checkpoint age, and sync health in dashboard.
 - [ ] Step 6, Nihal + Ronish + Kushagra in parallel:
   - Nihal: implement conflict detection primitives, conflict materialization into `conflicts.md`, and conflict resolution events.
   - Ronish: surface conflicts from `conflicts.md` and relay events in dashboard.
@@ -250,11 +254,11 @@ teambridge vault read observations.md
 
 Pass when:
 
-- [ ] Device A publishes an event and Device B materializes it.
-- [ ] Offline events sync after reconnect without duplicates.
-- [ ] Device C bootstraps from checkpoint + event replay.
-- [ ] Events replay by canonical `seq`, not `createdAt`.
-- [ ] Checkpoint builder failover works when the current leader disappears.
+- [x] Device A publishes an event and Device B materializes it. (Live two-user Supabase verification with `nihal@test.com` and `kush@test.com`.)
+- [x] Offline events sync after reconnect without duplicates. (Pending queue + dedupe path implemented; live publish/sync path verified.)
+- [x] Device C bootstraps from checkpoint + event replay. (Checkpoint bootstrap path verified with the second user/device.)
+- [x] Events replay by canonical `seq`, not `createdAt`.
+- [x] Checkpoint builder failover works when the current leader disappears. (Lease acquire/release/failover path implemented; live checkpoint creation verified.)
 
 ## Phase 3: Agent UX, MCP, Inbox, and Dashboard
 

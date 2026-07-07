@@ -5,6 +5,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { hostname } from 'node:os';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -37,6 +38,7 @@ import type {
   TeambridgeConfig,
   TeambridgeErrorCode,
   TrackListResponse,
+  VaultCheckpoint,
   VaultAnnotateResponseBody,
   VaultContextResponse,
   VaultReadResponse,
@@ -83,6 +85,10 @@ import {
 
 const DEFAULT_PORT = 9473;
 const RELAY_SYNC_INTERVAL_MS = Number(process.env.TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS ?? 5000);
+const RELAY_PRESENCE_INTERVAL_MS = Number(process.env.TEAMBRIDGE_RELAY_PRESENCE_INTERVAL_MS ?? 15000);
+const CHECKPOINT_INTERVAL_EVENTS = Number(process.env.TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS ?? 50);
+const CHECKPOINT_LEASE_MS = Number(process.env.TEAMBRIDGE_CHECKPOINT_LEASE_MS ?? 60000);
+const CHECKPOINT_BUCKET = 'teambridge-checkpoints';
 
 const StartRequestBodySchema = StartWorkspaceRequestSchema.extend({
   repoRoot: z.string().min(1).optional()
@@ -746,6 +752,18 @@ function rowToSyncState(row: Record<string, unknown>): SyncStateEntry {
   };
 }
 
+function remoteCheckpointToVaultCheckpoint(row: RemoteCheckpointRow): VaultCheckpoint {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    seq: Number(row.seq),
+    storagePath: row.storage_path,
+    hash: row.hash,
+    createdByDeviceId: row.created_by_device_id,
+    createdAt: row.created_at
+  };
+}
+
 async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
 
@@ -1277,6 +1295,39 @@ type RemoteEventRow = {
   created_at: string;
 };
 
+type RemoteCheckpointRow = {
+  id: string;
+  workspace_id: string;
+  seq: number;
+  storage_path: string;
+  hash: string;
+  byte_size: number;
+  created_by_device_id: string;
+  created_at: string;
+};
+
+type CheckpointSnapshot = {
+  schemaVersion: 1;
+  workspaceId: string;
+  seq: number;
+  files: Record<string, string>;
+  createdAt: string;
+};
+
+type RealtimeMessage = {
+  event?: string;
+  topic?: string;
+  payload?: {
+    status?: string;
+    response?: unknown;
+    data?: {
+      record?: RemoteEventRow;
+    };
+  };
+  ref?: string;
+  join_ref?: string;
+};
+
 function relayConfig(): RelayConfig | null {
   const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
   const restUrl = (process.env.SUPABASE_REST_URL ?? (supabaseUrl ? `${supabaseUrl}/rest/v1` : '')).replace(/\/$/, '');
@@ -1331,6 +1382,42 @@ async function supabaseRpc<T>(config: RelayConfig, name: string, body: unknown):
     method: 'POST',
     body: JSON.stringify(body)
   });
+}
+
+function storageObjectUrl(config: RelayConfig, bucket: string, path: string): string {
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  return `${config.supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodedPath}`;
+}
+
+async function uploadStorageObject(config: RelayConfig, bucket: string, path: string, body: Buffer, contentType: string): Promise<void> {
+  const response = await fetch(storageObjectUrl(config, bucket, path), {
+    method: 'PUT',
+    headers: {
+      apikey: config.serviceRoleKey,
+      authorization: `Bearer ${config.serviceRoleKey}`,
+      'content-type': contentType,
+      'x-upsert': 'true'
+    },
+    body: body as unknown as BodyInit
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Supabase storage upload failed (${response.status}): ${text}`);
+  }
+}
+
+async function downloadStorageObject(config: RelayConfig, bucket: string, path: string): Promise<Buffer> {
+  const response = await fetch(storageObjectUrl(config, bucket, path), {
+    headers: {
+      apikey: config.serviceRoleKey,
+      authorization: `Bearer ${config.serviceRoleKey}`
+    }
+  });
+  const bytes = await response.arrayBuffer();
+  if (!response.ok) {
+    throw new Error(`Supabase storage download failed (${response.status}): ${Buffer.from(bytes).toString('utf8')}`);
+  }
+  return Buffer.from(bytes);
 }
 
 async function supabaseAuthPassword(
@@ -1631,6 +1718,87 @@ async function maybeMirrorWorkspaceToRelay(repoRoot: string, workspace: Workspac
   }
 }
 
+async function syncRemoteParticipants(repoRoot: string, workspaceId: string): Promise<void> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return;
+  const rows = await supabaseRest<RemoteParticipantRow[]>(config, 'tc_participants', {}, {
+    workspace_id: `eq.${workspaceId}`,
+    order: 'created_at.asc'
+  });
+  if (rows.length === 0) return;
+
+  const dbPath = initializeStateDb(repoRoot);
+  const statements = rows.map((participant) => `
+    insert into participants (
+      id, workspace_id, display_name, branch, agent, status, last_seen_at
+    ) values (
+      ${sqlValue(participant.id)},
+      ${sqlValue(participant.workspace_id)},
+      ${sqlValue(participant.display_name)},
+      ${sqlValue(participant.branch)},
+      ${sqlValue(participant.agent ?? null)},
+      ${sqlValue(participant.status === 'offline' || participant.status === 'idle' ? participant.status : 'active')},
+      ${sqlValue(participant.last_seen_at)}
+    )
+    on conflict(id) do update set
+      display_name = excluded.display_name,
+      branch = excluded.branch,
+      agent = excluded.agent,
+      status = excluded.status,
+      last_seen_at = excluded.last_seen_at;
+  `);
+  runSql(dbPath, statements.join('\n'));
+}
+
+async function syncPresence(repoRoot: string): Promise<void> {
+  const config = relayConfig();
+  const identity = getRemoteIdentity(repoRoot);
+  if (!config || !identity) return;
+
+  const deviceId = relayDeviceId(repoRoot, identity.userId);
+  const dbPath = initializeStateDb(repoRoot);
+  const now = new Date().toISOString();
+  const localParticipants = querySql<Record<string, unknown>>(
+    dbPath,
+    'select p.id, p.workspace_id, p.branch from participants p order by p.workspace_id asc'
+  );
+
+  for (const row of localParticipants) {
+    await upsertSupabaseRows(config, 'tc_presence', [{
+      workspace_id: String(row.workspace_id),
+      participant_id: String(row.id),
+      device_id: deviceId,
+      status: 'active',
+      current_branch: String(row.branch),
+      current_worktree_path_hash: getRepoRootHash(repoRoot),
+      last_seen_at: now
+    }], 'workspace_id,participant_id,device_id').catch(() => undefined);
+  }
+
+  for (const workspace of listWorkspaces(repoRoot)) {
+    await syncRemoteParticipants(repoRoot, workspace.id).catch(() => undefined);
+    const presence = await supabaseRest<Array<{ participant_id: string; status: string; last_seen_at: string }>>(
+      config,
+      'tc_presence',
+      {},
+      { workspace_id: `eq.${workspace.id}` }
+    ).catch(() => []);
+    for (const entry of presence) {
+      const seenAgoMs = Date.now() - Date.parse(entry.last_seen_at);
+      const status = seenAgoMs > RELAY_PRESENCE_INTERVAL_MS * 3
+        ? 'offline'
+        : (entry.status === 'idle' || entry.status === 'offline' ? entry.status : 'active');
+      runSql(dbPath, `
+        update participants
+        set status = ${sqlValue(status)},
+            last_seen_at = ${sqlValue(entry.last_seen_at)}
+        where id = ${sqlValue(entry.participant_id)}
+          and workspace_id = ${sqlValue(workspace.id)};
+      `);
+    }
+  }
+}
+
 function setRemoteSyncState(repoRoot: string, workspaceId: string, patch: { lastSeq?: number; status?: string; error?: string | null }): void {
   const dbPath = initializeStateDb(repoRoot);
   const existing = querySql<{ last_remote_seq?: number }>(
@@ -1764,6 +1932,7 @@ async function pullRemoteEvents(repoRoot: string): Promise<number> {
   const dbPath = initializeStateDb(repoRoot);
   let pulled = 0;
   for (const workspace of listWorkspaces(repoRoot)) {
+    await syncRemoteParticipants(repoRoot, workspace.id).catch(() => undefined);
     const [state] = querySql<{ last_remote_seq?: number }>(
       dbPath,
       `select last_remote_seq from remote_sync_state where workspace_id = ${sqlValue(workspace.id)} limit 1`
@@ -1792,7 +1961,116 @@ async function pullRemoteEvents(repoRoot: string): Promise<number> {
 async function syncRelay(repoRoot: string): Promise<{ pushed: number; pulled: number }> {
   const pushed = await pushPendingRemoteEvents(repoRoot);
   const pulled = await pullRemoteEvents(repoRoot);
+  for (const workspace of listWorkspaces(repoRoot)) {
+    await maybeCreateRemoteCheckpoint(repoRoot, workspace).catch((error) => {
+      setRemoteSyncState(repoRoot, workspace.id, {
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  }
   return { pushed, pulled };
+}
+
+function realtimeMessageFromRaw(raw: unknown): RealtimeMessage | null {
+  if (Array.isArray(raw)) {
+    const [joinRef, ref, topic, event, payload] = raw;
+    return {
+      join_ref: joinRef === null ? undefined : String(joinRef),
+      ref: ref === null ? undefined : String(ref),
+      topic: topic === null ? undefined : String(topic),
+      event: event === null ? undefined : String(event),
+      payload: payload as RealtimeMessage['payload']
+    };
+  }
+  if (raw && typeof raw === 'object') {
+    return raw as RealtimeMessage;
+  }
+  return null;
+}
+
+async function applyRealtimeEventToKnownRepos(state: AppState, row: RemoteEventRow): Promise<void> {
+  const repos = [state.defaultRepoRoot, ...listKnownRepos(state.defaultRepoRoot).map((repo) => repo.repoRoot)];
+  for (const repoRoot of [...new Set(repos)]) {
+    if (!getRemoteIdentity(repoRoot)) continue;
+    const workspace = getWorkspaceByIdentifier(repoRoot, row.workspace_id);
+    if (!workspace) continue;
+    await syncRemoteParticipants(repoRoot, workspace.id).catch(() => undefined);
+    await applyCanonicalRemoteEvent(repoRoot, workspace, remoteEventToWorkspaceEvent(row));
+  }
+}
+
+function startRealtimeEventSubscriber(state: AppState): void {
+  const config = relayConfig();
+  if (!config || typeof WebSocket === 'undefined') return;
+
+  let socket: WebSocket | undefined;
+  let heartbeat: NodeJS.Timeout | undefined;
+  let reconnect: NodeJS.Timeout | undefined;
+  let ref = 1;
+  const topic = 'realtime:teambridge-events';
+
+  const nextRef = () => String(ref++);
+  const send = (event: string, payload: unknown, joinRef?: string, messageTopic = topic) => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    socket.send(JSON.stringify([joinRef ?? null, nextRef(), messageTopic, event, payload]));
+  };
+
+  const connect = () => {
+    const wsUrl = `${config.supabaseUrl.replace(/^http/, 'ws')}/realtime/v1/websocket?apikey=${encodeURIComponent(config.serviceRoleKey)}&vsn=2.0.0`;
+    socket = new WebSocket(wsUrl);
+    const joinRef = nextRef();
+
+    socket.addEventListener('open', () => {
+      send('phx_join', {
+        config: {
+          broadcast: { self: false, ack: false },
+          presence: { enabled: false },
+          postgres_changes: [
+            { event: 'INSERT', schema: 'public', table: 'tc_workspace_events' }
+          ],
+          private: false
+        },
+        access_token: config.serviceRoleKey
+      }, joinRef);
+      heartbeat = setInterval(() => {
+        send('heartbeat', {}, undefined, 'phoenix');
+      }, 25000);
+    });
+
+    socket.addEventListener('message', (event) => {
+      void (async () => {
+        const parsed = realtimeMessageFromRaw(JSON.parse(String(event.data)));
+        if (!parsed) return;
+        if (parsed.event === 'postgres_changes') {
+          const record = parsed.payload?.data?.record;
+          if (record) {
+            await applyRealtimeEventToKnownRepos(state, record);
+          }
+        } else if (parsed.event === 'system' && parsed.payload?.status === 'error') {
+          console.error(`[teambridge] realtime system error: ${JSON.stringify(parsed.payload)}`);
+        } else if (parsed.event === 'phx_reply' && parsed.payload?.status === 'error') {
+          console.error(`[teambridge] realtime join error: ${JSON.stringify(parsed.payload)}`);
+        }
+      })().catch((error) => {
+        console.error(`[teambridge] realtime event apply failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    });
+
+    const scheduleReconnect = () => {
+      if (heartbeat) clearInterval(heartbeat);
+      if (reconnect) return;
+      reconnect = setTimeout(() => {
+        reconnect = undefined;
+        connect();
+      }, 5000);
+    };
+
+    socket.addEventListener('close', scheduleReconnect);
+    socket.addEventListener('error', scheduleReconnect);
+  };
+
+  connect();
 }
 
 function startRelayPolling(state: AppState): void {
@@ -1805,6 +2083,7 @@ function startRelayPolling(state: AppState): void {
       const repos = [state.defaultRepoRoot, ...listKnownRepos(state.defaultRepoRoot).map((repo) => repo.repoRoot)];
       for (const repoRoot of [...new Set(repos)]) {
         if (getRemoteIdentity(repoRoot)) {
+          await syncPresence(repoRoot);
           await syncRelay(repoRoot);
         }
       }
@@ -1875,7 +2154,12 @@ async function importRelayWorkspace(repoRoot: string, sessionName: string): Prom
     values (${sqlValue(workspace.id)}, 0);
   `);
 
+  await syncRemoteParticipants(repoRoot, workspace.id).catch(() => undefined);
   await writeWorkspaceManifest(repoRoot, workspace);
+  const latestCheckpoint = await getLatestRemoteCheckpoint(repoRoot, workspace.id).catch(() => undefined);
+  if (latestCheckpoint) {
+    await materializeCheckpointSnapshot(repoRoot, workspace, latestCheckpoint);
+  }
   await pullRemoteEvents(repoRoot);
   return getWorkspaceByIdentifier(repoRoot, workspace.id) ?? workspace;
 }
@@ -1943,6 +2227,164 @@ function getWorkspacePaths(repoRoot: string, workspace: Workspace): { workspaceD
     eventsPath: join(workspaceDir, 'events.jsonl'),
     vaultDir: join(workspaceDir, 'vault')
   };
+}
+
+async function getLatestRemoteCheckpoint(repoRoot: string, workspaceId: string): Promise<VaultCheckpoint | undefined> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return undefined;
+  const rows = await supabaseRest<RemoteCheckpointRow[]>(config, 'tc_workspace_vault_checkpoints', {}, {
+    workspace_id: `eq.${workspaceId}`,
+    order: 'seq.desc',
+    limit: '1'
+  });
+  return rows[0] ? remoteCheckpointToVaultCheckpoint(rows[0]) : undefined;
+}
+
+async function acquireCheckpointLease(repoRoot: string, workspaceId: string, deviceId: string): Promise<boolean> {
+  const config = requireRelayConfig();
+  requireRemoteIdentity(repoRoot);
+  const now = Date.now();
+  const leaseExpiresAt = new Date(now + CHECKPOINT_LEASE_MS).toISOString();
+
+  const existing = await supabaseRest<Array<{ workspace_id: string; leader_device_id: string; lease_expires_at: string }>>(
+    config,
+    'tc_checkpoint_leases',
+    {},
+    { workspace_id: `eq.${workspaceId}`, limit: '1' }
+  );
+
+  if (existing.length === 0) {
+    try {
+      await upsertSupabaseRows(config, 'tc_checkpoint_leases', [{
+        workspace_id: workspaceId,
+        leader_device_id: deviceId,
+        lease_expires_at: leaseExpiresAt,
+        updated_at: new Date().toISOString()
+      }], 'workspace_id');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const current = existing[0];
+  if (current.leader_device_id !== deviceId && Date.parse(current.lease_expires_at) > now) {
+    return false;
+  }
+
+  await supabaseRest(config, 'tc_checkpoint_leases', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      leader_device_id: deviceId,
+      lease_expires_at: leaseExpiresAt,
+      updated_at: new Date().toISOString()
+    })
+  }, { workspace_id: `eq.${workspaceId}` });
+  return true;
+}
+
+async function releaseCheckpointLease(repoRoot: string, workspaceId: string, deviceId: string): Promise<void> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return;
+  await supabaseRest(config, 'tc_checkpoint_leases', {
+    method: 'DELETE'
+  }, {
+    workspace_id: `eq.${workspaceId}`,
+    leader_device_id: `eq.${deviceId}`
+  }).catch(() => undefined);
+}
+
+async function createRemoteCheckpoint(repoRoot: string, workspace: Workspace): Promise<VaultCheckpoint> {
+  const profile = await readLocalUserProfile(repoRoot);
+  const { config, deviceId } = await ensureRelayIdentity(repoRoot, profile);
+  const leaseAcquired = await acquireCheckpointLease(repoRoot, workspace.id, deviceId);
+  if (!leaseAcquired) {
+    throw new Error(`Checkpoint lease is held by another device for workspace ${workspace.id}`);
+  }
+
+  try {
+    const seq = getLastSeq(repoRoot, workspace.id);
+    if (seq <= 0) {
+      throw new Error('Cannot create a checkpoint before any canonical events exist.');
+    }
+
+    const { vaultDir } = getWorkspacePaths(repoRoot, workspace);
+    const files: Record<string, string> = {};
+    for (const file of PHASE_ONE_VAULT_FILES) {
+      files[file] = await readFile(join(vaultDir, file), 'utf8').catch(() => '');
+    }
+
+    const snapshot: CheckpointSnapshot = {
+      schemaVersion: 1,
+      workspaceId: workspace.id,
+      seq,
+      files,
+      createdAt: new Date().toISOString()
+    };
+    const json = JSON.stringify(snapshot);
+    const compressed = gzipSync(Buffer.from(json, 'utf8'));
+    const hash = createHash('sha256').update(json).digest('hex');
+    const checkpointId = `chk_${randomUUID()}`;
+    const storagePath = `${workspace.id}/vault-${seq}-${checkpointId}.json.gz`;
+
+    await uploadStorageObject(config, CHECKPOINT_BUCKET, storagePath, compressed, 'application/gzip');
+    const rows = await upsertSupabaseRows<RemoteCheckpointRow>(config, 'tc_workspace_vault_checkpoints', [{
+      id: checkpointId,
+      workspace_id: workspace.id,
+      seq,
+      storage_path: storagePath,
+      hash,
+      byte_size: compressed.byteLength,
+      created_by_device_id: deviceId
+    }], 'workspace_id,seq');
+    return remoteCheckpointToVaultCheckpoint(rows[0]);
+  } finally {
+    await releaseCheckpointLease(repoRoot, workspace.id, deviceId);
+  }
+}
+
+async function downloadCheckpointSnapshot(repoRoot: string, checkpoint: VaultCheckpoint): Promise<CheckpointSnapshot> {
+  const config = requireRelayConfig();
+  requireRemoteIdentity(repoRoot);
+  const compressed = await downloadStorageObject(config, CHECKPOINT_BUCKET, checkpoint.storagePath);
+  const json = gunzipSync(compressed).toString('utf8');
+  const hash = createHash('sha256').update(json).digest('hex');
+  if (hash !== checkpoint.hash) {
+    throw new Error(`Checkpoint hash mismatch for ${checkpoint.id}`);
+  }
+  return JSON.parse(json) as CheckpointSnapshot;
+}
+
+async function materializeCheckpointSnapshot(repoRoot: string, workspace: Workspace, checkpoint: VaultCheckpoint): Promise<void> {
+  const snapshot = await downloadCheckpointSnapshot(repoRoot, checkpoint);
+  if (snapshot.workspaceId !== workspace.id) {
+    throw new Error(`Checkpoint ${checkpoint.id} belongs to ${snapshot.workspaceId}, not ${workspace.id}`);
+  }
+
+  const { vaultDir } = getWorkspacePaths(repoRoot, workspace);
+  await initializePhaseOneVault(vaultDir);
+  const dbPath = initializeStateDb(repoRoot);
+  for (const file of PHASE_ONE_VAULT_FILES) {
+    const content = snapshot.files[file] ?? '';
+    await writeFile(join(vaultDir, file), content);
+    reindexVaultFile(dbPath, workspace.id, file, content, checkpoint.seq);
+  }
+
+  runSql(dbPath, `
+    insert into local_sequences (workspace_id, last_seq)
+    values (${sqlValue(workspace.id)}, ${checkpoint.seq})
+    on conflict(workspace_id) do update set last_seq = excluded.last_seq;
+  `);
+  setRemoteSyncState(repoRoot, workspace.id, { lastSeq: checkpoint.seq, status: 'online' });
+}
+
+async function maybeCreateRemoteCheckpoint(repoRoot: string, workspace: Workspace): Promise<VaultCheckpoint | undefined> {
+  const lastSeq = getLastSeq(repoRoot, workspace.id);
+  if (lastSeq <= 0) return undefined;
+  const latest = await getLatestRemoteCheckpoint(repoRoot, workspace.id).catch(() => undefined);
+  if (latest && latest.seq >= lastSeq) return latest;
+  if (latest && lastSeq - latest.seq < CHECKPOINT_INTERVAL_EVENTS) return latest;
+  return createRemoteCheckpoint(repoRoot, workspace);
 }
 
 async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<JoinWorkspaceResponse> {
@@ -2442,6 +2884,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       return;
     }
 
+    await pullRemoteEvents(repoRoot).catch(() => undefined);
     const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath);
     sendJson<EventListResponse>(response, 200, ok({ events }));
     return;
@@ -2591,6 +3034,37 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     return;
   }
 
+  const latestCheckpointMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/checkpoints\/latest$/);
+  if (method === 'GET' && latestCheckpointMatch) {
+    const workspaceIdentifier = decodeURIComponent(latestCheckpointMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    const checkpoint = await getLatestRemoteCheckpoint(repoRoot, workspace.id);
+    sendJson(response, 200, ok({ checkpoint: checkpoint ?? null }));
+    return;
+  }
+
+  const createCheckpointMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/checkpoints$/);
+  if (method === 'POST' && createCheckpointMatch) {
+    const workspaceIdentifier = decodeURIComponent(createCheckpointMatch[1]);
+    const body = RelayRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+
+    const checkpoint = await createRemoteCheckpoint(repoRoot, workspace);
+    sendJson(response, 201, ok({ checkpoint }));
+    return;
+  }
+
   const registerWorktreeMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/worktrees\/register$/);
   if (method === 'POST' && registerWorktreeMatch) {
     const workspaceIdentifier = decodeURIComponent(registerWorktreeMatch[1]);
@@ -2631,11 +3105,14 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
       `select last_seq from local_sequences where workspace_id = ${sqlValue(workspace.id)}`
     );
 
+    const latestCheckpoint = await getLatestRemoteCheckpoint(repoRoot, workspace.id).catch(() => undefined);
+
     sendJson(response, 200, ok({
       workspace,
       participants: listParticipants(repoRoot, workspace.id),
       worktrees: listWorktrees(repoRoot, workspace.id),
-      lastSeq: sequence?.last_seq ?? 0
+      lastSeq: sequence?.last_seq ?? 0,
+      latestCheckpoint
     }));
     return;
   }
@@ -2729,6 +3206,7 @@ function main(): void {
     console.log(`default repo: ${repoRoot}`);
   });
   startRelayPolling({ defaultRepoRoot: repoRoot });
+  startRealtimeEventSubscriber({ defaultRepoRoot: repoRoot });
 }
 
 main();

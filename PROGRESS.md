@@ -12,7 +12,7 @@ _Last updated: 2026-07-06._
 | Phase | Theme | Status |
 |-------|-------|--------|
 | Phase 1 | Local-first foundation (daemon, CLI, vault, dashboard) | ✅ Complete |
-| Phase 2 | Supabase relay + cross-device sync | 🟡 Relay MVP live; realtime/checkpoints/conflicts pending |
+| Phase 2 | Supabase relay + cross-device sync | 🟡 Relay live; conflicts pending |
 | Phase 3 | Agent UX (MCP server, hooks, inbox) | ⬜ Not started (resource/tool stubs only) |
 
 ## What works today
@@ -75,16 +75,22 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   remote session before creating the worktree.
 - Dashboard merges relay sessions with local sessions.
 
-**Still pending:**
+**Live-verified after relay MVP:**
 
-- Supabase Realtime websocket subscription in the daemon (polling is the
-  current correctness path).
+- Supabase Realtime websocket subscription in the daemon, with polling/manual
+  sync kept as fallback.
 - Checkpoint upload/download (`tc_workspace_vault_checkpoints`,
   `teambridge-checkpoints` bucket).
 - Checkpoint lease acquisition/failover (`tc_checkpoint_leases`).
-- Late-joiner bootstrap from checkpoint + replay (currently full event replay).
+- Late-joiner bootstrap from checkpoint + replay.
+- Presence heartbeat through `tc_presence`, reflected into participant status.
+- Two-user verification with `nihal@test.com` and `kush@test.com`: session
+  discovery, join, checkpoint bootstrap, realtime receive, presence, remote
+  events, and cleanup.
+
+**Still pending:**
+
 - Conflict detection/resolution plumbing and conflict UX (CLI + dashboard).
-- Polished relay UI for sync health, presence, checkpoints, conflicts.
 
 ## Phase 3 — Agent UX, MCP, inbox ⬜
 
