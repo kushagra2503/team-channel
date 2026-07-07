@@ -18,7 +18,9 @@ const api = vi.hoisted(() => ({
   listWorkspaces: vi.fn(),
   getWorkspaceStatus: vi.fn(),
   getVaultContext: vi.fn(),
-  getRepoContext: vi.fn()
+  getRepoContext: vi.fn(),
+  getRelayStatus: vi.fn(),
+  getWorkspaceEvents: vi.fn()
 }));
 
 vi.mock('./api/teambridgeClient', () => api);
@@ -152,6 +154,8 @@ describe('DashboardPage', () => {
     // Prevent unhandled rejection from listProjects call inside DashboardPage
     api.listProjects.mockResolvedValue({ projects: [] });
     api.listKnownRepos.mockResolvedValue({ repos: [] });
+    api.getRelayStatus.mockResolvedValue({ configured: false, loggedIn: false, pending: 0, sync: [] });
+    api.getWorkspaceEvents.mockResolvedValue({ events: [] });
   });
 
   it('loads tracks and renders vault content for the selected track', async () => {

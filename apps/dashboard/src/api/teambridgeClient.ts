@@ -1,9 +1,11 @@
 import type {
   ApiResult,
+  EventListResponse,
   LocalUserProfileResponse,
   Project,
   ProjectListResponse,
   ProjectMemberListResponse,
+  RelayStatusResponse,
   RepoContextResponse,
   TrackListResponse,
   VaultAnnotateResponseBody,
@@ -151,6 +153,26 @@ export function listRelaySessions(
   signal?: AbortSignal
 ): Promise<{ sessions: TrackListResponse['tracks'] }> {
   return getJson<{ sessions: TrackListResponse['tracks'] }>('/relay/sessions', config, undefined, signal);
+}
+
+export function getRelayStatus(
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<RelayStatusResponse> {
+  return getJson<RelayStatusResponse>('/relay/status', config, undefined, signal);
+}
+
+export function getWorkspaceEvents(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<EventListResponse> {
+  return getJson<EventListResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/events`,
+    config,
+    undefined,
+    signal
+  );
 }
 
 export function getRepoContext(

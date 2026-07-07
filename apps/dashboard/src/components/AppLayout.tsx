@@ -21,8 +21,9 @@ function AppLayoutFrame() {
           teamPanelOpen={header.teamPanelOpen}
           onToggleTeamPanel={header.onToggleTeamPanel}
           onOpenSettings={() => setSettingsOpen(true)}
+          relayStatus={header.relayStatus}
         />
-        <div className="flex min-h-0 flex-1 select-none">
+        <div className="flex min-h-0 flex-1 select-none overflow-hidden">
           <Outlet />
         </div>
       </SidebarProvider>

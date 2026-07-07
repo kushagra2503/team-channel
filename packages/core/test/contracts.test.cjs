@@ -7,6 +7,7 @@ const {
   ParticipantSchema,
   PublishEventRequestSchema,
   PublishEventSchema,
+  RelayStatusResponseSchema,
   StartWorkspaceResponseSchema,
   TeambridgeConfigSchema,
   VaultContextSchema,
@@ -174,5 +175,49 @@ test('TeambridgeConfigSchema keeps repo config defaults stable', () => {
   };
 
   assert.deepEqual(TeambridgeConfigSchema.parse(config), config);
-  assert.throws(() => TeambridgeConfigSchema.parse({ ...config, defaultRelayMode: 'supabase' }));
+  assert.throws(() => TeambridgeConfigSchema.parse({ ...config, defaultRelayMode: 'remote' }));
+});
+
+test('RelayMode accepts both local and supabase', () => {
+  const localManifest = { ...manifest, relayMode: 'local' };
+  const supabaseManifest = { ...manifest, relayMode: 'supabase' };
+
+  assert.deepEqual(WorkspaceManifestSchema.parse(localManifest), localManifest);
+  assert.deepEqual(WorkspaceManifestSchema.parse(supabaseManifest), supabaseManifest);
+  assert.throws(() => WorkspaceManifestSchema.parse({ ...manifest, relayMode: 'remote' }));
+});
+
+test('RelayStatusResponseSchema validates relay status with sync entries', () => {
+  const relayStatus = {
+    configured: true,
+    loggedIn: true,
+    pending: 0,
+    sync: [
+      {
+        workspaceId: 'ws_123',
+        lastRemoteSeq: 5,
+        lastSyncedAt: '2026-07-06T12:00:00.000Z',
+        relayStatus: 'online',
+        lastError: null
+      }
+    ]
+  };
+
+  assert.deepEqual(RelayStatusResponseSchema.parse(relayStatus), relayStatus);
+});
+
+test('RelayStatusResponseSchema validates empty sync array', () => {
+  const relayStatus = {
+    configured: false,
+    loggedIn: false,
+    pending: 0,
+    sync: []
+  };
+
+  assert.deepEqual(RelayStatusResponseSchema.parse(relayStatus), relayStatus);
+});
+
+test('RelayStatusResponseSchema rejects missing configured or pending', () => {
+  assert.throws(() => RelayStatusResponseSchema.parse({ loggedIn: true, pending: 0, sync: [] }));
+  assert.throws(() => RelayStatusResponseSchema.parse({ configured: true, loggedIn: true, sync: [] }));
 });

@@ -6,6 +6,7 @@ import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { openRepoPath, type TeambridgeClientConfig } from '@/api/teambridgeClient';
 import { prettyParticipantName, displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
+import { formatRelativeTime } from '@/lib/relative-time';
 
 export type TrackParticipantsPanelProps = {
   status?: WorkspaceStatusResponse;
@@ -42,6 +43,7 @@ type MemberRowData = {
   branch?: string;
   agent?: string;
   worktreePath?: string;
+  lastSeenAt?: string;
 };
 
 function MemberRow({
@@ -86,6 +88,11 @@ function MemberRow({
           {row.isYou ? <span className="text-muted-foreground"> (You)</span> : null}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{STATUS_LABEL[row.status]}</span>
+        {row.lastSeenAt && row.status !== 'active' ? (
+          <span className="block truncate text-[11px] text-muted-foreground/70">
+            last seen {formatRelativeTime(row.lastSeenAt)}
+          </span>
+        ) : null}
         {meta ? <span className="block truncate text-[11px] text-muted-foreground/80">{meta}</span> : null}
       </div>
       {row.worktreePath ? (
@@ -129,7 +136,8 @@ function buildMemberRows(
       avatarRev: localAvatarVersion,
       branch: matchingParticipant?.branch,
       agent: matchingParticipant?.agent,
-      worktreePath: matchingParticipant ? worktreeByUserId.get(matchingParticipant.id)?.path : undefined
+      worktreePath: matchingParticipant ? worktreeByUserId.get(matchingParticipant.id)?.path : undefined,
+      lastSeenAt: matchingParticipant?.lastSeenAt
     };
     if (localUser.status === 'offline') {
       offline.push(youRow);
@@ -145,7 +153,8 @@ function buildMemberRows(
       status: participant.status,
       branch: participant.branch,
       agent: participant.agent,
-      worktreePath: worktreeByUserId.get(participant.id)?.path
+      worktreePath: worktreeByUserId.get(participant.id)?.path,
+      lastSeenAt: participant.lastSeenAt
     };
     if (participant.status === 'offline') {
       offline.push(row);

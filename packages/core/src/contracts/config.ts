@@ -1,8 +1,9 @@
 import type { AgentKind } from './participant';
+import type { RelayMode } from './workspace';
 
 export type TeambridgeConfig = {
   schemaVersion: 1;
-  defaultRelayMode: 'local';
+  defaultRelayMode: RelayMode;
   daemonPort: number;
   mcpPort: number;
   autoInject: boolean;

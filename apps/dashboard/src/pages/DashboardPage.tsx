@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Project, ProjectMember, LocalUserProfile, VaultContext, VaultItemAnnotation, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, ProjectMember, LocalUserProfile, RelayStatusResponse, VaultContext, VaultItemAnnotation, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 import {
   annotateVaultItem,
   getDefaultClientConfig,
   getProjectMembers,
   getProjectTracks,
+  getRelayStatus,
   getVaultContext,
+  getWorkspaceEvents,
   getWorkspaceStatus,
   listRelaySessions,
   listProjects,
@@ -66,6 +68,10 @@ export function DashboardPage() {
   const [tracksError, setTracksError] = useState<string>();
   const [detailsError, setDetailsError] = useState<string>();
   const [vaultError, setVaultError] = useState<string>();
+  const [relayStatus, setRelayStatus] = useState<RelayStatusResponse | undefined>();
+  const [relayError, setRelayError] = useState<string>();
+  const [events, setEvents] = useState<WorkspaceEvent[]>();
+  const [eventsError, setEventsError] = useState<string>();
   const [teamPanelOpen, setTeamPanelOpen] = useState(true);
   const [avatarRev, setAvatarRev] = useState(0);
   const daemonUrl = clientConfig.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL;
@@ -229,6 +235,68 @@ export function DashboardPage() {
     };
   }, [clientConfig, selectedTrackId, cache]);
 
+  // Poll relay status (repo-level, 5s cadence)
+  useEffect(() => {
+    const controller = new AbortController();
+    setRelayError(undefined);
+
+    const pollRelay = async () => {
+      try {
+        const status = await getRelayStatus(clientConfig, controller.signal);
+        if (!controller.signal.aborted) {
+          setRelayStatus(status);
+          setRelayError(undefined);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setRelayError(error instanceof Error ? error.message : 'Unable to load relay status.');
+        }
+      }
+    };
+
+    void pollRelay();
+    const refreshId = window.setInterval(pollRelay, PROJECT_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(refreshId);
+      controller.abort();
+    };
+  }, [clientConfig]);
+
+  // Poll workspace events (track-scoped, 3s cadence)
+  useEffect(() => {
+    if (!selectedTrackId) {
+      setEvents(undefined);
+      setEventsError(undefined);
+      return;
+    }
+
+    const controller = new AbortController();
+    setEventsError(undefined);
+
+    const pollEvents = async () => {
+      try {
+        const res = await getWorkspaceEvents(selectedTrackId, clientConfig, controller.signal);
+        if (!controller.signal.aborted) {
+          setEvents(res.events);
+          setEventsError(undefined);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setEventsError(error instanceof Error ? error.message : 'Unable to load events.');
+        }
+      }
+    };
+
+    void pollEvents();
+    const refreshId = window.setInterval(pollEvents, TRACK_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(refreshId);
+      controller.abort();
+    };
+  }, [clientConfig, selectedTrackId]);
+
   const selectedTrack = workspaceStatus?.workspace ?? tracks.find((t) => t.id === selectedTrackId);
 
   useEffect(() => {
@@ -237,13 +305,15 @@ export function DashboardPage() {
       project,
       workspace: selectedTrack,
       teamPanelOpen,
-      onToggleTeamPanel: toggleTeamPanel
+      onToggleTeamPanel: toggleTeamPanel,
+      relayStatus
     });
   }, [
     project,
     selectedTrack,
     teamPanelOpen,
     toggleTeamPanel,
+    relayStatus,
     setHeader
   ]);
 
@@ -326,6 +396,11 @@ export function DashboardPage() {
           repoRoot={clientConfig.repoRoot}
           avatarRev={avatarRev}
           onAvatarRev={() => setAvatarRev((rev) => rev + 1)}
+          relayStatus={relayStatus}
+          relayError={relayError}
+          events={events}
+          eventsError={eventsError}
+          latestCheckpoint={workspaceStatus?.latestCheckpoint}
         />
       </div>
     </>
