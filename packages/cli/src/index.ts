@@ -10,6 +10,7 @@ import { runWs } from './commands/ws';
 import { runStatus } from './commands/status';
 import { runDaemon } from './commands/daemon';
 import { runLogin, runRelayStatus, runSessions, runSync } from './commands/relay';
+import { runMcp } from './commands/mcp';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
 function usage(): void {
@@ -33,6 +34,7 @@ Usage:
   teambridge ws show|who|branches <NAME>
   teambridge daemon start|status|stop [--port PORT]
   teambridge status
+  teambridge mcp
 
 Environment:
   TEAMBRIDGE_DAEMON_URL   default http://127.0.0.1:9473
@@ -128,6 +130,11 @@ async function main(): Promise<void> {
 
     if (command === 'daemon') {
       await runDaemon(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'mcp') {
+      await runMcp();
       return;
     }
 
