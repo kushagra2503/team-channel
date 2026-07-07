@@ -9,6 +9,8 @@
     "test": "pnpm build && node --test test/*.test.cjs"
   },
   "dependencies": {
-    "@teambridge/core": "workspace:*"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@teambridge/core": "workspace:*",
+    "zod": "^4.4.3"
   }
 }
