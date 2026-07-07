@@ -7,8 +7,10 @@ const {
   getVaultContext,
   getWorkspaceStatus,
   isMcpResourceName,
+  publishEvent,
   readVaultFile,
-  resolveMcpResource
+  resolveMcpResource,
+  searchVault
 } = require('../dist');
 
 const createdAt = '2026-06-22T00:00:00.000Z';
@@ -273,6 +275,81 @@ test('getRelayStatus calls GET /relay/status and returns ApiResult', async () =>
     assert.equal(result.ok, true);
     assert.deepEqual(result.data, relayStatus);
     assert.deepEqual(seen, ['http://127.0.0.1:9473/relay/status?repoRoot=%2Ftmp%2Frepo']);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('publishEvent calls POST /workspaces/:id/events with correct JSON body', async () => {
+  const seen = [];
+  const seenBodies = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, init) => {
+    seen.push(String(url));
+    seenBodies.push(init && init.body ? JSON.parse(init.body) : null);
+    return new Response(JSON.stringify({ ok: true, data: { event: { seq: 3 } } }), {
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await publishEvent(
+      'ws_123',
+      { targetFile: 'decisions.md', payload: { text: 'Updated decision' }, actorId: 'user_ronish' },
+      { repoRoot: '/tmp/repo' }
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data, { event: { seq: 3 } });
+    assert.deepEqual(seen, ['http://127.0.0.1:9473/workspaces/ws_123/events?repoRoot=%2Ftmp%2Frepo']);
+    assert.deepEqual(seenBodies, [
+      {
+        targetFile: 'decisions.md',
+        payload: { text: 'Updated decision' },
+        actorId: 'user_ronish'
+      }
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('searchVault calls GET /workspaces/:id/vault/search?query=...&repoRoot=...', async () => {
+  const seen = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify({ ok: true, data: { results: [] } }), {
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await searchVault('ws_123', 'invoice', { repoRoot: '/tmp/repo' });
+    assert.equal(result.ok, true);
+    assert.deepEqual(seen, [
+      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&query=invoice'
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('searchVault with limit includes it in the query string', async () => {
+  const seen = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify({ ok: true, data: { results: [] } }), {
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await searchVault('ws_123', 'invoice', { repoRoot: '/tmp/repo' }, 25);
+    assert.equal(result.ok, true);
+    assert.deepEqual(seen, [
+      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&query=invoice&limit=25'
+    ]);
   } finally {
     global.fetch = originalFetch;
   }
