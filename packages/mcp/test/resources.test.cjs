@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   MCP_RESOURCE_NAMES,
   buildDaemonUrl,
+  getRelayStatus,
   getVaultContext,
   getWorkspaceStatus,
   isMcpResourceName,
@@ -60,7 +61,25 @@ const reader = {
         }
       }
     };
+  },
+  async getRelayStatus() {
+    return { ok: true, data: relayStatus };
   }
+};
+
+const relayStatus = {
+  configured: true,
+  loggedIn: true,
+  pending: 0,
+  sync: [
+    {
+      workspaceId: 'ws_123',
+      lastRemoteSeq: 5,
+      lastSyncedAt: '2026-07-06T12:00:00.000Z',
+      relayStatus: 'online',
+      lastError: null
+    }
+  ]
 };
 
 test('resource registry matches core MCP resource contract', () => {
@@ -92,7 +111,11 @@ test('daemon URL builder includes repoRoot and encoded params', () => {
 
 test('workspace and participant resources resolve through workspace status', async () => {
   const workspace = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_123' }, reader);
-  assert.deepEqual(workspace, { ok: true, data: workspaceStatus });
+  assert.equal(workspace.ok, true);
+  assert.deepEqual(workspace.data.workspace, workspaceStatus.workspace);
+  assert.deepEqual(workspace.data.participants, workspaceStatus.participants);
+  assert.equal(workspace.data.lastSeq, workspaceStatus.lastSeq);
+  assert.deepEqual(workspace.data.relayStatus, relayStatus);
 
   const participants = await resolveMcpResource('teambridge://participants', { workspaceId: 'ws_123' }, reader);
   assert.deepEqual(participants, { ok: true, data: { participants: workspaceStatus.participants } });
@@ -106,11 +129,16 @@ test('resources can use sessionName as the daemon workspace identifier', async (
     },
     async getVaultContext() {
       throw new Error('not used');
+    },
+    async getRelayStatus() {
+      return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
     }
   };
 
   const workspace = await resolveMcpResource('teambridge://workspace', { sessionName: 'billing-refactor' }, sessionReader);
-  assert.deepEqual(workspace, { ok: true, data: workspaceStatus });
+  assert.equal(workspace.ok, true);
+  assert.deepEqual(workspace.data.workspace, workspaceStatus.workspace);
+  assert.equal(workspace.data.relayStatus, undefined);
 });
 
 test('participants resource propagates workspace status failures', async () => {
@@ -126,6 +154,9 @@ test('participants resource propagates workspace status failures', async () => {
       return fail;
     },
     async getVaultContext() {
+      throw new Error('not used');
+    },
+    async getRelayStatus() {
       throw new Error('not used');
     }
   };
@@ -179,4 +210,70 @@ test('resources require workspace context', async () => {
   const result = await resolveMcpResource('teambridge://workspace', {}, reader);
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'INVALID_REQUEST');
+});
+
+test('workspace resource includes relay status when relay is configured', async () => {
+  const result = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_123' }, reader);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.relayStatus, relayStatus);
+});
+
+test('workspace resource degrades gracefully when relay is not configured', async () => {
+  const noRelayReader = {
+    async getWorkspaceStatus() {
+      return { ok: true, data: workspaceStatus };
+    },
+    async getVaultContext() {
+      throw new Error('not used');
+    },
+    async getRelayStatus() {
+      return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
+    }
+  };
+
+  const result = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_123' }, noRelayReader);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.workspace, workspaceStatus.workspace);
+  assert.equal(result.data.relayStatus, undefined);
+});
+
+test('workspace resource returns error when workspace status fails, without fetching relay', async () => {
+  let relayCalled = false;
+  const errorReader = {
+    async getWorkspaceStatus() {
+      return { ok: false, error: { code: 'WORKSPACE_NOT_FOUND', message: 'Not found' } };
+    },
+    async getVaultContext() {
+      throw new Error('not used');
+    },
+    async getRelayStatus() {
+      relayCalled = true;
+      return { ok: true, data: relayStatus };
+    }
+  };
+
+  const result = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_missing' }, errorReader);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'WORKSPACE_NOT_FOUND');
+  assert.equal(relayCalled, false);
+});
+
+test('getRelayStatus calls GET /relay/status and returns ApiResult', async () => {
+  const seen = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    seen.push(String(url));
+    return new Response(JSON.stringify({ ok: true, data: relayStatus }), {
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await getRelayStatus({ repoRoot: '/tmp/repo' });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.data, relayStatus);
+    assert.deepEqual(seen, ['http://127.0.0.1:9473/relay/status?repoRoot=%2Ftmp%2Frepo']);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });

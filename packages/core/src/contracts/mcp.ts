@@ -1,5 +1,6 @@
 import type { PublishEventRequest } from './events';
 import type { AskRequest, ReplyRequest } from './inbox';
+import type { RelayStatusResponse, WorkspaceStatusResponse } from './api';
 
 export type McpWorkspaceResolution = {
   workspaceId: string;
@@ -51,3 +52,17 @@ export const MCP_TOOL_NAMES = [
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
 
+/**
+ * Workspace resource response with optional relay-backed sync state.
+ * When relay mode is active (`relayMode: 'supabase'`), the `relayStatus`
+ * field carries sync health, pending count, and per-workspace sync entries.
+ * When relay is not configured, the field is absent and the resource
+ * degrades to plain `WorkspaceStatusResponse`.
+ *
+ * On the `teambridge://participants` resource, participant `status` and
+ * `lastSeenAt` fields are relay-backed when the workspace's `relayMode`
+ * is `'supabase'`; in local mode they reflect local heartbeat state only.
+ */
+export type McpWorkspaceResourceResponse = WorkspaceStatusResponse & {
+  relayStatus?: RelayStatusResponse;
+};
