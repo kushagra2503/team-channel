@@ -5,7 +5,7 @@ digest; the authoritative checklist stays in [`todo.md`](./todo.md), and the
 per-phase build plan lives in
 [`report/team-implementation-plan.md`](./report/team-implementation-plan.md).
 
-_Last updated: 2026-07-06._
+_Last updated: 2026-07-08._
 
 ## At a glance
 
@@ -13,7 +13,7 @@ _Last updated: 2026-07-06._
 |-------|-------|--------|
 | Phase 1 | Local-first foundation (daemon, CLI, vault, dashboard) | ✅ Complete |
 | Phase 2 | Supabase relay + cross-device sync | 🟡 Relay live; conflicts pending |
-| Phase 3 | Agent UX (MCP server, hooks, inbox) | ⬜ Not started (resource/tool stubs only) |
+| Phase 3 | Agent UX (MCP server, hooks, inbox) | 🟡 MCP server live; inbox/hooks pending |
 
 ## What works today
 
@@ -46,6 +46,14 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   repo context panel, relay-session merge.
 - **Core** (`packages/core`) — shared contracts in `src/contracts/`, the
   starting point for any API/event/MCP change.
+- **MCP** (`packages/mcp`) — MCP server over stdio transport using
+  `@modelcontextprotocol/sdk`. Five resources registered (`workspace`,
+  `participants`, `vault/context`, `inbox` stub, `conflicts` stub) and six
+  tools (`team_publish`, `vault_search`, `vault_read`, `workspace_status` —
+  all live; `team_ask`, `team_reply` — stubs returning not-implemented).
+  Workspace resolution from explicit params or `.teambridge/.active` fallback.
+  Start with `teambridge mcp`. Integration tests spawn the server over stdio
+  and verify JSON-RPC handshake, resource/tool lists, and stub errors.
 
 ## Phase 1 — Local-first foundation ✅
 
@@ -92,20 +100,35 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
 
 - Conflict detection/resolution plumbing and conflict UX (CLI + dashboard).
 
-## Phase 3 — Agent UX, MCP, inbox ⬜
+## Phase 3 — Agent UX, MCP, inbox 🟡
 
-Not started beyond stubs. MCP resource/tool **names** exist in
-`packages/mcp/src/resources.ts` and `tools.ts`, but there is no MCP HTTP
-server, no Claude Code hook auto-injection, and no `ask`/`inbox`/`reply` CLI.
+**Live-verified:**
 
-Planned:
+- MCP server over stdio transport using `@modelcontextprotocol/sdk` with
+  `StdioServerTransport` (Claude Code compatible). Start with
+  `teambridge mcp`.
+- Five MCP resources registered: `teambridge://workspace` (with relay status),
+  `teambridge://participants`, `teambridge://vault/context`,
+  `teambridge://inbox` (stub), `teambridge://conflicts` (stub).
+- Six MCP tools registered: `team_publish`, `vault_search`, `vault_read`,
+  `workspace_status` (all calling the daemon); `team_ask`, `team_reply`
+  (stubs returning `isError: true` — blocked on daemon inbox endpoints).
+- Workspace resolution from explicit params or `.teambridge/.active` fallback.
+- Integration tests spawning the server over stdio, verifying initialize
+  handshake, resources/list, tools/list, and stub error responses.
+- MCP resource contracts include relay-backed workspace state with graceful
+  degradation when relay is unavailable.
+- Dashboard relay screens: sync health, realtime event feed, checkpoint state,
+  presence panel.
 
-- MCP HTTP server + resources (`teambridge://workspace`, `…/participants`,
-  `…/vault/context`, `…/inbox`, `…/conflicts`) and tools (`team_publish`,
-  `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`).
-- Claude Code hook auto-injection (compact context + teammate deltas) with no
-  per-session flags.
+**Still pending:**
+
+- Claude Code hook auto-injection (compact context + teammate deltas).
 - Inbox: `teambridge ask|inbox|reply`, dashboard approval UI.
+- Daemon inbox endpoints (Nihal — Phase 3 Step 1).
+- Daemon conflict resolve endpoint (Nihal — Phase 3 Step 1).
+- Dashboard actions for approving replies and resolving conflicts.
+- End-to-end tests for offline/reconnect sync and new joiner bootstrap.
 
 ## Known gaps / follow-ups
 

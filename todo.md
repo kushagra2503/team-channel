@@ -208,9 +208,9 @@ Still pending after this pass:
   - Kushagra: add relay mode configuration to `teambridge init`.
   - [x] Kushagra: add `teambridge status relay` output for relay configured/logged-in/pending state.
   - [x] Kushagra: add `teambridge sessions` / `teambridge list` for remote session discovery.
-  - Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked/live events.
+  - [x] Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked/live events. (PR #3)
   - [x] Ronish: merge remote relay sessions into the dashboard session list.
-  - Ronish: update MCP resource contracts to include relay-backed workspace state.
+  - [x] Ronish: update MCP resource contracts to include relay-backed workspace state. (PR #4)
 - [x] Step 3, Nihal next:
   - [x] Implement Supabase Realtime websocket subscriptions.
   - [x] Implement offline queue and retry behavior for publishes that fail remote append.
@@ -273,15 +273,15 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - Implement conflict resolve daemon endpoint.
   - Add daemon-side authorization checks for MCP and dashboard calls.
 - [ ] Step 2, Ronish + Kushagra in parallel:
-  - Ronish: implement MCP server over local HTTP.
-  - Ronish: implement MCP workspace/worktree resolution using explicit query params, client CWD headers, local `state.sqlite` worktree path mapping, and `.teambridge/.active` fallback.
-  - Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox`, `teambridge://conflicts`.
+  - [x] Ronish: implement MCP server over stdio transport (Claude Code compatible). (PR #5)
+  - [x] Ronish: implement MCP workspace/worktree resolution using explicit query params, local `state.sqlite` worktree path mapping, and `.teambridge/.active` fallback. (PR #5)
+  - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (stub), `teambridge://conflicts` (stub). (PR #5)
   - Kushagra: implement Claude Code hook auto-injection.
   - Kushagra: ensure normal use needs no per-session CLI flags.
   - Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX.
   - Kushagra: implement delta injection for teammate updates.
 - [ ] Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
-  - Ronish: implement MCP tools: `team_publish`, `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`.
+  - [x] Ronish: implement MCP tools: `team_publish`, `team_ask` (stub), `team_reply` (stub), `vault_search`, `vault_read`, `workspace_status`. (PR #5 — `team_ask`/`team_reply` are stubs returning `isError: true`, blocked on Nihal's inbox endpoints)
   - Kushagra: implement `teambridge ask`.
   - Kushagra: implement `teambridge inbox`.
   - Kushagra: implement `teambridge reply`.
