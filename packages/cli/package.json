@@ -13,6 +13,7 @@
     "test": "pnpm build && node --test test/*.test.cjs"
   },
   "dependencies": {
-    "@teambridge/core": "workspace:*"
+    "@teambridge/core": "workspace:*",
+    "@teambridge/mcp": "workspace:*"
   }
 }

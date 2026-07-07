@@ -5,8 +5,10 @@ import type {
   RelayStatusResponse,
   VaultContextResponse,
   VaultReadResponse,
+  WorkspaceEvent,
   WorkspaceListResponse,
-  WorkspaceStatusResponse
+  WorkspaceStatusResponse,
+  VaultSearchResponse
 } from '@teambridge/core';
 import { buildDaemonUrl } from '@teambridge/core';
 
@@ -15,6 +17,21 @@ export type { DaemonClientOptions, DaemonQueryParams } from '@teambridge/core';
 
 async function getJson<T>(path: string, options: DaemonClientOptions, params?: DaemonQueryParams): Promise<ApiResult<T>> {
   const response = await fetch(buildDaemonUrl(path, options, params));
+  return (await response.json()) as ApiResult<T>;
+}
+
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  options: DaemonClientOptions,
+  params?: DaemonQueryParams
+): Promise<ApiResult<T>> {
+  const url = buildDaemonUrl(path, options, params);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
   return (await response.json()) as ApiResult<T>;
 }
 
@@ -51,4 +68,29 @@ export function getRelayStatus(
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<RelayStatusResponse>> {
   return getJson<RelayStatusResponse>('/relay/status', options);
+}
+
+export function publishEvent(
+  workspaceId: string,
+  body: { targetFile: string; payload: { text: string }; dedupeKey?: string; actorId?: string; deviceId?: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<{ event: WorkspaceEvent }>> {
+  return postJson<{ event: WorkspaceEvent }>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/events`,
+    body,
+    options
+  );
+}
+
+export function searchVault(
+  workspaceId: string,
+  query: string,
+  options: DaemonClientOptions = {},
+  limit?: number
+): Promise<ApiResult<VaultSearchResponse>> {
+  return getJson<VaultSearchResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/vault/search`,
+    options,
+    { query, limit }
+  );
 }
