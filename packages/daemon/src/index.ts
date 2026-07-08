@@ -53,6 +53,7 @@ import type {
 import {
   JoinWorkspaceRequestSchema,
   PublishEventRequestSchema,
+  RelayModeSchema,
   StartWorkspaceRequestSchema,
   TeambridgeConfigSchema,
   CreateProjectRequestSchema,
@@ -135,7 +136,8 @@ const VaultAnnotateBodySchema = z.object({
 });
 
 const ConfigRequestBodySchema = z.object({
-  repoRoot: z.string().min(1).optional()
+  repoRoot: z.string().min(1).optional(),
+  relayMode: RelayModeSchema.optional()
 });
 
 const PfpPreviewBodySchema = z.object({
@@ -1020,7 +1022,14 @@ async function createProject(
   return { project, member };
 }
 
-async function initRepoConfig(repoRoot: string): Promise<{ config: TeambridgeConfig; path: string; created: boolean }> {
+type ConfigOverrides = {
+  relayMode?: TeambridgeConfig['defaultRelayMode'];
+};
+
+async function initRepoConfig(
+  repoRoot: string,
+  overrides: ConfigOverrides = {}
+): Promise<{ config: TeambridgeConfig; path: string; created: boolean; updated: boolean }> {
   await ensureTeambridgeDirs(repoRoot);
 
   const configPath = getConfigPath(repoRoot);
@@ -1033,18 +1042,28 @@ async function initRepoConfig(repoRoot: string): Promise<{ config: TeambridgeCon
   });
 
   if (existing) {
-    return {
-      config: TeambridgeConfigSchema.parse(JSON.parse(existing)),
-      path: configPath,
-      created: false
-    };
+    const current = TeambridgeConfigSchema.parse(JSON.parse(existing));
+    // `init` is safe to re-run: leave an existing config alone unless the caller
+    // explicitly asked for a different relay mode, in which case update just
+    // that field and persist.
+    if (overrides.relayMode && overrides.relayMode !== current.defaultRelayMode) {
+      const next: TeambridgeConfig = { ...current, defaultRelayMode: overrides.relayMode };
+      await writeFile(configPath, `${JSON.stringify(next, null, 2)}\n`);
+      return { config: next, path: configPath, created: false, updated: true };
+    }
+    return { config: current, path: configPath, created: false, updated: false };
   }
 
-  await writeFile(configPath, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, { flag: 'wx' });
+  const config: TeambridgeConfig = {
+    ...DEFAULT_CONFIG,
+    ...(overrides.relayMode ? { defaultRelayMode: overrides.relayMode } : {})
+  };
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
   return {
-    config: DEFAULT_CONFIG,
+    config,
     path: configPath,
-    created: true
+    created: true,
+    updated: false
   };
 }
 
@@ -2650,7 +2669,7 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const body = ConfigRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
     rememberRepoRoot(state.defaultRepoRoot, repoRoot);
-    const result = await initRepoConfig(repoRoot);
+    const result = await initRepoConfig(repoRoot, { relayMode: body.relayMode });
     sendJson(response, result.created ? 201 : 200, ok(result));
     return;
   }

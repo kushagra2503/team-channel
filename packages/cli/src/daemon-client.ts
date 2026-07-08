@@ -1,10 +1,13 @@
 import type {
   ApiResult,
   CreateProjectResponse,
+  EventListResponse,
   JoinWorkspaceResponse,
   LocalUserProfile,
   ProjectListResponse,
+  RelayMode,
   StartWorkspaceResponse,
+  TeambridgeConfig,
   TrackListResponse,
   VaultContextResponse,
   VaultReadResponse,
@@ -45,11 +48,20 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<ApiResul
   }
 }
 
-export async function initConfig(options: ClientOptions): Promise<ApiResult<{ created: boolean }>> {
+export async function initConfig(
+  options: ClientOptions,
+  body: { relayMode?: RelayMode } = {}
+): Promise<ApiResult<{ config: TeambridgeConfig; path: string; created: boolean; updated: boolean }>> {
   return request(buildDaemonUrl('/config/init', options), {
     method: 'POST',
-    body: JSON.stringify({ repoRoot: options.repoRoot })
+    body: JSON.stringify({ repoRoot: options.repoRoot, ...(body.relayMode ? { relayMode: body.relayMode } : {}) })
   });
+}
+
+export async function getConfig(
+  options: ClientOptions
+): Promise<ApiResult<{ config: TeambridgeConfig; path: string; exists: boolean }>> {
+  return request(buildDaemonUrl('/config', options));
 }
 
 export async function saveUserProfile(
@@ -199,6 +211,13 @@ export async function getWorkspaceStatus(
   workspaceId: string
 ): Promise<ApiResult<WorkspaceStatusResponse>> {
   return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/status`, options));
+}
+
+export async function listEvents(
+  options: ClientOptions,
+  workspaceId: string
+): Promise<ApiResult<EventListResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/events`, options));
 }
 
 export async function registerWorktree(

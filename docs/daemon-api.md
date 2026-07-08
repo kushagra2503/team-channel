@@ -18,7 +18,7 @@ POST bodies may include `repoRoot` when the route accepts a JSON body.
 |--------|------|-------------|
 | GET | `/health` | Liveness |
 | GET | `/config?repoRoot=` | Read repo config |
-| POST | `/config/init` | Create `.teambridge/config.json` |
+| POST | `/config/init` | Create `.teambridge/config.json` (body `{ repoRoot?, relayMode? }`; `relayMode` sets/updates `defaultRelayMode` — `local` or `supabase`) |
 
 ## Repo context (dashboard sidebar)
 

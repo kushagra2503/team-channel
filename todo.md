@@ -205,7 +205,7 @@ Still pending after this pass:
   - [x] Implement canonical event insert with per-workspace monotonic `seq` via `tc_append_event`.
 - [ ] Step 2, Kushagra + Ronish in parallel while Nihal finishes relay internals:
   - [x] Kushagra: implement CLI auth/login flow against relay responses.
-  - Kushagra: add relay mode configuration to `teambridge init`.
+  - [x] Kushagra: add relay mode configuration to `teambridge init` (`--relay local|supabase`, interactive prompt; `/config/init` accepts `relayMode` and updates `defaultRelayMode`).
   - [x] Kushagra: add `teambridge status relay` output for relay configured/logged-in/pending state.
   - [x] Kushagra: add `teambridge sessions` / `teambridge list` for remote session discovery.
   - [x] Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked/live events. (PR #3)
@@ -276,10 +276,10 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - [x] Ronish: implement MCP server over stdio transport (Claude Code compatible). (PR #5)
   - [x] Ronish: implement MCP workspace/worktree resolution using explicit query params, local `state.sqlite` worktree path mapping, and `.teambridge/.active` fallback. (PR #5)
   - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (stub), `teambridge://conflicts` (stub). (PR #5)
-  - Kushagra: implement Claude Code hook auto-injection.
-  - Kushagra: ensure normal use needs no per-session CLI flags.
-  - Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX.
-  - Kushagra: implement delta injection for teammate updates.
+  - [x] Kushagra: implement Claude Code hook auto-injection (`teambridge hook install|uninstall|status` writes a SessionStart hook into `.claude/settings.json` that runs `teambridge context`).
+  - [x] Kushagra: ensure normal use needs no per-session CLI flags (the installed hook runs `teambridge context` with no flags; `context`/`publish`/`vault *` resolve the current track from the branch).
+  - [x] Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX (`teambridge context` drops empty files, strips per-file titles, and dedupes bullets).
+  - [x] Kushagra: implement delta injection for teammate updates (`teambridge context` shows what changed since a per-participant last-seen `seq`; `--peek`/`--deltas-only`/`--json` supported).
 - [ ] Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
   - [x] Ronish: implement MCP tools: `team_publish`, `team_ask` (stub), `team_reply` (stub), `vault_search`, `vault_read`, `workspace_status`. (PR #5 — `team_ask`/`team_reply` are stubs returning `isError: true`, blocked on Nihal's inbox endpoints)
   - Kushagra: implement `teambridge ask`.
