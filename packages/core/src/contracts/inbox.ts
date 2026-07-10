@@ -11,6 +11,8 @@ export type InboxMessage = {
   eventId?: string;
   createdAt: string;
   answeredAt?: string;
+  replyText?: string;
+  replyEventId?: string;
 };
 
 export type AskRequest = {

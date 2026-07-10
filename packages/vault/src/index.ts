@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@teambridge/core';
+import type { ConflictDetectedPayload, ConflictResolvedPayload, PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@teambridge/core';
 import {
   extractVaultAnnotations,
   parseVaultListLine,
@@ -14,7 +14,8 @@ export const PHASE_ONE_VAULT_FILES: PhaseOneVaultFile[] = [
   'observations.md',
   'blockers.md',
   'test-results.md',
-  'attempts.md'
+  'attempts.md',
+  'conflicts.md'
 ];
 
 const INITIAL_CONTENT: Record<PhaseOneVaultFile, string> = {
@@ -23,7 +24,8 @@ const INITIAL_CONTENT: Record<PhaseOneVaultFile, string> = {
   'observations.md': '# Observations\n',
   'blockers.md': '# Blockers\n',
   'test-results.md': '# Test Results\n',
-  'attempts.md': '# Attempts\n'
+  'attempts.md': '# Attempts\n',
+  'conflicts.md': '# Conflicts\n'
 };
 
 export async function initializePhaseOneVault(vaultDir: string): Promise<void> {
@@ -77,6 +79,27 @@ export async function materializePublishEvent(vaultDir: string, event: Workspace
   await appendFile(join(vaultDir, targetFile), formatPublishText(event.payload.text));
 }
 
+function formatConflictText(event: WorkspaceEvent<ConflictDetectedPayload | ConflictResolvedPayload>): string {
+  if (event.type === 'conflict_detected') {
+    const { targetFile, summary } = event.payload as ConflictDetectedPayload;
+    return `- ${event.createdAt} OPEN: ${summary} (${targetFile})\n`;
+  }
+  const { conflictId, resolutionText } = event.payload as ConflictResolvedPayload;
+  return `- ${event.createdAt} RESOLVED ${conflictId}: ${resolutionText.replace(/\n/g, ' ')}\n`;
+}
+
+export async function materializeConflictEvent(
+  vaultDir: string,
+  event: WorkspaceEvent<ConflictDetectedPayload | ConflictResolvedPayload>
+): Promise<void> {
+  if (event.type !== 'conflict_detected' && event.type !== 'conflict_resolved') {
+    return;
+  }
+
+  await initializePhaseOneVault(vaultDir);
+  await appendFile(join(vaultDir, 'conflicts.md'), formatConflictText(event));
+}
+
 export async function readEventsJsonl(eventsPath: string): Promise<WorkspaceEvent[]> {
   const content = await readFile(eventsPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') {
@@ -109,6 +132,8 @@ export async function rebuildPhaseOneVault(vaultDir: string, eventsPath: string)
   for (const event of events) {
     if (event.type === 'publish') {
       await materializePublishEvent(vaultDir, event as WorkspaceEvent<PublishEventPayload>);
+    } else if (event.type === 'conflict_detected' || event.type === 'conflict_resolved') {
+      await materializeConflictEvent(vaultDir, event as WorkspaceEvent<ConflictDetectedPayload | ConflictResolvedPayload>);
     }
   }
 

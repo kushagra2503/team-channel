@@ -216,7 +216,9 @@ export const InboxMessageSchema = z.object({
   replyTo: z.string().optional(),
   eventId: z.string().optional(),
   createdAt: z.string().datetime(),
-  answeredAt: z.string().datetime().optional()
+  answeredAt: z.string().datetime().optional(),
+  replyText: z.string().optional(),
+  replyEventId: z.string().optional()
 });
 
 export const InboxResponseSchema = z.object({
