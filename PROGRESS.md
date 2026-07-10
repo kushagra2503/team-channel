@@ -32,10 +32,12 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   SQLite state, projects/tracks, participants, worktrees, publish events,
   vault materialization + rebuild, `vault context`, FTS5 vault search, avatars,
   repo context, and Supabase relay mirroring/sync.
-- **CLI** (`packages/cli`, `pnpm teambridge`) — `init`, `status`,
-  `project create|list`, `start`, `join`, `enter`, `publish`,
-  `vault read|context|search`, `ws show|who|branches`, plus relay commands
-  `login`, `sessions`, `list`, `sync`, `status relay`.
+- **CLI** (`packages/cli`, `pnpm teambridge`) — `init` (with `--relay
+  local|supabase`), `status`, `project create|list`, `start`, `join`, `enter`,
+  `publish`, `vault read|context|search`, `context` (compact vault context +
+  teammate deltas), `hook install|uninstall|status` (Claude Code
+  auto-injection), `ws show|who|branches`, plus relay commands `login`,
+  `sessions`, `list`, `sync`, `status relay`.
 - **Vault** (`packages/vault`) — flat Phase 1 files (`decisions.md`,
   `observations.md`, `blockers.md`, `test-results.md`, `attempts.md`)
   materialized from `events.jsonl`; row annotations (`[tb color= assign=]`)
@@ -120,10 +122,17 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   degradation when relay is unavailable.
 - Dashboard relay screens: sync health, realtime event feed, checkpoint state,
   presence panel.
+- Claude Code hook auto-injection: `teambridge hook install` writes a
+  SessionStart hook into `.claude/settings.json` that runs `teambridge
+  context`, so an agent opening a worktree gets shared context with no
+  per-session flags. `teambridge context` emits smarter compact vault context
+  (empty files dropped, per-file titles stripped, bullets deduped) plus a
+  delta of what changed since a per-participant last-seen `seq`
+  (`--peek`/`--deltas-only`/`--json`). Covered by
+  `tests/integration/context-hook-flow.test.mjs`.
 
 **Still pending:**
 
-- Claude Code hook auto-injection (compact context + teammate deltas).
 - Inbox: `teambridge ask|inbox|reply`, dashboard approval UI.
 - Daemon inbox endpoints (Nihal — Phase 3 Step 1).
 - Daemon conflict resolve endpoint (Nihal — Phase 3 Step 1).

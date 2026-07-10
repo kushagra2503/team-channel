@@ -6,6 +6,8 @@ import { runStart } from './commands/start';
 import { runEnter } from './commands/enter';
 import { runPublish } from './commands/publish';
 import { runVault } from './commands/vault';
+import { runContext } from './commands/context';
+import { runHook } from './commands/hook';
 import { runWs } from './commands/ws';
 import { runStatus } from './commands/status';
 import { runDaemon } from './commands/daemon';
@@ -17,7 +19,7 @@ function usage(): void {
   console.log(`Teambridge CLI
 
 Usage:
-  teambridge init [--first-name NAME] [--last-name NAME] [--agent cursor|claude-code|codex]
+  teambridge init [--first-name NAME] [--last-name NAME] [--agent cursor|claude-code|codex] [--relay local|supabase]
   teambridge project create [--name NAME] [--description TEXT]
   teambridge project list
   teambridge start [NAME] [BASE_REF] [--project PROJECT_ID]
@@ -31,6 +33,8 @@ Usage:
   teambridge vault read <PATH>
   teambridge vault context
   teambridge vault search <QUERY>
+  teambridge context [--json] [--peek] [--deltas-only] [--full]
+  teambridge hook install|uninstall|status
   teambridge ws show|who|branches <NAME>
   teambridge daemon start|status|stop [--port PORT]
   teambridge status
@@ -111,6 +115,16 @@ async function main(): Promise<void> {
 
     if (command === 'vault') {
       await runVault(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'context') {
+      await runContext(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'hook') {
+      await runHook(argv.slice(1), options);
       return;
     }
 
