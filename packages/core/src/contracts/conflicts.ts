@@ -19,3 +19,13 @@ export type ResolveConflictRequest = {
   resolutionText: string;
 };
 
+export type ConflictDetectedPayload = {
+  targetFile: string;
+  summary: string;
+};
+
+export type ConflictResolvedPayload = {
+  conflictId: string;
+  resolutionText: string;
+};
+

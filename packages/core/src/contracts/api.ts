@@ -3,6 +3,7 @@ import type { TeambridgeError } from './errors';
 import type { WorkspaceEvent } from './events';
 import type { WorktreeInfo, RepoContext } from './git';
 import type { InboxMessage } from './inbox';
+import type { Conflict } from './conflicts';
 import type { Participant } from './participant';
 import type { LocalUserProfile } from './config';
 import type { Project, ProjectMember } from './project';
@@ -85,6 +86,10 @@ export type EventListResponse = {
 
 export type InboxResponse = {
   messages: InboxMessage[];
+};
+
+export type ConflictsResponse = {
+  conflicts: Conflict[];
 };
 
 export type VaultReadResponse = {

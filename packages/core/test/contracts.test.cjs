@@ -221,3 +221,132 @@ test('RelayStatusResponseSchema rejects missing configured or pending', () => {
   assert.throws(() => RelayStatusResponseSchema.parse({ loggedIn: true, pending: 0, sync: [] }));
   assert.throws(() => RelayStatusResponseSchema.parse({ configured: true, loggedIn: true, sync: [] }));
 });
+
+const {
+  InboxMessageSchema,
+  InboxResponseSchema,
+  AskRequestSchema,
+  ReplyRequestSchema,
+  ConflictSchema,
+  ConflictsResponseSchema,
+  ResolveConflictRequestSchema,
+  TeamAskEventSchema,
+  TeamReplyEventSchema,
+  ConflictDetectedEventSchema,
+  ConflictResolvedEventSchema
+} = require('../dist');
+
+const inboxMessage = {
+  id: 'msg_001',
+  workspaceId: 'ws_123',
+  fromUserId: 'user_ronish',
+  toUserId: 'user_nihal',
+  status: 'pending',
+  body: 'How should we structure the conflict API?',
+  eventId: 'evt_ask_001',
+  createdAt
+};
+
+const conflict = {
+  id: 'conflict_001',
+  workspaceId: 'ws_123',
+  kind: 'vault',
+  status: 'open',
+  summary: 'Two publishes to decisions.md',
+  eventIds: ['evt_001', 'evt_002'],
+  affectedPaths: ['decisions.md'],
+  createdAt
+};
+
+test('InboxMessageSchema accepts a complete ask message', () => {
+  assert.deepEqual(InboxMessageSchema.parse(inboxMessage), inboxMessage);
+});
+
+test('InboxResponseSchema validates a list of messages', () => {
+  assert.deepEqual(InboxResponseSchema.parse({ messages: [inboxMessage] }), { messages: [inboxMessage] });
+});
+
+test('AskRequestSchema rejects empty to or text', () => {
+  assert.deepEqual(AskRequestSchema.parse({ to: 'nihal', text: 'hello' }), { to: 'nihal', text: 'hello' });
+  assert.throws(() => AskRequestSchema.parse({ to: '', text: 'hello' }));
+  assert.throws(() => AskRequestSchema.parse({ to: 'nihal', text: '' }));
+});
+
+test('ReplyRequestSchema requires messageId and text', () => {
+  assert.deepEqual(ReplyRequestSchema.parse({ messageId: 'msg_001', text: 'yes' }), { messageId: 'msg_001', text: 'yes' });
+  assert.throws(() => ReplyRequestSchema.parse({ text: 'yes' }));
+});
+
+test('ConflictSchema validates an open conflict', () => {
+  assert.deepEqual(ConflictSchema.parse(conflict), conflict);
+});
+
+test('ConflictsResponseSchema validates a list of conflicts', () => {
+  assert.deepEqual(ConflictsResponseSchema.parse({ conflicts: [conflict] }), { conflicts: [conflict] });
+});
+
+test('ResolveConflictRequestSchema requires conflictId and resolutionText', () => {
+  assert.deepEqual(
+    ResolveConflictRequestSchema.parse({ conflictId: 'conflict_001', resolutionText: 'merged manually' }),
+    { conflictId: 'conflict_001', resolutionText: 'merged manually' }
+  );
+  assert.throws(() => ResolveConflictRequestSchema.parse({ conflictId: 'conflict_001' }));
+});
+
+test('TeamAskEventSchema validates a team_ask event', () => {
+  const event = {
+    id: 'evt_ask_001',
+    workspaceId: 'ws_123',
+    seq: 1,
+    type: 'team_ask',
+    actorId: 'user_ronish',
+    deviceId: 'device_local',
+    payload: { to: 'nihal', text: 'How should we structure the conflict API?' },
+    createdAt
+  };
+  assert.deepEqual(TeamAskEventSchema.parse(event), event);
+  assert.throws(() => TeamAskEventSchema.parse({ ...event, type: 'publish' }));
+});
+
+test('TeamReplyEventSchema validates a team_reply event', () => {
+  const event = {
+    id: 'evt_reply_001',
+    workspaceId: 'ws_123',
+    seq: 2,
+    type: 'team_reply',
+    actorId: 'user_nihal',
+    deviceId: 'device_local',
+    payload: { replyToMessageId: 'msg_001', text: 'Use the same table as publish events.' },
+    createdAt
+  };
+  assert.deepEqual(TeamReplyEventSchema.parse(event), event);
+  assert.throws(() => TeamReplyEventSchema.parse({ ...event, payload: { text: 'missing replyToMessageId' } }));
+});
+
+test('ConflictDetectedEventSchema validates a conflict_detected event', () => {
+  const event = {
+    id: 'evt_conflict_001',
+    workspaceId: 'ws_123',
+    seq: 3,
+    type: 'conflict_detected',
+    actorId: 'user_ronish',
+    deviceId: 'device_local',
+    payload: { targetFile: 'decisions.md', summary: 'Two publishes to decisions.md' },
+    createdAt
+  };
+  assert.deepEqual(ConflictDetectedEventSchema.parse(event), event);
+});
+
+test('ConflictResolvedEventSchema validates a conflict_resolved event', () => {
+  const event = {
+    id: 'evt_resolve_001',
+    workspaceId: 'ws_123',
+    seq: 4,
+    type: 'conflict_resolved',
+    actorId: 'user_nihal',
+    deviceId: 'device_local',
+    payload: { conflictId: 'conflict_001', resolutionText: 'merged manually' },
+    createdAt
+  };
+  assert.deepEqual(ConflictResolvedEventSchema.parse(event), event);
+});

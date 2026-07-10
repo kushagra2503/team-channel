@@ -24,3 +24,13 @@ export type ReplyRequest = {
   text: string;
 };
 
+export type TeamAskPayload = {
+  to: string;
+  text: string;
+};
+
+export type TeamReplyPayload = {
+  replyToMessageId: string;
+  text: string;
+};
+
