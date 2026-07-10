@@ -305,7 +305,8 @@ test('publishEvent calls POST /workspaces/:id/events with correct JSON body', as
       {
         targetFile: 'decisions.md',
         payload: { text: 'Updated decision' },
-        actorId: 'user_ronish'
+        actorId: 'user_ronish',
+        repoRoot: '/tmp/repo'
       }
     ]);
   } finally {
@@ -313,7 +314,7 @@ test('publishEvent calls POST /workspaces/:id/events with correct JSON body', as
   }
 });
 
-test('searchVault calls GET /workspaces/:id/vault/search?query=...&repoRoot=...', async () => {
+test('searchVault calls GET /workspaces/:id/vault/search?q=...&repoRoot=...', async () => {
   const seen = [];
   const originalFetch = global.fetch;
   global.fetch = async (url) => {
@@ -327,7 +328,7 @@ test('searchVault calls GET /workspaces/:id/vault/search?query=...&repoRoot=...'
     const result = await searchVault('ws_123', 'invoice', { repoRoot: '/tmp/repo' });
     assert.equal(result.ok, true);
     assert.deepEqual(seen, [
-      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&query=invoice'
+      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&q=invoice'
     ]);
   } finally {
     global.fetch = originalFetch;
@@ -348,7 +349,7 @@ test('searchVault with limit includes it in the query string', async () => {
     const result = await searchVault('ws_123', 'invoice', { repoRoot: '/tmp/repo' }, 25);
     assert.equal(result.ok, true);
     assert.deepEqual(seen, [
-      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&query=invoice&limit=25'
+      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&q=invoice&limit=25'
     ]);
   } finally {
     global.fetch = originalFetch;

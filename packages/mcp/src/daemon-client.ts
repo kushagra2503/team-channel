@@ -75,9 +75,13 @@ export function publishEvent(
   body: { targetFile: string; payload: { text: string }; dedupeKey?: string; actorId?: string; deviceId?: string },
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<{ event: WorkspaceEvent }>> {
+  // The POST /workspaces/:id/events handler reads repoRoot from the request
+  // body (not the URL query string), so we must include it in the body when
+  // it is available in options.
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
   return postJson<{ event: WorkspaceEvent }>(
     `/workspaces/${encodeURIComponent(workspaceId)}/events`,
-    body,
+    bodyWithRepo,
     options
   );
 }
@@ -91,6 +95,6 @@ export function searchVault(
   return getJson<VaultSearchResponse>(
     `/workspaces/${encodeURIComponent(workspaceId)}/vault/search`,
     options,
-    { query, limit }
+    { q: query, limit }
   );
 }
