@@ -16,7 +16,11 @@ if (process.env.TEAMBRIDGE_REPO_ROOT) {
 import { z } from 'zod';
 import type {
   ApiResult,
+  Conflict,
+  ConflictsResponse,
   EventListResponse,
+  InboxMessage,
+  InboxResponse,
   JoinWorkspaceRequest,
   JoinWorkspaceResponse,
   LocalUserProfile,
@@ -60,6 +64,9 @@ import {
   SaveLocalUserProfileRequestSchema,
   UpsertProjectMemberRequestSchema,
   LocalUserProfileSchema,
+  AskRequestSchema,
+  ReplyRequestSchema,
+  ResolveConflictRequestSchema,
   avatarStorageId,
   avatarNameSlug,
   formatDisplayName
@@ -176,6 +183,24 @@ const AuthLoginBodySchema = z.object({
 });
 
 const RelayRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional()
+});
+
+const AskRequestBodySchema = AskRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const ReplyRequestBodySchema = z.object({
+  text: z.string().min(1),
+  repoRoot: z.string().min(1).optional()
+});
+
+const ResolveConflictBodySchema = ResolveConflictRequestSchema.extend({
+  repoRoot: z.string().min(1).optional()
+});
+
+const ContextPointerBodySchema = z.object({
+  lastSeenSeq: z.number().int().nonnegative(),
   repoRoot: z.string().min(1).optional()
 });
 
@@ -628,6 +653,34 @@ function initializeStateDb(repoRoot: string): string {
       created_at text not null,
       last_error text
     );
+
+    create table if not exists inbox_messages (
+      id text primary key,
+      workspace_id text not null references tracks(id),
+      from_user_id text not null,
+      to_user_id text not null,
+      status text not null check (status in ('pending', 'answered', 'expired', 'cancelled')),
+      body text not null,
+      reply_to text,
+      event_id text not null,
+      created_at text not null,
+      answered_at text,
+      reply_text text,
+      reply_event_id text
+    );
+
+    create table if not exists conflicts (
+      id text primary key,
+      workspace_id text not null references tracks(id),
+      kind text not null check (kind in ('content', 'vault', 'branch', 'unknown')),
+      status text not null check (status in ('open', 'resolved', 'ignored')),
+      summary text not null,
+      event_ids text not null,
+      affected_paths text,
+      created_at text not null,
+      resolved_at text,
+      resolution_event_id text
+    );
   `);
 
   // Separate statement (and try/catch): if this sqlite3 build lacks FTS5, every
@@ -741,6 +794,38 @@ function rowToParticipant(row: Record<string, unknown>): Participant {
     agent: row.agent ? (String(row.agent) as Participant['agent']) : undefined,
     status: row.status === 'idle' || row.status === 'offline' ? row.status : 'active',
     lastSeenAt: String(row.last_seen_at)
+  };
+}
+
+function rowToInboxMessage(row: Record<string, unknown>): InboxMessage {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    fromUserId: String(row.from_user_id),
+    toUserId: String(row.to_user_id),
+    status: row.status as InboxMessage['status'],
+    body: String(row.body),
+    replyTo: row.reply_to ? String(row.reply_to) : undefined,
+    eventId: row.event_id ? String(row.event_id) : undefined,
+    createdAt: String(row.created_at),
+    answeredAt: row.answered_at ? String(row.answered_at) : undefined,
+    replyText: row.reply_text ? String(row.reply_text) : undefined,
+    replyEventId: row.reply_event_id ? String(row.reply_event_id) : undefined
+  };
+}
+
+function rowToConflict(row: Record<string, unknown>): Conflict {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    kind: row.kind as Conflict['kind'],
+    status: row.status as Conflict['status'],
+    summary: String(row.summary),
+    eventIds: JSON.parse(String(row.event_ids ?? '[]')) as string[],
+    affectedPaths: row.affected_paths ? (JSON.parse(String(row.affected_paths)) as string[]) : undefined,
+    createdAt: String(row.created_at),
+    resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
+    resolutionEventId: row.resolution_event_id ? String(row.resolution_event_id) : undefined
   };
 }
 
