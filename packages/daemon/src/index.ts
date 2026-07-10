@@ -17,6 +17,8 @@ import { z } from 'zod';
 import type {
   ApiResult,
   Conflict,
+  ConflictDetectedPayload,
+  ConflictResolvedPayload,
   ConflictsResponse,
   EventListResponse,
   InboxMessage,
@@ -39,6 +41,8 @@ import type {
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   SyncStateEntry,
+  TeamAskPayload,
+  TeamReplyPayload,
   TeambridgeConfig,
   TeambridgeErrorCode,
   TrackListResponse,
@@ -75,6 +79,7 @@ import {
   annotateVaultItem,
   createVaultContext,
   initializePhaseOneVault,
+  materializeConflictEvent,
   materializePublishEvent,
   PHASE_ONE_VAULT_FILES,
   readEventsJsonl,
@@ -1636,6 +1641,341 @@ function listParticipants(repoRoot: string, workspaceId: string): Participant[] 
   return rows.map(rowToParticipant);
 }
 
+function getParticipantByDisplayName(
+  repoRoot: string,
+  workspaceId: string,
+  displayName: string
+): Participant | undefined {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from participants where workspace_id = ${sqlValue(workspaceId)} and display_name = ${sqlValue(displayName)} limit 1`
+  );
+  return row ? rowToParticipant(row) : undefined;
+}
+
+async function getParticipantForLocalUser(repoRoot: string, workspaceId: string): Promise<Participant | undefined> {
+  const profile = await readLocalUserProfile(repoRoot);
+  if (!profile?.displayName) {
+    return undefined;
+  }
+  return getParticipantByDisplayName(repoRoot, workspaceId, profile.displayName);
+}
+
+function listInboxMessages(repoRoot: string, workspaceId: string): InboxMessage[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from inbox_messages where workspace_id = ${sqlValue(workspaceId)} order by created_at desc`
+  );
+  return rows.map(rowToInboxMessage);
+}
+
+async function appendTeamAskEvent(
+  repoRoot: string,
+  workspace: Workspace,
+  body: { to: string; text: string }
+): Promise<InboxMessage> {
+  const dbPath = initializeStateDb(repoRoot);
+  const toParticipant = getParticipantByDisplayName(repoRoot, workspace.id, body.to);
+  if (!toParticipant) {
+    throw new Error(`No participant named "${body.to}" in this workspace`);
+  }
+  const fromParticipant = await getParticipantForLocalUser(repoRoot, workspace.id);
+  if (!fromParticipant) {
+    throw new Error('Local user is not a participant in this workspace');
+  }
+
+  runSql(
+    dbPath,
+    `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
+  );
+  const seq = getLastSeq(repoRoot, workspace.id);
+  const now = new Date().toISOString();
+  const messageId = `msg_${randomUUID()}`;
+  const eventId = `evt_${randomUUID()}`;
+
+  const event: WorkspaceEvent<TeamAskPayload> = {
+    id: eventId,
+    workspaceId: workspace.id,
+    seq,
+    type: 'team_ask',
+    actorId: fromParticipant.id,
+    deviceId: 'device_local',
+    payload: { to: body.to, text: body.text },
+    createdAt: now
+  };
+
+  const { eventsPath } = getWorkspacePaths(repoRoot, workspace);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
+
+  runSql(dbPath, `
+    insert into inbox_messages (
+      id, workspace_id, from_user_id, to_user_id, status, body, event_id, created_at
+    ) values (
+      ${sqlValue(messageId)},
+      ${sqlValue(workspace.id)},
+      ${sqlValue(fromParticipant.id)},
+      ${sqlValue(toParticipant.id)},
+      ${sqlValue('pending')},
+      ${sqlValue(body.text)},
+      ${sqlValue(eventId)},
+      ${sqlValue(now)}
+    );
+  `);
+
+  return {
+    id: messageId,
+    workspaceId: workspace.id,
+    fromUserId: fromParticipant.id,
+    toUserId: toParticipant.id,
+    status: 'pending',
+    body: body.text,
+    eventId,
+    createdAt: now
+  };
+}
+
+async function appendTeamReplyEvent(
+  repoRoot: string,
+  workspace: Workspace,
+  body: { messageId: string; text: string }
+): Promise<InboxMessage> {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from inbox_messages where id = ${sqlValue(body.messageId)} and workspace_id = ${sqlValue(workspace.id)} limit 1`
+  );
+  if (!row) {
+    throw new Error(`Message ${body.messageId} not found`);
+  }
+  const message = rowToInboxMessage(row);
+  if (message.status !== 'pending') {
+    throw new Error('Message has already been answered');
+  }
+  const fromParticipant = await getParticipantForLocalUser(repoRoot, workspace.id);
+  if (!fromParticipant || fromParticipant.id !== message.toUserId) {
+    throw new Error('Only the message recipient can reply');
+  }
+
+  runSql(
+    dbPath,
+    `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
+  );
+  const seq = getLastSeq(repoRoot, workspace.id);
+  const now = new Date().toISOString();
+  const eventId = `evt_${randomUUID()}`;
+
+  const event: WorkspaceEvent<TeamReplyPayload> = {
+    id: eventId,
+    workspaceId: workspace.id,
+    seq,
+    type: 'team_reply',
+    actorId: fromParticipant.id,
+    deviceId: 'device_local',
+    payload: { replyToMessageId: body.messageId, text: body.text },
+    createdAt: now
+  };
+
+  const { eventsPath } = getWorkspacePaths(repoRoot, workspace);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
+
+  runSql(dbPath, `
+    update inbox_messages set
+      status = ${sqlValue('answered')},
+      answered_at = ${sqlValue(now)},
+      reply_text = ${sqlValue(body.text)},
+      reply_event_id = ${sqlValue(eventId)}
+    where id = ${sqlValue(body.messageId)};
+  `);
+
+  return {
+    ...message,
+    status: 'answered',
+    answeredAt: now,
+    replyText: body.text,
+    replyEventId: eventId
+  };
+}
+
+function getOpenConflictByTargetFile(
+  repoRoot: string,
+  workspaceId: string,
+  targetFile: string
+): Conflict | undefined {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from conflicts where workspace_id = ${sqlValue(workspaceId)} and status = ${sqlValue('open')} and affected_paths like ${sqlValue(`%"${targetFile}"%`)} limit 1`
+  );
+  return row ? rowToConflict(row) : undefined;
+}
+
+function listConflicts(repoRoot: string, workspaceId: string): Conflict[] {
+  const dbPath = initializeStateDb(repoRoot);
+  const rows = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from conflicts where workspace_id = ${sqlValue(workspaceId)} and status = ${sqlValue('open')} order by created_at desc`
+  );
+  return rows.map(rowToConflict);
+}
+
+async function appendConflictDetectedEvent(
+  repoRoot: string,
+  workspace: Workspace,
+  targetFile: string,
+  summary: string,
+  eventIds: string[]
+): Promise<Conflict> {
+  const dbPath = initializeStateDb(repoRoot);
+  runSql(
+    dbPath,
+    `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
+  );
+  const seq = getLastSeq(repoRoot, workspace.id);
+  const now = new Date().toISOString();
+  const conflictId = `conflict_${randomUUID()}`;
+  const eventId = `evt_${randomUUID()}`;
+  const actorId = (await getParticipantForLocalUser(repoRoot, workspace.id))?.id ?? workspace.createdBy;
+
+  const event: WorkspaceEvent<ConflictDetectedPayload> = {
+    id: eventId,
+    workspaceId: workspace.id,
+    seq,
+    type: 'conflict_detected',
+    actorId,
+    deviceId: 'device_local',
+    payload: { targetFile, summary },
+    createdAt: now
+  };
+
+  const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
+  await materializeConflictEvent(vaultDir, event);
+
+  runSql(dbPath, `
+    insert into conflicts (
+      id, workspace_id, kind, status, summary, event_ids, affected_paths, created_at
+    ) values (
+      ${sqlValue(conflictId)},
+      ${sqlValue(workspace.id)},
+      ${sqlValue('vault')},
+      ${sqlValue('open')},
+      ${sqlValue(summary)},
+      ${sqlValue(JSON.stringify(eventIds))},
+      ${sqlValue(JSON.stringify([targetFile]))},
+      ${sqlValue(now)}
+    );
+  `);
+
+  return {
+    id: conflictId,
+    workspaceId: workspace.id,
+    kind: 'vault',
+    status: 'open',
+    summary,
+    eventIds,
+    affectedPaths: [targetFile],
+    createdAt: now
+  };
+}
+
+async function appendConflictResolvedEvent(
+  repoRoot: string,
+  workspace: Workspace,
+  conflictId: string,
+  resolutionText: string
+): Promise<Conflict> {
+  const dbPath = initializeStateDb(repoRoot);
+  const [row] = querySql<Record<string, unknown>>(
+    dbPath,
+    `select * from conflicts where id = ${sqlValue(conflictId)} and workspace_id = ${sqlValue(workspace.id)} limit 1`
+  );
+  if (!row) {
+    throw new Error(`Conflict ${conflictId} not found`);
+  }
+  const conflict = rowToConflict(row);
+  if (conflict.status !== 'open') {
+    throw new Error('Conflict is already resolved');
+  }
+
+  runSql(
+    dbPath,
+    `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
+  );
+  const seq = getLastSeq(repoRoot, workspace.id);
+  const now = new Date().toISOString();
+  const eventId = `evt_${randomUUID()}`;
+  const actorId = (await getParticipantForLocalUser(repoRoot, workspace.id))?.id ?? workspace.createdBy;
+
+  const event: WorkspaceEvent<ConflictResolvedPayload> = {
+    id: eventId,
+    workspaceId: workspace.id,
+    seq,
+    type: 'conflict_resolved',
+    actorId,
+    deviceId: 'device_local',
+    payload: { conflictId, resolutionText },
+    createdAt: now
+  };
+
+  const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
+  await materializeConflictEvent(vaultDir, event);
+
+  runSql(dbPath, `
+    update conflicts set
+      status = ${sqlValue('resolved')},
+      resolved_at = ${sqlValue(now)},
+      resolution_event_id = ${sqlValue(eventId)}
+    where id = ${sqlValue(conflictId)};
+  `);
+
+  return {
+    ...conflict,
+    status: 'resolved',
+    resolvedAt: now,
+    resolutionEventId: eventId
+  };
+}
+
+async function detectAndEmitConflictForPublish(
+  repoRoot: string,
+  workspace: Workspace,
+  event: WorkspaceEvent<PublishEventPayload>
+): Promise<Conflict | undefined> {
+  if (!event.targetFile) {
+    return undefined;
+  }
+
+  const existing = getOpenConflictByTargetFile(repoRoot, workspace.id, event.targetFile);
+  if (existing) {
+    const dbPath = initializeStateDb(repoRoot);
+    const eventIds = [...existing.eventIds, event.id];
+    const affectedPaths = Array.from(new Set([...(existing.affectedPaths ?? []), event.targetFile]));
+    runSql(dbPath, `
+      update conflicts set
+        event_ids = ${sqlValue(JSON.stringify(eventIds))},
+        affected_paths = ${sqlValue(JSON.stringify(affectedPaths))}
+      where id = ${sqlValue(existing.id)};
+    `);
+    return existing;
+  }
+
+  const { eventsPath } = getWorkspacePaths(repoRoot, workspace);
+  const events = await readEventsJsonl(eventsPath);
+  const priorPublishes = events.filter(
+    (e) => e.id !== event.id && e.type === 'publish' && e.targetFile === event.targetFile
+  );
+  if (priorPublishes.length === 0) {
+    return undefined;
+  }
+
+  const summary = `Conflicting publishes to ${event.targetFile}`;
+  const eventIds = [priorPublishes.at(-1)!.id, event.id];
+  return appendConflictDetectedEvent(repoRoot, workspace, event.targetFile, summary, eventIds);
+}
+
 function rowToWorktree(row: Record<string, unknown>): WorktreeInfo {
   return {
     workspaceId: String(row.workspace_id),
@@ -2638,6 +2978,7 @@ async function appendPublishEvent(
   const { eventsPath, vaultDir } = getWorkspacePaths(repoRoot, workspace);
   await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
   await materializePublishEvent(vaultDir, event);
+  await detectAndEmitConflictForPublish(repoRoot, workspace, event).catch(() => undefined);
 
   const updatedContent = await readFile(join(vaultDir, body.targetFile), 'utf8').catch(() => '');
   reindexVaultFile(dbPath, workspace.id, body.targetFile, updatedContent, seq);
@@ -2999,6 +3340,101 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const body = PublishRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const event = await appendPublishEvent(state, workspaceIdentifier, body);
     sendJson(response, 201, ok({ event }));
+    return;
+  }
+
+  const inboxListMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/inbox$/);
+  if (method === 'GET' && inboxListMatch) {
+    const workspaceIdentifier = decodeURIComponent(inboxListMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    sendJson<InboxResponse>(response, 200, ok({ messages: listInboxMessages(repoRoot, workspace.id) }));
+    return;
+  }
+
+  const inboxAskMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/inbox\/ask$/);
+  if (method === 'POST' && inboxAskMatch) {
+    const workspaceIdentifier = decodeURIComponent(inboxAskMatch[1]);
+    const body = AskRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    try {
+      const message = await appendTeamAskEvent(repoRoot, workspace, { to: body.to, text: body.text });
+      sendJson<InboxMessage>(response, 201, ok(message));
+    } catch (error) {
+      sendJson(response, 400, fail('INVALID_REQUEST', error instanceof Error ? error.message : 'Unable to ask'));
+    }
+    return;
+  }
+
+  const inboxReplyMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/inbox\/([^/]+)\/reply$/);
+  if (method === 'POST' && inboxReplyMatch) {
+    const workspaceIdentifier = decodeURIComponent(inboxReplyMatch[1]);
+    const messageId = decodeURIComponent(inboxReplyMatch[2]);
+    const body = ReplyRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    try {
+      const message = await appendTeamReplyEvent(repoRoot, workspace, { messageId, text: body.text });
+      sendJson<InboxMessage>(response, 200, ok(message));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to reply';
+      if (message.includes('Only the message recipient')) {
+        sendJson(response, 403, fail('FORBIDDEN', message));
+      } else {
+        sendJson(response, 400, fail('INVALID_REQUEST', message));
+      }
+    }
+    return;
+  }
+
+  const conflictsListMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/conflicts$/);
+  if (method === 'GET' && conflictsListMatch) {
+    const workspaceIdentifier = decodeURIComponent(conflictsListMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    sendJson<ConflictsResponse>(response, 200, ok({ conflicts: listConflicts(repoRoot, workspace.id) }));
+    return;
+  }
+
+  const conflictResolveMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/conflicts\/([^/]+)\/resolve$/);
+  if (method === 'POST' && conflictResolveMatch) {
+    const workspaceIdentifier = decodeURIComponent(conflictResolveMatch[1]);
+    const conflictId = decodeURIComponent(conflictResolveMatch[2]);
+    const body = ResolveConflictBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    try {
+      const conflict = await appendConflictResolvedEvent(repoRoot, workspace, conflictId, body.resolutionText);
+      sendJson<Conflict>(response, 200, ok(conflict));
+    } catch (error) {
+      sendJson(response, 400, fail('INVALID_REQUEST', error instanceof Error ? error.message : 'Unable to resolve conflict'));
+    }
     return;
   }
 
