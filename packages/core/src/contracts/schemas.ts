@@ -134,6 +134,131 @@ export const PublishEventSchema = z.object({
   createdAt: z.string().datetime()
 });
 
+export const TeamAskPayloadSchema = z.object({
+  to: z.string().min(1),
+  text: z.string().min(1)
+});
+
+export const TeamAskEventSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  seq: z.number().int().positive(),
+  type: z.literal('team_ask'),
+  actorId: z.string().min(1),
+  deviceId: z.string().min(1),
+  payload: TeamAskPayloadSchema,
+  targetFile: z.string().optional(),
+  dedupeKey: z.string().optional(),
+  createdAt: z.string().datetime()
+});
+
+export const TeamReplyPayloadSchema = z.object({
+  replyToMessageId: z.string().min(1),
+  text: z.string().min(1)
+});
+
+export const TeamReplyEventSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  seq: z.number().int().positive(),
+  type: z.literal('team_reply'),
+  actorId: z.string().min(1),
+  deviceId: z.string().min(1),
+  payload: TeamReplyPayloadSchema,
+  targetFile: z.string().optional(),
+  dedupeKey: z.string().optional(),
+  createdAt: z.string().datetime()
+});
+
+export const ConflictDetectedPayloadSchema = z.object({
+  targetFile: z.string().min(1),
+  summary: z.string().min(1)
+});
+
+export const ConflictDetectedEventSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  seq: z.number().int().positive(),
+  type: z.literal('conflict_detected'),
+  actorId: z.string().min(1),
+  deviceId: z.string().min(1),
+  payload: ConflictDetectedPayloadSchema,
+  targetFile: z.string().optional(),
+  dedupeKey: z.string().optional(),
+  createdAt: z.string().datetime()
+});
+
+export const ConflictResolvedPayloadSchema = z.object({
+  conflictId: z.string().min(1),
+  resolutionText: z.string().min(1)
+});
+
+export const ConflictResolvedEventSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  seq: z.number().int().positive(),
+  type: z.literal('conflict_resolved'),
+  actorId: z.string().min(1),
+  deviceId: z.string().min(1),
+  payload: ConflictResolvedPayloadSchema,
+  targetFile: z.string().optional(),
+  dedupeKey: z.string().optional(),
+  createdAt: z.string().datetime()
+});
+
+export const InboxMessageSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  fromUserId: z.string().min(1),
+  toUserId: z.string().min(1),
+  status: z.enum(['pending', 'answered', 'expired', 'cancelled']),
+  body: z.string().min(1),
+  replyTo: z.string().optional(),
+  eventId: z.string().optional(),
+  createdAt: z.string().datetime(),
+  answeredAt: z.string().datetime().optional(),
+  replyText: z.string().optional(),
+  replyEventId: z.string().optional()
+});
+
+export const InboxResponseSchema = z.object({
+  messages: z.array(InboxMessageSchema)
+});
+
+export const AskRequestSchema = z.object({
+  to: z.string().min(1),
+  text: z.string().min(1),
+  wait: z.boolean().optional()
+});
+
+export const ReplyRequestSchema = z.object({
+  messageId: z.string().min(1),
+  text: z.string().min(1)
+});
+
+export const ConflictSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  kind: z.enum(['content', 'vault', 'branch', 'unknown']),
+  status: z.enum(['open', 'resolved', 'ignored']),
+  summary: z.string().min(1),
+  eventIds: z.array(z.string().min(1)),
+  affectedPaths: z.array(z.string().min(1)).optional(),
+  createdAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().optional(),
+  resolutionEventId: z.string().optional(),
+  resolutionText: z.string().optional()
+});
+
+export const ConflictsResponseSchema = z.object({
+  conflicts: z.array(ConflictSchema)
+});
+
+export const ResolveConflictRequestSchema = z.object({
+  conflictId: z.string().min(1),
+  resolutionText: z.string().min(1)
+});
+
 export const VaultFileSchema = z.object({
   path: z.string().min(1),
   content: z.string(),

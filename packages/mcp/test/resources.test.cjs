@@ -43,6 +43,28 @@ const workspaceStatus = {
   lastSeq: 2
 };
 
+const inboxMessage = {
+  id: 'msg_001',
+  workspaceId: 'ws_123',
+  fromUserId: 'user_ronish',
+  toUserId: 'user_nihal',
+  status: 'pending',
+  body: 'How should we structure the conflict API?',
+  eventId: 'evt_ask_001',
+  createdAt
+};
+
+const conflict = {
+  id: 'conflict_001',
+  workspaceId: 'ws_123',
+  kind: 'vault',
+  status: 'open',
+  summary: 'Two publishes to decisions.md',
+  eventIds: ['evt_001', 'evt_002'],
+  affectedPaths: ['decisions.md'],
+  createdAt
+};
+
 const reader = {
   async getWorkspaceStatus(workspaceId) {
     assert.equal(workspaceId, 'ws_123');
@@ -69,42 +91,11 @@ const reader = {
   },
   async listInbox(workspaceId) {
     assert.equal(workspaceId, 'ws_123');
-    return {
-      ok: true,
-      data: {
-        messages: [
-          {
-            id: 'msg_1',
-            workspaceId,
-            fromUserId: 'user_ronish',
-            toUserId: 'user_nihal',
-            status: 'pending',
-            body: 'Can backend cap retries?',
-            createdAt
-          }
-        ]
-      }
-    };
+    return { ok: true, data: { messages: [inboxMessage] } };
   },
   async listConflicts(workspaceId) {
     assert.equal(workspaceId, 'ws_123');
-    return {
-      ok: true,
-      data: {
-        conflicts: [
-          {
-            id: 'conf_1',
-            workspaceId,
-            kind: 'content',
-            status: 'open',
-            summary: 'Conflict in decisions.md',
-            eventIds: ['evt_1'],
-            affectedPaths: ['decisions.md'],
-            createdAt
-          }
-        ]
-      }
-    };
+    return { ok: true, data: { conflicts: [conflict] } };
   }
 };
 
@@ -249,12 +240,10 @@ test('vault, inbox, conflict, and unknown resources have stable behavior', async
   assert.deepEqual(vault.data.context.includedPaths, ['decisions.md']);
 
   const inbox = await resolveMcpResource('teambridge://inbox', { workspaceId: 'ws_123' }, reader);
-  assert.equal(inbox.ok, true);
-  assert.equal(inbox.data.messages[0].id, 'msg_1');
+  assert.deepEqual(inbox, { ok: true, data: { messages: [inboxMessage] } });
 
   const conflicts = await resolveMcpResource('teambridge://conflicts', { workspaceId: 'ws_123' }, reader);
-  assert.equal(conflicts.ok, true);
-  assert.equal(conflicts.data.conflicts[0].id, 'conf_1');
+  assert.deepEqual(conflicts, { ok: true, data: { conflicts: [conflict] } });
 
   const missing = await resolveMcpResource('teambridge://missing', { workspaceId: 'ws_123' }, reader);
   assert.equal(missing.ok, false);
@@ -370,7 +359,8 @@ test('publishEvent calls POST /workspaces/:id/events with correct JSON body', as
       {
         targetFile: 'decisions.md',
         payload: { text: 'Updated decision' },
-        actorId: 'user_ronish'
+        actorId: 'user_ronish',
+        repoRoot: '/tmp/repo'
       }
     ]);
   } finally {
@@ -378,7 +368,7 @@ test('publishEvent calls POST /workspaces/:id/events with correct JSON body', as
   }
 });
 
-test('searchVault calls GET /workspaces/:id/vault/search?query=...&repoRoot=...', async () => {
+test('searchVault calls GET /workspaces/:id/vault/search?q=...&repoRoot=...', async () => {
   const seen = [];
   const originalFetch = global.fetch;
   global.fetch = async (url) => {
@@ -392,7 +382,7 @@ test('searchVault calls GET /workspaces/:id/vault/search?query=...&repoRoot=...'
     const result = await searchVault('ws_123', 'invoice', { repoRoot: '/tmp/repo' });
     assert.equal(result.ok, true);
     assert.deepEqual(seen, [
-      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&query=invoice'
+      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&q=invoice'
     ]);
   } finally {
     global.fetch = originalFetch;
@@ -413,7 +403,63 @@ test('searchVault with limit includes it in the query string', async () => {
     const result = await searchVault('ws_123', 'invoice', { repoRoot: '/tmp/repo' }, 25);
     assert.equal(result.ok, true);
     assert.deepEqual(seen, [
-      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&query=invoice&limit=25'
+      'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&q=invoice&limit=25'
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+const {
+  getInbox,
+  askInbox,
+  replyInbox,
+  getConflicts,
+  resolveConflict,
+  getContextPointer,
+  setContextPointer
+} = require('../dist');
+
+test('inbox and conflict fetch wrappers construct endpoints and bodies', async () => {
+  const seen = [];
+  const seenBodies = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, init) => {
+    seen.push(String(url));
+    seenBodies.push(init && init.body ? JSON.parse(init.body) : null);
+    return new Response(
+      JSON.stringify({ ok: true, data: { value: seen.length } }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    await getInbox('ws_123', { repoRoot: '/tmp/repo' });
+    await askInbox('ws_123', { to: 'nihal', text: 'hello' }, { repoRoot: '/tmp/repo' });
+    await replyInbox('ws_123', 'msg_1', { text: 'reply' }, { repoRoot: '/tmp/repo' });
+    await getConflicts('ws_123', { repoRoot: '/tmp/repo' });
+    await resolveConflict('ws_123', 'conflict_1', { resolutionText: 'fixed' }, { repoRoot: '/tmp/repo' });
+    await getContextPointer('ws_123', { repoRoot: '/tmp/repo' });
+    await setContextPointer('ws_123', { lastSeenSeq: 7 }, { repoRoot: '/tmp/repo' });
+
+    assert.deepEqual(seen, [
+      'http://127.0.0.1:9473/workspaces/ws_123/inbox?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/inbox/ask?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/inbox/msg_1/reply?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/conflicts?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/conflicts/conflict_1/resolve?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/context-pointer?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/context-pointer?repoRoot=%2Ftmp%2Frepo'
+    ]);
+
+    assert.deepEqual(seenBodies, [
+      null,
+      { to: 'nihal', text: 'hello', repoRoot: '/tmp/repo' },
+      { text: 'reply', repoRoot: '/tmp/repo' },
+      null,
+      { resolutionText: 'fixed', repoRoot: '/tmp/repo' },
+      null,
+      { lastSeenSeq: 7, repoRoot: '/tmp/repo' }
     ]);
   } finally {
     global.fetch = originalFetch;

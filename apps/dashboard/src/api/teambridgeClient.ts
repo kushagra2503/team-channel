@@ -2,17 +2,20 @@ import type {
   ApiResult,
   AskResponse,
   ConflictListResponse,
+  ContextPointerResponse,
   DeltaContextResponse,
   EventListResponse,
+  InboxMessage,
   InboxResponse,
   LocalUserProfileResponse,
   Project,
   ProjectListResponse,
   ProjectMemberListResponse,
   RelayStatusResponse,
-  RepoContextResponse,
   ReplyResponse,
+  RepoContextResponse,
   ResolveConflictResponse,
+  SaveContextPointerRequest,
   TrackListResponse,
   VaultAnnotateResponseBody,
   VaultContextResponse,
@@ -25,6 +28,8 @@ import type {
 import { avatarNameSlug } from '@/lib/avatar-identity';
 
 export const DEFAULT_DAEMON_BASE_URL = 'http://127.0.0.1:9473';
+
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 export type TeambridgeQueryParams = Record<string, string | number | boolean | undefined>;
 
@@ -90,13 +95,22 @@ export async function unwrapApiResult<T>(response: Response): Promise<T> {
   return body.data;
 }
 
+function withDefaultTimeout(signal?: AbortSignal): AbortSignal | undefined {
+  if (signal) return signal;
+  try {
+    return AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  } catch {
+    return undefined;
+  }
+}
+
 async function getJson<T>(
   path: string,
   config: TeambridgeClientConfig,
   params?: TeambridgeQueryParams,
   signal?: AbortSignal
 ): Promise<T> {
-  const response = await fetch(buildTeambridgeUrl(path, config, params), { signal });
+  const response = await fetch(buildTeambridgeUrl(path, config, params), { signal: withDefaultTimeout(signal) });
   return unwrapApiResult<T>(response);
 }
 
@@ -118,7 +132,7 @@ export async function registerRepo(config: TeambridgeClientConfig, repoRoot: str
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ repoRoot }),
-    signal
+    signal: withDefaultTimeout(signal)
   });
   return unwrapApiResult<{ repoRoot: string }>(response);
 }
@@ -217,7 +231,7 @@ export async function openRepoPath(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ path, repoRoot: config.repoRoot }),
-    signal
+    signal: withDefaultTimeout(signal)
   });
   return unwrapApiResult<{ opened: string }>(response);
 }
@@ -354,7 +368,7 @@ export function annotateVaultItem(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...annotation, repoRoot: config.repoRoot }),
-    signal
+    signal: withDefaultTimeout(signal)
   }).then((response) => unwrapApiResult<VaultAnnotateResponseBody>(response));
 }
 
@@ -397,7 +411,7 @@ export async function previewPfp(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(options),
-    signal
+    signal: withDefaultTimeout(signal)
   });
   if (!response.ok) {
     throw new Error(`pfp preview failed: ${response.status}`);
@@ -423,4 +437,32 @@ export async function regeneratePfp(
     body: JSON.stringify({ participantId, ...options })
   });
   return unwrapApiResult<{ participantId: string; meta: unknown }>(response);
+}
+
+export function getContextPointer(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ContextPointerResponse> {
+  return getJson<ContextPointerResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`,
+    config,
+    undefined,
+    signal
+  );
+}
+
+export function setContextPointer(
+  workspaceId: string,
+  body: SaveContextPointerRequest,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ContextPointerResponse> {
+  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
+  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(bodyWithRepo),
+    signal: withDefaultTimeout(signal)
+  }).then((response) => unwrapApiResult<ContextPointerResponse>(response));
 }

@@ -12,9 +12,20 @@ export type Conflict = {
   createdAt: string;
   resolvedAt?: string;
   resolutionEventId?: string;
+  resolutionText?: string;
 };
 
 export type ResolveConflictRequest = {
+  conflictId: string;
+  resolutionText: string;
+};
+
+export type ConflictDetectedPayload = {
+  targetFile: string;
+  summary: string;
+};
+
+export type ConflictResolvedPayload = {
   conflictId: string;
   resolutionText: string;
 };

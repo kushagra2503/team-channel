@@ -11,13 +11,15 @@ export type ResolutionInput = {
 };
 
 export async function resolveWorkspaceContext(input: ResolutionInput): Promise<McpResourceContext> {
+  const baseUrl = input.baseUrl ?? process.env.TEAMBRIDGE_DAEMON_URL;
+
   // 1. Explicit params
   if (input.workspaceId || input.sessionName) {
     return {
       workspaceId: input.workspaceId,
       sessionName: input.sessionName,
       repoRoot: input.repoRoot,
-      baseUrl: input.baseUrl
+      baseUrl
     };
   }
 
@@ -28,7 +30,7 @@ export async function resolveWorkspaceContext(input: ResolutionInput): Promise<M
       const content = await readFile(resolve(repoRoot, '.teambridge/.active'), 'utf-8');
       const sessionName = content.trim();
       if (sessionName) {
-        return { sessionName, repoRoot, baseUrl: input.baseUrl };
+        return { sessionName, repoRoot, baseUrl };
       }
     } catch {
       // File doesn't exist, fall through

@@ -2,6 +2,7 @@ import type {
   ApiResult,
   AskResponse,
   ConflictListResponse,
+  ContextPointerResponse,
   DaemonClientOptions,
   DaemonQueryParams,
   InboxResponse,
@@ -10,18 +11,20 @@ import type {
   ResolveConflictResponse,
   VaultContextResponse,
   VaultReadResponse,
+  VaultSearchResponse,
   WorkspaceEvent,
   WorkspaceListResponse,
-  WorkspaceStatusResponse,
-  VaultSearchResponse
+  WorkspaceStatusResponse
 } from '@teambridge/core';
 import { buildDaemonUrl } from '@teambridge/core';
 
 export { DEFAULT_DAEMON_BASE_URL, buildDaemonUrl } from '@teambridge/core';
 export type { DaemonClientOptions, DaemonQueryParams } from '@teambridge/core';
 
+const DEFAULT_TIMEOUT_MS = 10_000;
+
 async function getJson<T>(path: string, options: DaemonClientOptions, params?: DaemonQueryParams): Promise<ApiResult<T>> {
-  const response = await fetch(buildDaemonUrl(path, options, params));
+  const response = await fetch(buildDaemonUrl(path, options, params), { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
   return (await response.json()) as ApiResult<T>;
 }
 
@@ -35,7 +38,8 @@ async function postJson<T>(
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
   });
   return (await response.json()) as ApiResult<T>;
 }
@@ -80,9 +84,13 @@ export function publishEvent(
   body: { targetFile: string; payload: { text: string }; dedupeKey?: string; actorId?: string; deviceId?: string },
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<{ event: WorkspaceEvent }>> {
+  // The POST /workspaces/:id/events handler reads repoRoot from the request
+  // body (not the URL query string), so we must include it in the body when
+  // it is available in options.
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
   return postJson<{ event: WorkspaceEvent }>(
     `/workspaces/${encodeURIComponent(workspaceId)}/events`,
-    body,
+    bodyWithRepo,
     options
   );
 }
@@ -96,12 +104,13 @@ export function listInbox(
 
 export function askInbox(
   workspaceId: string,
-  body: { to: string; text: string },
+  body: { to: string; text: string; actorId?: string; deviceId?: string; dedupeKey?: string },
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<AskResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
   return postJson<AskResponse>(
     `/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`,
-    body,
+    bodyWithRepo,
     options
   );
 }
@@ -109,12 +118,13 @@ export function askInbox(
 export function replyInbox(
   workspaceId: string,
   messageId: string,
-  body: { text: string },
+  body: { text: string; actorId?: string; deviceId?: string; dedupeKey?: string },
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<ReplyResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
   return postJson<ReplyResponse>(
     `/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`,
-    body,
+    bodyWithRepo,
     options
   );
 }
@@ -129,12 +139,13 @@ export function listConflicts(
 export function resolveConflict(
   workspaceId: string,
   conflictId: string,
-  body: { resolutionText: string },
+  body: { resolutionText: string; actorId?: string; deviceId?: string; dedupeKey?: string },
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<ResolveConflictResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
   return postJson<ResolveConflictResponse>(
     `/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
-    body,
+    bodyWithRepo,
     options
   );
 }
@@ -148,6 +159,40 @@ export function searchVault(
   return getJson<VaultSearchResponse>(
     `/workspaces/${encodeURIComponent(workspaceId)}/vault/search`,
     options,
-    { query, limit }
+    { q: query, limit }
+  );
+}
+
+export function getInbox(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<InboxResponse>> {
+  return listInbox(workspaceId, options);
+}
+
+export function getConflicts(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ConflictListResponse>> {
+  return listConflicts(workspaceId, options);
+}
+
+export function getContextPointer(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ContextPointerResponse>> {
+  return getJson<ContextPointerResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`, options);
+}
+
+export function setContextPointer(
+  workspaceId: string,
+  body: { lastSeenSeq: number },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ContextPointerResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
+  return postJson<ContextPointerResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`,
+    bodyWithRepo,
+    options
   );
 }

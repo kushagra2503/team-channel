@@ -5,7 +5,7 @@ digest; the authoritative checklist stays in [`todo.md`](./todo.md), and the
 per-phase build plan lives in
 [`report/team-implementation-plan.md`](./report/team-implementation-plan.md).
 
-_Last updated: 2026-07-10._
+_Last updated: 2026-07-12._
 
 ## At a glance
 
@@ -45,18 +45,20 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
 - **Dashboard** (`apps/dashboard`) — project picker, track sidebar, project
   members, vault highlights with color/assign, participant branch/agent,
   vault search + single-file viewer, worktree "enter" affordance, sidebar
-  repo context panel, relay-session merge, inbox/conflict actions, recent
-  teammate deltas.
+  repo context panel, relay-session merge, inbox panel with reply actions,
+  conflicts panel with resolution, recent teammate deltas, and teammate delta
+  updates.
 - **Core** (`packages/core`) — shared contracts in `src/contracts/`, the
   starting point for any API/event/MCP change.
 - **MCP** (`packages/mcp`) — MCP server over stdio transport using
   `@modelcontextprotocol/sdk`. Five resources registered (`workspace`,
   `participants`, `vault/context`, `inbox`, `conflicts`) and six tools
   (`team_publish`, `vault_search`, `vault_read`, `workspace_status`,
-  `team_ask`, `team_reply`) call the daemon.
-  Workspace resolution from explicit params or `.teambridge/.active` fallback.
-  Start with `teambridge mcp`. Integration tests spawn the server over stdio
-  and verify JSON-RPC handshake, resource/tool lists, and stub errors.
+  `team_ask`, `team_reply`) — all calling the daemon. Workspace resolution
+  from explicit params, local `state.sqlite` worktree mapping, or
+  `.teambridge/.active` fallback. Start with `teambridge mcp`. Integration tests
+  spawn the server over stdio and verify JSON-RPC handshake, resource/tool
+  lists, live resource reads, and full ask/reply/conflict flows.
 
 ## Phase 1 — Local-first foundation ✅
 
@@ -105,7 +107,7 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   `conflict_resolved` events, `conflicts.md` materialization, CLI conflict
   commands, and dashboard conflict resolve UI.
 
-## Phase 3 — Agent UX, MCP, inbox 🟡
+## Phase 3 — Agent UX, MCP, inbox ✅
 
 **Live-verified:**
 
@@ -114,27 +116,36 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   `teambridge mcp`.
 - Five MCP resources registered: `teambridge://workspace` (with relay status),
   `teambridge://participants`, `teambridge://vault/context`,
-  `teambridge://inbox`, `teambridge://conflicts`.
+  `teambridge://inbox`, `teambridge://conflicts` — all backed by daemon calls.
 - Six MCP tools registered: `team_publish`, `vault_search`, `vault_read`,
-  `workspace_status`, `team_ask`, `team_reply` (all calling the daemon).
-- Workspace resolution from explicit params or `.teambridge/.active` fallback.
+  `workspace_status`, `team_ask`, `team_reply` — all calling the daemon.
+- Workspace resolution from explicit params, local `state.sqlite` worktree
+  mapping, or `.teambridge/.active` fallback.
 - Integration tests spawning the server over stdio, verifying initialize
   handshake, resources/list, tools/list, and workspace-resolution errors.
 - MCP resource contracts include relay-backed workspace state with graceful
   degradation when relay is unavailable.
 - Dashboard relay screens: sync health, realtime event feed, checkpoint state,
   presence panel.
-- Inbox daemon endpoints, `teambridge ask|inbox|reply`, live MCP ask/reply,
-  dashboard inbox panel with inline replies.
-- Conflict daemon endpoints, conflict-marker parser, `conflicts.md`
-  materialization, `teambridge conflicts`, dashboard conflict panel with inline
-  resolve action.
-- End-to-end local verification for ask/reply and conflict detect/resolve in
-  `tests/integration/inbox-conflicts-flow.test.mjs`.
+- Dashboard inbox panel with live `team_ask`/`team_reply` flow and reply
+  affordance for messages addressed to the local user.
+- Dashboard conflicts panel showing open/resolved conflicts, affected paths,
+  and a resolution action for open conflicts.
+- Dashboard teammate delta panel based on per-participant context pointers
+  (`lastSeenSeq`), with a "Mark seen" update action.
+- Dashboard recent teammate deltas panel in the Relay view.
+- Daemon inbox endpoints (`GET /workspaces/:id/inbox`,
+  `POST /workspaces/:id/inbox/ask`, `POST /workspaces/:id/inbox/:id/reply`) and
+  conflict endpoints (`GET /workspaces/:id/conflicts`,
+  `POST /workspaces/:id/conflicts/:id/resolve`) with participant-level actor
+  validation.
+- `teambridge ask|inbox|reply` CLI commands, live MCP ask/reply, and end-to-end
+  local verification in `tests/integration/inbox-conflicts-flow.test.mjs`.
+- Conflict-marker parser, `conflicts.md` materialization, and `teambridge
+  conflicts` CLI command.
 - Daemon hook/delta context endpoints (`/context/hook`, `/context/deltas`) for
   IDE hooks and dashboard callers, covered by
   `tests/integration/context-hook-flow.test.mjs`.
-- Dashboard recent teammate deltas panel in the Relay view.
 - Mock-relay end-to-end verification for offline/reconnect retry and late
   joiner checkpoint bootstrap in
   `tests/integration/relay-reconnect-bootstrap.test.mjs`.

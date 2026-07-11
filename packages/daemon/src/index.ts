@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { hostname } from 'node:os';
@@ -20,8 +20,10 @@ import type {
   Conflict,
   ConflictListResponse,
   ContextDelta,
+  ContextPointerResponse,
   DeltaContextResponse,
   DetectConflictsResponse,
+  SaveContextPointerRequest,
   EventListResponse,
   InboxMessage,
   InboxResponse,
@@ -161,6 +163,11 @@ const ResolveConflictRequestBodySchema = z.object({
   actorId: z.string().min(1).optional(),
   deviceId: z.string().min(1).optional(),
   dedupeKey: z.string().min(1).optional()
+});
+
+const ContextPointerBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  lastSeenSeq: z.number().int().min(0)
 });
 
 const VaultRebuildRequestBodySchema = z.object({
@@ -878,7 +885,9 @@ function deriveInboxMessages(events: WorkspaceEvent[]): InboxMessage[] {
         questions.set(question.id, {
           ...question,
           status: 'answered',
-          answeredAt: reply.answeredAt ?? reply.createdAt
+          answeredAt: reply.answeredAt ?? reply.createdAt,
+          replyText: reply.body,
+          replyEventId: reply.eventId
         });
       }
     }
@@ -922,7 +931,8 @@ function deriveConflicts(events: WorkspaceEvent[]): Conflict[] {
           ...existing,
           status: 'resolved',
           resolvedAt: String(payload.resolvedAt ?? event.createdAt),
-          resolutionEventId: event.id
+          resolutionEventId: event.id,
+          resolutionText: String(payload.resolutionText ?? '') || undefined
         });
       }
     }
@@ -1852,6 +1862,40 @@ async function resolveActorParticipant(repoRoot: string, workspace: Workspace, a
   if (creator) return creator;
   if (participants[0]) return participants[0];
   throw new Error(`No participants exist in ${workspace.sessionName}`);
+}
+
+function contextPointerPath(repoRoot: string, sessionName: string, displayName: string): string {
+  return join(repoRoot, '.teambridge', 'workspaces', sessionName, `.context.${safeDisplayName(displayName)}.json`);
+}
+
+async function readContextPointer(
+  repoRoot: string,
+  sessionName: string,
+  displayName: string
+): Promise<ContextPointerResponse | null> {
+  const path = contextPointerPath(repoRoot, sessionName, displayName);
+  if (!existsSync(path)) {
+    return null;
+  }
+  try {
+    const content = await readFile(path, 'utf8');
+    return JSON.parse(content) as ContextPointerResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function writeContextPointer(
+  repoRoot: string,
+  pointer: ContextPointerResponse
+): Promise<string> {
+  const dir = join(repoRoot, '.teambridge', 'workspaces', pointer.sessionName);
+  mkdirSync(dir, { recursive: true });
+  const path = contextPointerPath(repoRoot, pointer.sessionName, pointer.displayName);
+  const tempPath = `${path}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(pointer, null, 2)}\n`);
+  await rename(tempPath, path);
+  return path;
 }
 
 function rowToWorktree(row: Record<string, unknown>): WorktreeInfo {
@@ -3197,7 +3241,14 @@ async function replyInboxMessage(
   );
   const reply = inboxMessageFromReplyEvent(event, new Map([[question.id, question]]));
   if (!reply) throw new Error('Failed to create inbox reply');
-  return { message: reply, event };
+  const updatedQuestion = {
+    ...question,
+    status: 'answered' as const,
+    answeredAt: reply.answeredAt ?? reply.createdAt,
+    replyText: reply.body,
+    replyEventId: reply.eventId
+  };
+  return { message: updatedQuestion, event };
 }
 
 async function listConflicts(repoRoot: string, workspace: Workspace): Promise<Conflict[]> {
@@ -3774,6 +3825,64 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const body = ResolveConflictRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const result = await resolveConflict(state, workspaceIdentifier, conflictId, body);
     sendJson<ResolveConflictResponse>(response, 200, ok(result));
+    return;
+  }
+
+  const contextPointerMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/context-pointer$/);
+  if (method === 'GET' && contextPointerMatch) {
+    const workspaceIdentifier = decodeURIComponent(contextPointerMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const profile = await readLocalUserProfile(repoRoot);
+    if (!profile?.displayName) {
+      sendJson(response, 400, fail('INVALID_REQUEST', 'Local user profile is not set'));
+      return;
+    }
+    const pointer = await readContextPointer(repoRoot, workspace.sessionName, profile.displayName);
+    if (!pointer) {
+      sendJson<ContextPointerResponse>(response, 200, ok({
+        workspaceId: workspace.id,
+        sessionName: workspace.sessionName,
+        displayName: profile.displayName,
+        lastSeenSeq: 0,
+        updatedAt: new Date().toISOString()
+      }));
+      return;
+    }
+    sendJson<ContextPointerResponse>(response, 200, ok(pointer));
+    return;
+  }
+
+  if (method === 'POST' && contextPointerMatch) {
+    const workspaceIdentifier = decodeURIComponent(contextPointerMatch[1]);
+    const body = ContextPointerBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const profile = await readLocalUserProfile(repoRoot);
+    if (!profile?.displayName) {
+      sendJson(response, 400, fail('INVALID_REQUEST', 'Local user profile is not set'));
+      return;
+    }
+    const now = new Date().toISOString();
+    const pointer: ContextPointerResponse = {
+      workspaceId: workspace.id,
+      sessionName: workspace.sessionName,
+      displayName: profile.displayName,
+      lastSeenSeq: body.lastSeenSeq,
+      updatedAt: now
+    };
+    await writeContextPointer(repoRoot, pointer);
+    sendJson<ContextPointerResponse>(response, 200, ok(pointer));
     return;
   }
 

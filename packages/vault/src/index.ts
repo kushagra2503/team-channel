@@ -138,7 +138,7 @@ function deriveConflicts(events: WorkspaceEvent[]): Conflict[] {
   });
 }
 
-function renderConflictsMarkdown(conflicts: Conflict[], events: WorkspaceEvent[]): string {
+export function renderConflictsMarkdown(conflicts: Conflict[], events: WorkspaceEvent[]): string {
   const resolutionByConflictId = new Map<string, string>();
   for (const event of events) {
     if (event.type !== 'conflict_resolved' || typeof event.payload !== 'object' || event.payload === null) continue;

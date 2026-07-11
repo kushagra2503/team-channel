@@ -11,6 +11,8 @@ export type InboxMessage = {
   eventId?: string;
   createdAt: string;
   answeredAt?: string;
+  replyText?: string;
+  replyEventId?: string;
 };
 
 export type AskRequest = {
@@ -21,6 +23,16 @@ export type AskRequest = {
 
 export type ReplyRequest = {
   messageId: string;
+  text: string;
+};
+
+export type TeamAskPayload = {
+  to: string;
+  text: string;
+};
+
+export type TeamReplyPayload = {
+  replyToMessageId: string;
   text: string;
 };
 

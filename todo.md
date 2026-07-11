@@ -103,7 +103,7 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
 - [x] Topbar cleanup (removed teammate count + note # chips)
 
-Now complete: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, and CLI/dashboard parity for the local workflow. Remaining later polish: packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces:
+Now complete: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, and CLI/dashboard parity for the local workflow. Remaining later polish: packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces plus inbox, conflicts, and teammate-delta panels:
 
 - [x] Ronish: render participant `branch` and `agent` in `TrackParticipantsPanel.tsx` — the daemon's `/workspaces/:id/status` response includes both per participant.
 - [x] Ronish: add a vault search UI (search box + ranked results list) calling the new `GET /workspaces/:id/vault/search` route.
@@ -278,7 +278,7 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
 - [x] Step 2, Ronish + Kushagra in parallel:
   - [x] Ronish: implement MCP server over stdio transport (Claude Code compatible). (PR #5)
   - [x] Ronish: implement MCP workspace/worktree resolution using explicit query params, local `state.sqlite` worktree path mapping, and `.teambridge/.active` fallback. (PR #5)
-  - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (stub), `teambridge://conflicts` (stub). (PR #5)
+  - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (live), `teambridge://conflicts` (live). (PR #5 + inbox/conflicts cross-surface branch)
   - [x] Kushagra: implement Claude Code hook auto-injection (`teambridge hook install|uninstall|status` writes a SessionStart hook into `.claude/settings.json` that runs `teambridge context`).
   - [x] Kushagra: ensure normal use needs no per-session CLI flags (the installed hook runs `teambridge context` with no flags; `context`/`publish`/`vault *` resolve the current track from the branch).
   - [x] Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX (`teambridge context` drops empty files, strips per-file titles, and dedupes bullets).

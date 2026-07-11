@@ -124,6 +124,9 @@ export type ConflictListResponse = {
   conflicts: Conflict[];
 };
 
+// Alias kept for compatibility with the dashboard inbox/conflicts branch.
+export type ConflictsResponse = ConflictListResponse;
+
 export type DetectConflictsResponse = {
   conflicts: Conflict[];
   events: WorkspaceEvent[];
@@ -132,6 +135,18 @@ export type DetectConflictsResponse = {
 export type ResolveConflictResponse = {
   conflict: Conflict;
   event: WorkspaceEvent;
+};
+
+export type ContextPointerResponse = {
+  workspaceId: string;
+  sessionName: string;
+  displayName: string;
+  lastSeenSeq: number;
+  updatedAt: string;
+};
+
+export type SaveContextPointerRequest = {
+  lastSeenSeq: number;
 };
 
 export type VaultReadResponse = {

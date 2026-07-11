@@ -1,7 +1,7 @@
 import type {
   ApiResult,
-  InboxResponse,
   ConflictListResponse,
+  InboxResponse,
   McpRequestContext,
   McpResourceName,
   McpWorkspaceResourceResponse,

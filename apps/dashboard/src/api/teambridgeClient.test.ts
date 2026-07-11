@@ -1,5 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildTeambridgeUrl, getDefaultClientConfig, getRelayStatus, getWorkspaceEvents, readVaultFile, searchVault, unwrapApiResult } from './teambridgeClient';
+import {
+  askInbox,
+  buildTeambridgeUrl,
+  getContextPointer,
+  getDefaultClientConfig,
+  listConflicts,
+  listInbox,
+  getRelayStatus,
+  getWorkspaceEvents,
+  readVaultFile,
+  replyInbox,
+  resolveConflict,
+  searchVault,
+  setContextPointer,
+  unwrapApiResult
+} from './teambridgeClient';
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -153,5 +168,87 @@ describe('teambridgeClient', () => {
     );
 
     await expect(getRelayStatus({})).rejects.toThrow('Daemon error');
+  });
+
+  it('fetches inbox, conflicts, and context pointer from the daemon', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const message = {
+      id: 'msg_001',
+      workspaceId: 'ws_123',
+      fromUserId: 'user_ronish',
+      toUserId: 'user_nihal',
+      status: 'pending',
+      body: 'How should we structure the conflict API?',
+      createdAt: '2026-07-10T12:00:00.000Z'
+    };
+    const conflict = {
+      id: 'conflict_001',
+      workspaceId: 'ws_123',
+      kind: 'vault',
+      status: 'open',
+      summary: 'Two publishes to decisions.md',
+      eventIds: ['evt_001', 'evt_002'],
+      affectedPaths: ['decisions.md'],
+      createdAt: '2026-07-10T12:00:00.000Z'
+    };
+    const pointer = {
+      workspaceId: 'ws_123',
+      sessionName: 'billing-refactor',
+      displayName: 'ronish',
+      lastSeenSeq: 5,
+      updatedAt: '2026-07-10T12:00:00.000Z'
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { messages: [message] } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: { conflicts: [conflict] } }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: pointer }));
+
+    await expect(listInbox('ws_123', { repoRoot: '/tmp/repo' })).resolves.toEqual({ messages: [message] });
+    await expect(listConflicts('ws_123', { repoRoot: '/tmp/repo' })).resolves.toEqual({ conflicts: [conflict] });
+    await expect(getContextPointer('ws_123', { repoRoot: '/tmp/repo' })).resolves.toEqual(pointer);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:9473/workspaces/ws_123/inbox?repoRoot=%2Ftmp%2Frepo');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://127.0.0.1:9473/workspaces/ws_123/conflicts?repoRoot=%2Ftmp%2Frepo');
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('http://127.0.0.1:9473/workspaces/ws_123/context-pointer?repoRoot=%2Ftmp%2Frepo');
+  });
+
+  it('posts ask, reply, resolve, and context pointer updates', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const askResponse = {
+      message: { id: 'msg_001', status: 'pending' },
+      event: { id: 'evt_ask_001', workspaceId: 'ws_123', seq: 1, type: 'team_ask', actorId: 'user_local', deviceId: 'device_local', payload: {}, createdAt: '2026-07-10T12:00:00.000Z' }
+    };
+    const replyResponse = {
+      message: { id: 'msg_001', status: 'answered' },
+      event: { id: 'evt_reply_001', workspaceId: 'ws_123', seq: 2, type: 'team_reply', actorId: 'user_local', deviceId: 'device_local', payload: {}, createdAt: '2026-07-10T12:00:00.000Z' }
+    };
+    const resolveResponse = {
+      conflict: { id: 'conflict_001', status: 'resolved' },
+      event: { id: 'evt_resolve_001', workspaceId: 'ws_123', seq: 3, type: 'conflict_resolved', actorId: 'user_local', deviceId: 'device_local', payload: {}, createdAt: '2026-07-10T12:00:00.000Z' }
+    };
+    const pointerResponse = {
+      workspaceId: 'ws_123',
+      sessionName: 'billing-refactor',
+      displayName: 'ronish',
+      lastSeenSeq: 7,
+      updatedAt: '2026-07-10T12:00:00.000Z'
+    };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: askResponse }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: replyResponse }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: resolveResponse }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, data: pointerResponse }));
+
+    await expect(askInbox('ws_123', { repoRoot: '/tmp/repo' }, { to: 'nihal', text: 'hello' })).resolves.toEqual(askResponse);
+    await expect(replyInbox('ws_123', 'msg_001', { repoRoot: '/tmp/repo' }, { text: 'reply' })).resolves.toEqual(replyResponse);
+    await expect(resolveConflict('ws_123', 'conflict_001', { repoRoot: '/tmp/repo' }, { resolutionText: 'merged' })).resolves.toEqual(resolveResponse);
+    await expect(setContextPointer('ws_123', { lastSeenSeq: 7 }, { repoRoot: '/tmp/repo' })).resolves.toEqual(pointerResponse);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://127.0.0.1:9473/workspaces/ws_123/inbox/ask?repoRoot=%2Ftmp%2Frepo');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('http://127.0.0.1:9473/workspaces/ws_123/inbox/msg_001/reply?repoRoot=%2Ftmp%2Frepo');
+    expect(fetchMock.mock.calls[2]?.[0]).toBe(
+      'http://127.0.0.1:9473/workspaces/ws_123/conflicts/conflict_001/resolve?repoRoot=%2Ftmp%2Frepo'
+    );
+    expect(fetchMock.mock.calls[3]?.[0]).toBe('http://127.0.0.1:9473/workspaces/ws_123/context-pointer?repoRoot=%2Ftmp%2Frepo');
   });
 });

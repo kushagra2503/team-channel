@@ -3,8 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { Conflict, ContextDelta, InboxMessage, Project, ProjectMember, LocalUserProfile, RelayStatusResponse, VaultContext, VaultItemAnnotation, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 import {
   annotateVaultItem,
-  getDefaultClientConfig,
   getContextDeltas,
+  getDefaultClientConfig,
   getProjectMembers,
   getProjectTracks,
   getRelayStatus,
@@ -13,13 +13,14 @@ import {
   getWorkspaceStatus,
   listConflicts,
   listInbox,
-  listRelaySessions,
   listProjects,
+  listRelaySessions,
   replyInbox,
   resolveConflict,
   DEFAULT_DAEMON_BASE_URL,
   type TeambridgeClientConfig
 } from '@/api/teambridgeClient';
+import { useContextPointer } from '@/hooks/useContextPointer';
 import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -85,6 +86,8 @@ export function DashboardPage() {
   const [conflictsError, setConflictsError] = useState<string>();
   const [teamPanelOpen, setTeamPanelOpen] = useState(true);
   const [avatarRev, setAvatarRev] = useState(0);
+
+  const { pointer, error: pointerError, update: updatePointer } = useContextPointer(selectedTrackId, clientConfig);
   const daemonUrl = clientConfig.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL;
   const cachedIdentity = useMemo(() => readCachedLocalIdentity(daemonUrl), [daemonUrl]);
   const [localUser, setLocalUser] = useState<LocalUserProfile | null>(() => cachedIdentity?.profile ?? null);
@@ -435,6 +438,13 @@ export function DashboardPage() {
     await refreshInboxAndConflicts();
   }, [clientConfig, localParticipantId, refreshInboxAndConflicts, selectedTrackId]);
 
+  const handleMarkSeen = useCallback(() => {
+    const latestSeq = events?.reduce((max, e) => Math.max(max, e.seq), 0) ?? 0;
+    if (latestSeq > 0) {
+      void updatePointer(latestSeq);
+    }
+  }, [events, updatePointer]);
+
   return (
     <>
       <div className="flex shrink-0">
@@ -491,6 +501,9 @@ export function DashboardPage() {
           inboxError={inboxError}
           conflicts={conflicts}
           conflictsError={conflictsError}
+          pointer={pointer}
+          pointerError={pointerError}
+          onMarkSeen={handleMarkSeen}
           onReplyInbox={handleInboxReply}
           onResolveConflict={handleResolveConflict}
         />
