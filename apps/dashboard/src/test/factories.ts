@@ -1,4 +1,4 @@
-import type { Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Conflict, InboxMessage, Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 
 export const createdAt = '2026-06-22T00:00:00.000Z';
 
@@ -97,6 +97,34 @@ export function makeWorkspaceEvent(overrides: Partial<WorkspaceEvent> = {}): Wor
     payload: { text: 'Decision made' },
     targetFile: 'decisions.md',
     createdAt: '2026-07-06T12:00:00.000Z',
+    ...overrides
+  };
+}
+
+export function makeInboxMessage(overrides: Partial<InboxMessage> = {}): InboxMessage {
+  return {
+    id: 'msg_001',
+    workspaceId: 'ws_123',
+    fromUserId: 'user_ronish',
+    toUserId: 'user_nihal',
+    status: 'pending',
+    body: 'How should we structure the conflict API?',
+    eventId: 'evt_ask_001',
+    createdAt,
+    ...overrides
+  };
+}
+
+export function makeConflict(overrides: Partial<Conflict> = {}): Conflict {
+  return {
+    id: 'conflict_001',
+    workspaceId: 'ws_123',
+    kind: 'vault',
+    status: 'open',
+    summary: 'Two publishes to decisions.md',
+    eventIds: ['evt_001', 'evt_002'],
+    affectedPaths: ['decisions.md'],
+    createdAt,
     ...overrides
   };
 }
