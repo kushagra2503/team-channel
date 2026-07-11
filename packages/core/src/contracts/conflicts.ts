@@ -12,6 +12,7 @@ export type Conflict = {
   createdAt: string;
   resolvedAt?: string;
   resolutionEventId?: string;
+  resolutionText?: string;
 };
 
 export type ResolveConflictRequest = {

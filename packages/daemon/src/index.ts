@@ -686,7 +686,8 @@ function initializeStateDb(repoRoot: string): string {
       affected_paths text,
       created_at text not null,
       resolved_at text,
-      resolution_event_id text
+      resolution_event_id text,
+      resolution_text text
     );
   `);
 
@@ -832,7 +833,8 @@ function rowToConflict(row: Record<string, unknown>): Conflict {
     affectedPaths: row.affected_paths ? (JSON.parse(String(row.affected_paths)) as string[]) : undefined,
     createdAt: String(row.created_at),
     resolvedAt: row.resolved_at ? String(row.resolved_at) : undefined,
-    resolutionEventId: row.resolution_event_id ? String(row.resolution_event_id) : undefined
+    resolutionEventId: row.resolution_event_id ? String(row.resolution_event_id) : undefined,
+    resolutionText: row.resolution_text ? String(row.resolution_text) : undefined
   };
 }
 
@@ -1929,7 +1931,8 @@ async function appendConflictResolvedEvent(
     update conflicts set
       status = ${sqlValue('resolved')},
       resolved_at = ${sqlValue(now)},
-      resolution_event_id = ${sqlValue(eventId)}
+      resolution_event_id = ${sqlValue(eventId)},
+      resolution_text = ${sqlValue(resolutionText)}
     where id = ${sqlValue(conflictId)};
   `);
 
@@ -1937,7 +1940,8 @@ async function appendConflictResolvedEvent(
     ...conflict,
     status: 'resolved',
     resolvedAt: now,
-    resolutionEventId: eventId
+    resolutionEventId: eventId,
+    resolutionText
   };
 }
 

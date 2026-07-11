@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Project, ProjectMember, LocalUserProfile, RelayStatusResponse, VaultContext, VaultItemAnnotation, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Conflict, InboxMessage, Project, ProjectMember, LocalUserProfile, RelayStatusResponse, VaultContext, VaultItemAnnotation, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 import {
   annotateVaultItem,
+  getConflicts,
   getDefaultClientConfig,
+  getInbox,
   getProjectMembers,
   getProjectTracks,
   getRelayStatus,
@@ -15,6 +17,7 @@ import {
   DEFAULT_DAEMON_BASE_URL,
   type TeambridgeClientConfig
 } from '@/api/teambridgeClient';
+import { useContextPointer } from '@/hooks/useContextPointer';
 import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -72,8 +75,14 @@ export function DashboardPage() {
   const [relayError, setRelayError] = useState<string>();
   const [events, setEvents] = useState<WorkspaceEvent[]>();
   const [eventsError, setEventsError] = useState<string>();
+  const [inboxMessages, setInboxMessages] = useState<InboxMessage[]>();
+  const [inboxError, setInboxError] = useState<string>();
+  const [conflicts, setConflicts] = useState<Conflict[]>();
+  const [conflictsError, setConflictsError] = useState<string>();
   const [teamPanelOpen, setTeamPanelOpen] = useState(true);
   const [avatarRev, setAvatarRev] = useState(0);
+
+  const { pointer, error: pointerError, update: updatePointer } = useContextPointer(selectedTrackId, clientConfig);
   const daemonUrl = clientConfig.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL;
   const cachedIdentity = useMemo(() => readCachedLocalIdentity(daemonUrl), [daemonUrl]);
   const [localUser, setLocalUser] = useState<LocalUserProfile | null>(() => cachedIdentity?.profile ?? null);
@@ -297,6 +306,54 @@ export function DashboardPage() {
     };
   }, [clientConfig, selectedTrackId]);
 
+  // Poll inbox and conflicts (track-scoped, 5s cadence)
+  useEffect(() => {
+    if (!selectedTrackId) {
+      setInboxMessages(undefined);
+      setInboxError(undefined);
+      setConflicts(undefined);
+      setConflictsError(undefined);
+      return;
+    }
+
+    const controller = new AbortController();
+    setInboxError(undefined);
+    setConflictsError(undefined);
+
+    const pollInboxAndConflicts = async () => {
+      try {
+        const inboxRes = await getInbox(selectedTrackId, clientConfig, controller.signal);
+        if (!controller.signal.aborted) {
+          setInboxMessages(inboxRes.messages);
+          setInboxError(undefined);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setInboxError(error instanceof Error ? error.message : 'Unable to load inbox.');
+        }
+      }
+      try {
+        const conflictsRes = await getConflicts(selectedTrackId, clientConfig, controller.signal);
+        if (!controller.signal.aborted) {
+          setConflicts(conflictsRes.conflicts);
+          setConflictsError(undefined);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setConflictsError(error instanceof Error ? error.message : 'Unable to load conflicts.');
+        }
+      }
+    };
+
+    void pollInboxAndConflicts();
+    const refreshId = window.setInterval(pollInboxAndConflicts, PROJECT_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(refreshId);
+      controller.abort();
+    };
+  }, [clientConfig, selectedTrackId]);
+
   const selectedTrack = workspaceStatus?.workspace ?? tracks.find((t) => t.id === selectedTrackId);
 
   useEffect(() => {
@@ -351,6 +408,25 @@ export function DashboardPage() {
     }
   }, [selectedTrackId, clientConfig, cache]);
 
+  const handleInboxReply = useCallback(async (message: InboxMessage) => {
+    setInboxMessages((prev) =>
+      prev?.map((m) => (m.id === message.id ? message : m))
+    );
+  }, []);
+
+  const handleConflictResolve = useCallback(async (conflict: Conflict) => {
+    setConflicts((prev) =>
+      prev?.map((c) => (c.id === conflict.id ? conflict : c))
+    );
+  }, []);
+
+  const handleMarkSeen = useCallback(() => {
+    const latestSeq = events?.reduce((max, e) => Math.max(max, e.seq), 0) ?? 0;
+    if (latestSeq > 0) {
+      void updatePointer(latestSeq);
+    }
+  }, [events, updatePointer]);
+
   return (
     <>
       <div className="flex shrink-0">
@@ -401,6 +477,15 @@ export function DashboardPage() {
           events={events}
           eventsError={eventsError}
           latestCheckpoint={workspaceStatus?.latestCheckpoint}
+          inboxMessages={inboxMessages}
+          inboxError={inboxError}
+          onInboxReply={handleInboxReply}
+          conflicts={conflicts}
+          conflictsError={conflictsError}
+          onConflictResolve={handleConflictResolve}
+          pointer={pointer}
+          pointerError={pointerError}
+          onMarkSeen={handleMarkSeen}
         />
       </div>
     </>

@@ -20,7 +20,8 @@ export type ConflictsPanelProps = {
 
 const STATUS_STYLES: Record<Conflict['status'], { label: string; className: string }> = {
   open: { label: 'open', className: 'bg-red-500/15 text-red-600' },
-  resolved: { label: 'resolved', className: 'bg-emerald-500/15 text-emerald-600' }
+  resolved: { label: 'resolved', className: 'bg-emerald-500/15 text-emerald-600' },
+  ignored: { label: 'ignored', className: 'bg-muted text-muted-foreground' }
 };
 
 export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolve }: ConflictsPanelProps) {
