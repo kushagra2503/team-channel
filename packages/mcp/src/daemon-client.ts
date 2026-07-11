@@ -20,8 +20,10 @@ import { buildDaemonUrl } from '@teambridge/core';
 export { DEFAULT_DAEMON_BASE_URL, buildDaemonUrl } from '@teambridge/core';
 export type { DaemonClientOptions, DaemonQueryParams } from '@teambridge/core';
 
+const DEFAULT_TIMEOUT_MS = 10_000;
+
 async function getJson<T>(path: string, options: DaemonClientOptions, params?: DaemonQueryParams): Promise<ApiResult<T>> {
-  const response = await fetch(buildDaemonUrl(path, options, params));
+  const response = await fetch(buildDaemonUrl(path, options, params), { signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS) });
   return (await response.json()) as ApiResult<T>;
 }
 
@@ -35,7 +37,8 @@ async function postJson<T>(
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
   });
   return (await response.json()) as ApiResult<T>;
 }

@@ -74,6 +74,25 @@ test('daemon inbox and conflict endpoints work end-to-end', async (t) => {
   const answered = inboxAfterReply.body.data.messages.find((m) => m.id === messageId);
   assert.equal(answered.status, 'answered');
 
+  // Authorization: only the recipient can reply to a pending message.
+  const askAgain = await apiPost(
+    `/workspaces/${workspaceId}/inbox/ask`,
+    { to: 'Bob', text: 'Second question for Bob' },
+    ctx
+  );
+  assert.equal(askAgain.body.ok, true, askAgain.body.error?.message);
+  await writeFile(
+    path.join(repoRoot, '.teambridge', 'user.json'),
+    JSON.stringify({ schemaVersion: 1, firstName: 'Alice', lastName: 'T', displayName: 'Alice T' }, null, 2)
+  );
+  const unauthorizedReply = await apiPost(
+    `/workspaces/${workspaceId}/inbox/${askAgain.body.data.id}/reply`,
+    { text: 'I am not Bob' },
+    ctx
+  );
+  assert.equal(unauthorizedReply.body.ok, false);
+  assert.equal(unauthorizedReply.body.error.code, 'FORBIDDEN');
+
   // Two publishes to the same file trigger a conflict.
   const pub1 = await apiPost(
     `/workspaces/${workspaceId}/events`,

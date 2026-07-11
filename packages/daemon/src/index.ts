@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { hostname } from 'node:os';
@@ -1933,8 +1933,16 @@ async function appendConflictResolvedEvent(
       resolved_at = ${sqlValue(now)},
       resolution_event_id = ${sqlValue(eventId)},
       resolution_text = ${sqlValue(resolutionText)}
-    where id = ${sqlValue(conflictId)};
+    where id = ${sqlValue(conflictId)} and status = ${sqlValue('open')};
   `);
+
+  const [updated] = querySql<{ status: string }>(
+    dbPath,
+    `select status from conflicts where id = ${sqlValue(conflictId)}`
+  );
+  if (!updated || updated.status !== 'resolved') {
+    throw new Error('Conflict was already resolved or could not be updated');
+  }
 
   return {
     ...conflict,
@@ -2010,7 +2018,9 @@ async function writeContextPointer(
   const dir = join(repoRoot, '.teambridge', 'workspaces', pointer.sessionName);
   mkdirSync(dir, { recursive: true });
   const path = contextPointerPath(repoRoot, pointer.sessionName, pointer.displayName);
-  await writeFile(path, `${JSON.stringify(pointer, null, 2)}\n`);
+  const tempPath = `${path}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(pointer, null, 2)}\n`);
+  await rename(tempPath, path);
   return path;
 }
 
