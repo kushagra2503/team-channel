@@ -15,8 +15,17 @@ if (process.env.TEAMBRIDGE_REPO_ROOT) {
 }
 import { z } from 'zod';
 import type {
+  AskResponse,
   ApiResult,
+  Conflict,
+  ConflictListResponse,
+  ContextDelta,
+  DeltaContextResponse,
+  DetectConflictsResponse,
   EventListResponse,
+  InboxMessage,
+  InboxResponse,
+  HookContextResponse,
   JoinWorkspaceRequest,
   JoinWorkspaceResponse,
   LocalUserProfile,
@@ -32,6 +41,8 @@ import type {
   PublishEventRequest,
   RepoContext,
   RepoContextResponse,
+  ReplyResponse,
+  ResolveConflictResponse,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   SyncStateEntry,
@@ -123,6 +134,35 @@ const PublishRequestBodySchema = PublishEventRequestSchema.extend({
   deviceId: z.string().min(1).optional()
 });
 
+const AskRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  to: z.string().min(1),
+  text: z.string().min(1),
+  actorId: z.string().min(1).optional(),
+  deviceId: z.string().min(1).optional(),
+  dedupeKey: z.string().min(1).optional()
+});
+
+const ReplyRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  text: z.string().min(1),
+  actorId: z.string().min(1).optional(),
+  deviceId: z.string().min(1).optional(),
+  dedupeKey: z.string().min(1).optional()
+});
+
+const DetectConflictsRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional()
+});
+
+const ResolveConflictRequestBodySchema = z.object({
+  repoRoot: z.string().min(1).optional(),
+  resolutionText: z.string().min(1),
+  actorId: z.string().min(1).optional(),
+  deviceId: z.string().min(1).optional(),
+  dedupeKey: z.string().min(1).optional()
+});
+
 const VaultRebuildRequestBodySchema = z.object({
   repoRoot: z.string().min(1).optional()
 });
@@ -204,6 +244,13 @@ type PublishRequestBody = PublishEventRequest & {
   repoRoot?: string;
   actorId?: string;
   deviceId?: string;
+};
+
+type EventRequestBody = {
+  repoRoot?: string;
+  actorId?: string;
+  deviceId?: string;
+  dedupeKey?: string;
 };
 
 type AppState = {
@@ -766,6 +813,205 @@ function remoteCheckpointToVaultCheckpoint(row: RemoteCheckpointRow): VaultCheck
   };
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function inboxMessageFromAskEvent(event: WorkspaceEvent): InboxMessage | null {
+  if (event.type !== 'team_ask' || typeof event.payload !== 'object' || event.payload === null) {
+    return null;
+  }
+  const payload = event.payload as Record<string, unknown>;
+  const id = String(payload.messageId ?? payload.id ?? `msg_${event.id}`);
+  const toUserId = String(payload.toParticipantId ?? payload.toUserId ?? '');
+  const body = String(payload.text ?? payload.body ?? '').trim();
+  if (!toUserId || !body) return null;
+  return {
+    id,
+    workspaceId: event.workspaceId,
+    fromUserId: String(payload.fromParticipantId ?? payload.fromUserId ?? event.actorId),
+    toUserId,
+    status: 'pending',
+    body,
+    eventId: event.id,
+    createdAt: String(payload.createdAt ?? event.createdAt)
+  };
+}
+
+function inboxMessageFromReplyEvent(event: WorkspaceEvent, questions: Map<string, InboxMessage>): InboxMessage | null {
+  if (event.type !== 'team_reply' || typeof event.payload !== 'object' || event.payload === null) {
+    return null;
+  }
+  const payload = event.payload as Record<string, unknown>;
+  const replyTo = String(payload.messageId ?? payload.replyTo ?? '');
+  const body = String(payload.text ?? payload.body ?? '').trim();
+  if (!replyTo || !body) return null;
+  const question = questions.get(replyTo);
+  return {
+    id: String(payload.replyMessageId ?? payload.id ?? `msg_${event.id}`),
+    workspaceId: event.workspaceId,
+    fromUserId: String(payload.fromParticipantId ?? payload.fromUserId ?? event.actorId),
+    toUserId: String(payload.toParticipantId ?? payload.toUserId ?? question?.fromUserId ?? ''),
+    status: 'answered',
+    body,
+    replyTo,
+    eventId: event.id,
+    createdAt: String(payload.createdAt ?? event.createdAt),
+    answeredAt: String(payload.answeredAt ?? event.createdAt)
+  };
+}
+
+function deriveInboxMessages(events: WorkspaceEvent[]): InboxMessage[] {
+  const questions = new Map<string, InboxMessage>();
+  const replies: InboxMessage[] = [];
+
+  for (const event of events) {
+    if (event.type === 'team_ask') {
+      const message = inboxMessageFromAskEvent(event);
+      if (message) questions.set(message.id, message);
+    } else if (event.type === 'team_reply') {
+      const reply = inboxMessageFromReplyEvent(event, questions);
+      if (!reply) continue;
+      replies.push(reply);
+      const question = questions.get(reply.replyTo ?? '');
+      if (question) {
+        questions.set(question.id, {
+          ...question,
+          status: 'answered',
+          answeredAt: reply.answeredAt ?? reply.createdAt
+        });
+      }
+    }
+  }
+
+  return [...questions.values(), ...replies].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function conflictFromDetectedEvent(event: WorkspaceEvent): Conflict | null {
+  if (event.type !== 'conflict_detected' || typeof event.payload !== 'object' || event.payload === null) {
+    return null;
+  }
+  const payload = event.payload as Record<string, unknown>;
+  const id = String(payload.conflictId ?? payload.id ?? `conf_${event.id}`);
+  const kind = String(payload.kind ?? 'unknown');
+  return {
+    id,
+    workspaceId: event.workspaceId,
+    kind: kind === 'content' || kind === 'vault' || kind === 'branch' ? kind : 'unknown',
+    status: 'open',
+    summary: String(payload.summary ?? 'Conflict detected'),
+    eventIds: stringArray(payload.eventIds).length > 0 ? stringArray(payload.eventIds) : [event.id],
+    affectedPaths: stringArray(payload.affectedPaths),
+    createdAt: String(payload.createdAt ?? event.createdAt)
+  };
+}
+
+function deriveConflicts(events: WorkspaceEvent[]): Conflict[] {
+  const conflicts = new Map<string, Conflict>();
+
+  for (const event of events) {
+    if (event.type === 'conflict_detected') {
+      const conflict = conflictFromDetectedEvent(event);
+      if (conflict) conflicts.set(conflict.id, conflict);
+    } else if (event.type === 'conflict_resolved' && typeof event.payload === 'object' && event.payload !== null) {
+      const payload = event.payload as Record<string, unknown>;
+      const conflictId = String(payload.conflictId ?? '');
+      const existing = conflicts.get(conflictId);
+      if (existing) {
+        conflicts.set(conflictId, {
+          ...existing,
+          status: 'resolved',
+          resolvedAt: String(payload.resolvedAt ?? event.createdAt),
+          resolutionEventId: event.id
+        });
+      }
+    }
+  }
+
+  return [...conflicts.values()].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
+function rowToInboxMessage(row: RemoteInboxMessageRow): InboxMessage {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    fromUserId: row.from_participant_id,
+    toUserId: row.to_participant_id,
+    status: row.status,
+    body: row.body,
+    replyTo: row.reply_to ?? undefined,
+    eventId: row.event_id ?? undefined,
+    createdAt: row.created_at,
+    answeredAt: row.answered_at ?? undefined
+  };
+}
+
+function rowToConflict(row: RemoteConflictRow): Conflict {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    kind: row.kind,
+    status: row.status,
+    summary: row.summary,
+    eventIds: row.event_ids,
+    affectedPaths: row.affected_paths,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at ?? undefined,
+    resolutionEventId: row.resolution_event_id ?? undefined
+  };
+}
+
+function compactVaultContext(raw: string): string {
+  const sections = raw.split(/\n*--- (.+?) ---\n/).filter((part) => part.length > 0);
+  const out: string[] = [];
+
+  for (let i = 0; i < sections.length - 1; i += 2) {
+    const file = sections[i].trim();
+    const body = sections[i + 1] ?? '';
+    const seen = new Set<string>();
+    const kept: string[] = [];
+
+    for (const line of body.split('\n')) {
+      const trimmed = line.trimEnd();
+      if (!trimmed.trim()) continue;
+      if (/^#\s/.test(trimmed.trim())) continue;
+      const key = trimmed.trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      kept.push(trimmed);
+    }
+
+    if (kept.length === 0) continue;
+    out.push(`### ${file}`);
+    out.push(...kept);
+    out.push('');
+  }
+
+  return out.join('\n').trimEnd();
+}
+
+function participantsById(participants: Participant[]): Map<string, Participant> {
+  return new Map(participants.map((participant) => [participant.id, participant]));
+}
+
+function eventToContextDelta(event: WorkspaceEvent, byId: Map<string, Participant>): ContextDelta | null {
+  if (event.type !== 'publish' || !event.targetFile) return null;
+  const payload = event.payload as PublishEventPayload | undefined;
+  const text = payload?.text?.trim();
+  if (!text) return null;
+  return {
+    seq: event.seq,
+    targetFile: event.targetFile,
+    author: byId.get(event.actorId)?.displayName,
+    actorId: event.actorId,
+    text,
+    createdAt: event.createdAt
+  };
+}
+
 async function readJsonBody<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
 
@@ -1325,6 +1571,32 @@ type RemoteCheckpointRow = {
   created_at: string;
 };
 
+type RemoteInboxMessageRow = {
+  id: string;
+  workspace_id: string;
+  from_participant_id: string;
+  to_participant_id: string;
+  status: InboxMessage['status'];
+  body: string;
+  reply_to?: string | null;
+  event_id?: string | null;
+  created_at: string;
+  answered_at?: string | null;
+};
+
+type RemoteConflictRow = {
+  id: string;
+  workspace_id: string;
+  kind: Conflict['kind'];
+  status: Conflict['status'];
+  summary: string;
+  event_ids: string[];
+  affected_paths: string[];
+  created_at: string;
+  resolved_at?: string | null;
+  resolution_event_id?: string | null;
+};
+
 type CheckpointSnapshot = {
   schemaVersion: 1;
   workspaceId: string;
@@ -1549,6 +1821,37 @@ function listParticipants(repoRoot: string, workspaceId: string): Participant[] 
     `select * from participants where workspace_id = ${sqlValue(workspaceId)} order by display_name asc`
   );
   return rows.map(rowToParticipant);
+}
+
+function resolveParticipantSelector(repoRoot: string, workspaceId: string, selector: string): Participant | undefined {
+  const normalized = selector.trim().toLowerCase();
+  return listParticipants(repoRoot, workspaceId).find((participant) =>
+    participant.id === selector ||
+    participant.displayName.toLowerCase() === normalized ||
+    avatarNameSlug(participant.displayName) === normalized
+  );
+}
+
+async function resolveActorParticipant(repoRoot: string, workspace: Workspace, actorId?: string): Promise<Participant> {
+  const participants = listParticipants(repoRoot, workspace.id);
+  if (actorId) {
+    const participant = participants.find((entry) => entry.id === actorId);
+    if (!participant) {
+      throw new Error(`Participant ${actorId} was not found in ${workspace.sessionName}`);
+    }
+    return participant;
+  }
+
+  const profile = await readLocalUserProfile(repoRoot);
+  if (profile) {
+    const participant = participants.find((entry) => entry.displayName.toLowerCase() === profile.displayName.toLowerCase());
+    if (participant) return participant;
+  }
+
+  const creator = participants.find((entry) => entry.id === workspace.createdBy);
+  if (creator) return creator;
+  if (participants[0]) return participants[0];
+  throw new Error(`No participants exist in ${workspace.sessionName}`);
 }
 
 function rowToWorktree(row: Record<string, unknown>): WorktreeInfo {
@@ -1906,6 +2209,96 @@ async function appendRemoteEvent(repoRoot: string, workspace: Workspace, event: 
   return remoteEventToWorkspaceEvent(row);
 }
 
+async function mirrorInboxEventToRelay(repoRoot: string, event: WorkspaceEvent): Promise<void> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return;
+
+  if (event.type === 'team_ask') {
+    const message = inboxMessageFromAskEvent(event);
+    if (!message) return;
+    await upsertSupabaseRows(config, 'tc_inbox_messages', [{
+      id: message.id,
+      workspace_id: message.workspaceId,
+      from_participant_id: message.fromUserId,
+      to_participant_id: message.toUserId,
+      status: message.status,
+      body: message.body,
+      reply_to: null,
+      event_id: event.id,
+      created_at: message.createdAt,
+      answered_at: null
+    }], 'id');
+  } else if (event.type === 'team_reply') {
+    const messages = deriveInboxMessages([event]);
+    const reply = messages.find((message) => message.replyTo);
+    const payload = typeof event.payload === 'object' && event.payload !== null ? event.payload as Record<string, unknown> : {};
+    const messageId = String(payload.messageId ?? payload.replyTo ?? '');
+    if (reply) {
+      await upsertSupabaseRows(config, 'tc_inbox_messages', [{
+        id: reply.id,
+        workspace_id: reply.workspaceId,
+        from_participant_id: reply.fromUserId,
+        to_participant_id: reply.toUserId || event.actorId,
+        status: 'answered',
+        body: reply.body,
+        reply_to: messageId,
+        event_id: event.id,
+        created_at: reply.createdAt,
+        answered_at: reply.answeredAt ?? event.createdAt
+      }], 'id');
+    }
+    if (messageId) {
+      await supabaseRest(config, 'tc_inbox_messages', {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'answered', answered_at: event.createdAt })
+      }, { id: `eq.${messageId}` });
+    }
+  }
+}
+
+async function mirrorConflictEventToRelay(repoRoot: string, event: WorkspaceEvent): Promise<void> {
+  const config = relayConfig();
+  if (!config || !getRemoteIdentity(repoRoot)) return;
+
+  if (event.type === 'conflict_detected') {
+    const conflict = conflictFromDetectedEvent(event);
+    if (!conflict) return;
+    await upsertSupabaseRows(config, 'tc_conflicts', [{
+      id: conflict.id,
+      workspace_id: conflict.workspaceId,
+      kind: conflict.kind,
+      status: conflict.status,
+      summary: conflict.summary,
+      event_ids: conflict.eventIds,
+      affected_paths: conflict.affectedPaths ?? [],
+      created_at: conflict.createdAt,
+      resolved_at: null,
+      resolution_event_id: null
+    }], 'id');
+  } else if (event.type === 'conflict_resolved' && typeof event.payload === 'object' && event.payload !== null) {
+    const payload = event.payload as Record<string, unknown>;
+    const conflictId = String(payload.conflictId ?? '');
+    if (!conflictId) return;
+    await supabaseRest(config, 'tc_conflicts', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'resolved',
+        resolved_at: String(payload.resolvedAt ?? event.createdAt),
+        resolution_event_id: event.id
+      })
+    }, { id: `eq.${conflictId}` });
+  }
+}
+
+async function mirrorDerivedEventToRelay(repoRoot: string, event: WorkspaceEvent): Promise<void> {
+  try {
+    await mirrorInboxEventToRelay(repoRoot, event);
+    await mirrorConflictEventToRelay(repoRoot, event);
+  } catch (error) {
+    console.error(`[teambridge] relay side-table mirror failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function pushPendingRemoteEvents(repoRoot: string): Promise<number> {
   const config = relayConfig();
   if (!config || !getRemoteIdentity(repoRoot)) return 0;
@@ -1929,6 +2322,7 @@ async function pushPendingRemoteEvents(repoRoot: string): Promise<number> {
         createdAt: String(row.created_at)
       };
       const remote = await appendRemoteEvent(repoRoot, workspace, event);
+      await mirrorDerivedEventToRelay(repoRoot, remote);
       await applyCanonicalRemoteEvent(repoRoot, workspace, remote);
       runSql(dbPath, `delete from pending_remote_events where local_id = ${sqlValue(event.id)};`);
       pushed += 1;
@@ -2494,6 +2888,168 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
   };
 }
 
+async function appendWorkspaceEvent(
+  state: AppState,
+  workspaceIdentifier: string,
+  body: EventRequestBody,
+  eventInput: {
+    type: WorkspaceEvent['type'];
+    payload: unknown;
+    targetFile?: string;
+    actorId?: string;
+    deviceId?: string;
+    dedupeKey?: string;
+  }
+): Promise<WorkspaceEvent> {
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${workspaceIdentifier}`);
+  }
+
+  const dbPath = initializeStateDb(repoRoot);
+  const identity = getRemoteIdentity(repoRoot);
+  const relayDevice = identity ? relayDeviceId(repoRoot, identity.userId) : undefined;
+  runSql(
+    dbPath,
+    `update local_sequences set last_seq = last_seq + 1 where workspace_id = ${sqlValue(workspace.id)};`
+  );
+  const seq = getLastSeq(repoRoot, workspace.id);
+
+  const event: WorkspaceEvent = {
+    id: `evt_${randomUUID()}`,
+    workspaceId: workspace.id,
+    seq,
+    type: eventInput.type,
+    actorId: eventInput.actorId ?? body.actorId ?? workspace.createdBy,
+    deviceId: eventInput.deviceId ?? body.deviceId ?? relayDevice ?? 'device_local',
+    targetFile: eventInput.targetFile,
+    payload: eventInput.payload,
+    dedupeKey: eventInput.dedupeKey ?? body.dedupeKey ?? `${workspace.id}:${relayDevice ?? 'device_local'}:${randomUUID()}`,
+    createdAt: new Date().toISOString()
+  };
+
+  if (relayConfig() && identity) {
+    try {
+      const remoteEvent = await appendRemoteEvent(repoRoot, workspace, event);
+      await mirrorDerivedEventToRelay(repoRoot, remoteEvent);
+      await applyCanonicalRemoteEvent(repoRoot, workspace, remoteEvent);
+      return remoteEvent;
+    } catch (error) {
+      queuePendingRemoteEvent(repoRoot, event);
+      setRemoteSyncState(repoRoot, workspace.id, {
+        status: 'queued',
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const { eventsPath } = getWorkspacePaths(repoRoot, workspace);
+  await appendFile(eventsPath, `${JSON.stringify(event)}\n`);
+  await rebuildWorkspaceFromEvents(repoRoot, workspace);
+  return event;
+}
+
+type ParsedConflictBlock = {
+  oursLabel: string;
+  theirsLabel: string;
+  ours: string;
+  theirs: string;
+};
+
+function parseConflictMarkerBlocks(text: string): ParsedConflictBlock[] {
+  const lines = text.split(/\r?\n/);
+  const blocks: ParsedConflictBlock[] = [];
+  let current: { oursLabel: string; ours: string[]; theirs: string[]; side: 'ours' | 'theirs' } | null = null;
+
+  for (const line of lines) {
+    if (line.startsWith('<<<<<<<')) {
+      current = { oursLabel: line.replace(/^<<<<<<<\s*/, '').trim() || 'ours', ours: [], theirs: [], side: 'ours' };
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith('=======') && current.side === 'ours') {
+      current.side = 'theirs';
+      continue;
+    }
+    if (line.startsWith('>>>>>>>') && current.side === 'theirs') {
+      blocks.push({
+        oursLabel: current.oursLabel,
+        theirsLabel: line.replace(/^>>>>>>>\s*/, '').trim() || 'theirs',
+        ours: current.ours.join('\n').trim(),
+        theirs: current.theirs.join('\n').trim()
+      });
+      current = null;
+      continue;
+    }
+    if (current.side === 'ours') current.ours.push(line);
+    else current.theirs.push(line);
+  }
+
+  return blocks.filter((block) => block.ours || block.theirs);
+}
+
+function summarizeConflictBlock(targetFile: string, block: ParsedConflictBlock): string {
+  const ours = block.ours.split(/\r?\n/).find((line) => line.trim())?.trim() ?? block.oursLabel;
+  const theirs = block.theirs.split(/\r?\n/).find((line) => line.trim())?.trim() ?? block.theirsLabel;
+  return `Conflict in ${targetFile}: ${ours.slice(0, 80)} vs ${theirs.slice(0, 80)}`;
+}
+
+function conflictPayloadsFromPublish(event: WorkspaceEvent<PublishEventPayload>): Array<Record<string, unknown>> {
+  if (event.type !== 'publish' || !event.targetFile || typeof event.payload?.text !== 'string') {
+    return [];
+  }
+  const blocks = parseConflictMarkerBlocks(event.payload.text);
+  return blocks.map((block, index) => ({
+    conflictId: `conf_${createHash('sha256').update(`${event.id}:${index}:${block.ours}:${block.theirs}`).digest('hex').slice(0, 24)}`,
+    kind: 'content',
+    summary: summarizeConflictBlock(event.targetFile ?? 'unknown', block),
+    eventIds: [event.id],
+    affectedPaths: [event.targetFile],
+    marker: {
+      oursLabel: block.oursLabel,
+      theirsLabel: block.theirsLabel,
+      ours: block.ours,
+      theirs: block.theirs
+    },
+    createdAt: new Date().toISOString()
+  }));
+}
+
+async function appendDetectedConflictEvents(
+  state: AppState,
+  repoRoot: string,
+  workspace: Workspace,
+  publishEvent: WorkspaceEvent<PublishEventPayload>
+): Promise<WorkspaceEvent[]> {
+  const payloads = conflictPayloadsFromPublish(publishEvent);
+  if (payloads.length === 0) return [];
+
+  const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath).catch(() => []);
+  const existing = deriveConflicts(events);
+  const existingSourceEvents = new Set(existing.flatMap((conflict) => conflict.eventIds));
+  if (existingSourceEvents.has(publishEvent.id)) return [];
+
+  const created: WorkspaceEvent[] = [];
+  for (const payload of payloads) {
+    const event = await appendWorkspaceEvent(
+      state,
+      workspace.id,
+      { repoRoot, actorId: publishEvent.actorId, deviceId: publishEvent.deviceId },
+      {
+        type: 'conflict_detected',
+        actorId: publishEvent.actorId,
+        deviceId: publishEvent.deviceId,
+        payload,
+        dedupeKey: `${publishEvent.id}:${payload.conflictId}`
+      }
+    );
+    await mirrorDerivedEventToRelay(repoRoot, event);
+    created.push(event);
+  }
+  return created;
+}
+
 async function appendPublishEvent(
   state: AppState,
   workspaceIdentifier: string,
@@ -2539,7 +3095,9 @@ async function appendPublishEvent(
   if (relayConfig() && identity) {
     try {
       const remoteEvent = await appendRemoteEvent(repoRoot, workspace, event);
+      await mirrorDerivedEventToRelay(repoRoot, remoteEvent);
       await applyCanonicalRemoteEvent(repoRoot, workspace, remoteEvent);
+      await appendDetectedConflictEvents(state, repoRoot, workspace, remoteEvent as WorkspaceEvent<PublishEventPayload>);
       return remoteEvent as WorkspaceEvent<PublishEventPayload>;
     } catch (error) {
       queuePendingRemoteEvent(repoRoot, event);
@@ -2557,7 +3115,200 @@ async function appendPublishEvent(
   const updatedContent = await readFile(join(vaultDir, body.targetFile), 'utf8').catch(() => '');
   reindexVaultFile(dbPath, workspace.id, body.targetFile, updatedContent, seq);
 
+  await appendDetectedConflictEvents(state, repoRoot, workspace, event);
+
   return event;
+}
+
+async function listInbox(repoRoot: string, workspace: Workspace): Promise<InboxMessage[]> {
+  await pullRemoteEvents(repoRoot).catch(() => undefined);
+  const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath);
+  return deriveInboxMessages(events);
+}
+
+async function askInboxMessage(
+  state: AppState,
+  workspaceIdentifier: string,
+  body: z.infer<typeof AskRequestBodySchema>
+): Promise<AskResponse> {
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+  if (!workspace) throw new Error(`Workspace not found: ${workspaceIdentifier}`);
+
+  const from = await resolveActorParticipant(repoRoot, workspace, body.actorId);
+  const to = resolveParticipantSelector(repoRoot, workspace.id, body.to);
+  if (!to) throw new Error(`Participant "${body.to}" was not found in ${workspace.sessionName}`);
+
+  const messageId = `msg_${randomUUID()}`;
+  const event = await appendWorkspaceEvent(
+    state,
+    workspace.id,
+    { repoRoot, actorId: from.id, deviceId: body.deviceId, dedupeKey: body.dedupeKey },
+    {
+      type: 'team_ask',
+      actorId: from.id,
+      deviceId: body.deviceId,
+      payload: {
+        messageId,
+        fromParticipantId: from.id,
+        toParticipantId: to.id,
+        text: body.text.trim(),
+        createdAt: new Date().toISOString()
+      }
+    }
+  );
+  const message = inboxMessageFromAskEvent(event);
+  if (!message) throw new Error('Failed to create inbox message');
+  return { message, event };
+}
+
+async function replyInboxMessage(
+  state: AppState,
+  workspaceIdentifier: string,
+  messageId: string,
+  body: z.infer<typeof ReplyRequestBodySchema>
+): Promise<ReplyResponse> {
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+  if (!workspace) throw new Error(`Workspace not found: ${workspaceIdentifier}`);
+
+  const messages = await listInbox(repoRoot, workspace);
+  const question = messages.find((message) => message.id === messageId && !message.replyTo);
+  if (!question) throw new Error(`Inbox message ${messageId} was not found`);
+
+  const from = await resolveActorParticipant(repoRoot, workspace, body.actorId);
+  const event = await appendWorkspaceEvent(
+    state,
+    workspace.id,
+    { repoRoot, actorId: from.id, deviceId: body.deviceId, dedupeKey: body.dedupeKey },
+    {
+      type: 'team_reply',
+      actorId: from.id,
+      deviceId: body.deviceId,
+      payload: {
+        messageId,
+        replyMessageId: `msg_${randomUUID()}`,
+        fromParticipantId: from.id,
+        toParticipantId: question.fromUserId,
+        text: body.text.trim(),
+        answeredAt: new Date().toISOString()
+      }
+    }
+  );
+  const reply = inboxMessageFromReplyEvent(event, new Map([[question.id, question]]));
+  if (!reply) throw new Error('Failed to create inbox reply');
+  return { message: reply, event };
+}
+
+async function listConflicts(repoRoot: string, workspace: Workspace): Promise<Conflict[]> {
+  await pullRemoteEvents(repoRoot).catch(() => undefined);
+  const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath);
+  return deriveConflicts(events);
+}
+
+async function listContextDeltas(
+  repoRoot: string,
+  workspace: Workspace,
+  options: { sinceSeq?: number; limit?: number; excludeActorId?: string } = {}
+): Promise<DeltaContextResponse> {
+  await pullRemoteEvents(repoRoot).catch(() => undefined);
+  const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath);
+  const byId = participantsById(listParticipants(repoRoot, workspace.id));
+  const latestSeq = events.reduce((max, event) => Math.max(max, event.seq), 0);
+  const sinceSeq = Math.max(0, options.sinceSeq ?? 0);
+  const limit = Math.max(1, Math.min(100, options.limit ?? 20));
+  const deltas = events
+    .filter((event) => event.seq > sinceSeq)
+    .filter((event) => !options.excludeActorId || event.actorId !== options.excludeActorId)
+    .map((event) => eventToContextDelta(event, byId))
+    .filter((entry): entry is ContextDelta => entry !== null)
+    .sort((a, b) => b.seq - a.seq)
+    .slice(0, limit);
+
+  return {
+    workspaceId: workspace.id,
+    sessionName: workspace.sessionName,
+    lastSeenSeq: sinceSeq,
+    latestSeq,
+    deltas
+  };
+}
+
+async function buildHookContext(
+  repoRoot: string,
+  workspace: Workspace,
+  options: { sinceSeq?: number; limit?: number; excludeActorId?: string; maxBytes?: number; full?: boolean; deltasOnly?: boolean } = {}
+): Promise<HookContextResponse> {
+  const repoConfig = await readRepoConfig(repoRoot);
+  const context = await createVaultContext(
+    workspace.id,
+    getWorkspacePaths(repoRoot, workspace).vaultDir,
+    getLastSeq(repoRoot, workspace.id),
+    options.maxBytes ?? repoConfig.vault.contextMaxBytes
+  );
+  const deltas = await listContextDeltas(repoRoot, workspace, options);
+  return {
+    ...deltas,
+    context: options.deltasOnly ? undefined : (options.full ? context.content : compactVaultContext(context.content)),
+    truncated: context.truncated
+  };
+}
+
+async function detectWorkspaceConflicts(
+  state: AppState,
+  workspaceIdentifier: string,
+  body: z.infer<typeof DetectConflictsRequestBodySchema>
+): Promise<DetectConflictsResponse> {
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+  if (!workspace) throw new Error(`Workspace not found: ${workspaceIdentifier}`);
+
+  const events = await readEventsJsonl(getWorkspacePaths(repoRoot, workspace).eventsPath);
+  const created: WorkspaceEvent[] = [];
+  for (const event of events) {
+    if (event.type !== 'publish') continue;
+    const conflictEvents = await appendDetectedConflictEvents(state, repoRoot, workspace, event as WorkspaceEvent<PublishEventPayload>);
+    created.push(...conflictEvents);
+  }
+
+  const conflicts = await listConflicts(repoRoot, workspace);
+  return { conflicts, events: created };
+}
+
+async function resolveConflict(
+  state: AppState,
+  workspaceIdentifier: string,
+  conflictId: string,
+  body: z.infer<typeof ResolveConflictRequestBodySchema>
+): Promise<ResolveConflictResponse> {
+  const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+  const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+  if (!workspace) throw new Error(`Workspace not found: ${workspaceIdentifier}`);
+
+  const conflicts = await listConflicts(repoRoot, workspace);
+  const conflict = conflicts.find((entry) => entry.id === conflictId);
+  if (!conflict) throw new Error(`Conflict ${conflictId} was not found`);
+  const actor = await resolveActorParticipant(repoRoot, workspace, body.actorId);
+  const event = await appendWorkspaceEvent(
+    state,
+    workspace.id,
+    { repoRoot, actorId: actor.id, deviceId: body.deviceId, dedupeKey: body.dedupeKey },
+    {
+      type: 'conflict_resolved',
+      actorId: actor.id,
+      deviceId: body.deviceId,
+      payload: {
+        conflictId,
+        resolutionText: body.resolutionText.trim(),
+        resolvedAt: new Date().toISOString()
+      },
+      dedupeKey: body.dedupeKey ?? `${conflictId}:resolved:${randomUUID()}`
+    }
+  );
+
+  const next = (await listConflicts(repoRoot, workspace)).find((entry) => entry.id === conflictId);
+  if (!next) throw new Error(`Conflict ${conflictId} disappeared after resolution`);
+  return { conflict: next, event };
 }
 
 async function handleRequest(state: AppState, request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -2914,6 +3665,115 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     const body = PublishRequestBodySchema.parse(await readJsonBody<unknown>(request));
     const event = await appendPublishEvent(state, workspaceIdentifier, body);
     sendJson(response, 201, ok({ event }));
+    return;
+  }
+
+  const hookContextMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/context\/hook$/);
+  if (method === 'GET' && hookContextMatch) {
+    const workspaceIdentifier = decodeURIComponent(hookContextMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const result = await buildHookContext(repoRoot, workspace, {
+      sinceSeq: Number(url.searchParams.get('sinceSeq') ?? 0),
+      limit: Number(url.searchParams.get('limit') ?? 20),
+      excludeActorId: url.searchParams.get('excludeActorId') ?? undefined,
+      maxBytes: url.searchParams.has('maxBytes') ? Number(url.searchParams.get('maxBytes')) : undefined,
+      full: url.searchParams.get('full') === 'true',
+      deltasOnly: url.searchParams.get('deltasOnly') === 'true'
+    });
+    sendJson<HookContextResponse>(response, 200, ok(result));
+    return;
+  }
+
+  const deltasContextMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/context\/deltas$/);
+  if (method === 'GET' && deltasContextMatch) {
+    const workspaceIdentifier = decodeURIComponent(deltasContextMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const result = await listContextDeltas(repoRoot, workspace, {
+      sinceSeq: Number(url.searchParams.get('sinceSeq') ?? 0),
+      limit: Number(url.searchParams.get('limit') ?? 20),
+      excludeActorId: url.searchParams.get('excludeActorId') ?? undefined
+    });
+    sendJson<DeltaContextResponse>(response, 200, ok(result));
+    return;
+  }
+
+  const inboxMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/inbox$/);
+  if (method === 'GET' && inboxMatch) {
+    const workspaceIdentifier = decodeURIComponent(inboxMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const messages = await listInbox(repoRoot, workspace);
+    const status = url.searchParams.get('status');
+    const filtered = status ? messages.filter((message) => message.status === status) : messages;
+    sendJson<InboxResponse>(response, 200, ok({ messages: filtered }));
+    return;
+  }
+
+  const askMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/inbox\/ask$/);
+  if (method === 'POST' && askMatch) {
+    const workspaceIdentifier = decodeURIComponent(askMatch[1]);
+    const body = AskRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const result = await askInboxMessage(state, workspaceIdentifier, body);
+    sendJson<AskResponse>(response, 201, ok(result));
+    return;
+  }
+
+  const replyMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/inbox\/([^/]+)\/reply$/);
+  if (method === 'POST' && replyMatch) {
+    const workspaceIdentifier = decodeURIComponent(replyMatch[1]);
+    const messageId = decodeURIComponent(replyMatch[2]);
+    const body = ReplyRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const result = await replyInboxMessage(state, workspaceIdentifier, messageId, body);
+    sendJson<ReplyResponse>(response, 201, ok(result));
+    return;
+  }
+
+  const conflictsMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/conflicts$/);
+  if (method === 'GET' && conflictsMatch) {
+    const workspaceIdentifier = decodeURIComponent(conflictsMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const conflicts = await listConflicts(repoRoot, workspace);
+    const status = url.searchParams.get('status');
+    const filtered = status ? conflicts.filter((conflict) => conflict.status === status) : conflicts;
+    sendJson<ConflictListResponse>(response, 200, ok({ conflicts: filtered }));
+    return;
+  }
+
+  const detectConflictsMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/conflicts\/detect$/);
+  if (method === 'POST' && detectConflictsMatch) {
+    const workspaceIdentifier = decodeURIComponent(detectConflictsMatch[1]);
+    const body = DetectConflictsRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const result = await detectWorkspaceConflicts(state, workspaceIdentifier, body);
+    sendJson<DetectConflictsResponse>(response, 200, ok(result));
+    return;
+  }
+
+  const resolveConflictMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/conflicts\/([^/]+)\/resolve$/);
+  if (method === 'POST' && resolveConflictMatch) {
+    const workspaceIdentifier = decodeURIComponent(resolveConflictMatch[1]);
+    const conflictId = decodeURIComponent(resolveConflictMatch[2]);
+    const body = ResolveConflictRequestBodySchema.parse(await readJsonBody<unknown>(request));
+    const result = await resolveConflict(state, workspaceIdentifier, conflictId, body);
+    sendJson<ResolveConflictResponse>(response, 200, ok(result));
     return;
   }
 

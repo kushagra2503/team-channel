@@ -4,7 +4,8 @@ export type PhaseOneVaultFile =
   | 'observations.md'
   | 'blockers.md'
   | 'test-results.md'
-  | 'attempts.md';
+  | 'attempts.md'
+  | 'conflicts.md';
 
 export type VaultFile = {
   path: string;

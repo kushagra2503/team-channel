@@ -1,12 +1,18 @@
 import type {
   ApiResult,
+  AskResponse,
+  ConflictListResponse,
+  DeltaContextResponse,
   EventListResponse,
+  InboxResponse,
   LocalUserProfileResponse,
   Project,
   ProjectListResponse,
   ProjectMemberListResponse,
   RelayStatusResponse,
   RepoContextResponse,
+  ReplyResponse,
+  ResolveConflictResponse,
   TrackListResponse,
   VaultAnnotateResponseBody,
   VaultContextResponse,
@@ -175,6 +181,20 @@ export function getWorkspaceEvents(
   );
 }
 
+export function getContextDeltas(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  params: { sinceSeq?: number; limit?: number; excludeActorId?: string } = {},
+  signal?: AbortSignal
+): Promise<DeltaContextResponse> {
+  return getJson<DeltaContextResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/context/deltas`,
+    config,
+    params,
+    signal
+  );
+}
+
 export function getRepoContext(
   config: TeambridgeClientConfig,
   workspaceId?: string,
@@ -249,6 +269,79 @@ export function searchVault(
     { q: query },
     signal
   );
+}
+
+export function listInbox(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<InboxResponse> {
+  return getJson<InboxResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/inbox`,
+    config,
+    undefined,
+    signal
+  );
+}
+
+export async function askInbox(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  body: { to: string; text: string; actorId?: string },
+  signal?: AbortSignal
+): Promise<AskResponse> {
+  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<AskResponse>(response);
+}
+
+export async function replyInbox(
+  workspaceId: string,
+  messageId: string,
+  config: TeambridgeClientConfig,
+  body: { text: string; actorId?: string },
+  signal?: AbortSignal
+): Promise<ReplyResponse> {
+  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<ReplyResponse>(response);
+}
+
+export function listConflicts(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ConflictListResponse> {
+  return getJson<ConflictListResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/conflicts`,
+    config,
+    undefined,
+    signal
+  );
+}
+
+export async function resolveConflict(
+  workspaceId: string,
+  conflictId: string,
+  config: TeambridgeClientConfig,
+  body: { resolutionText: string; actorId?: string },
+  signal?: AbortSignal
+): Promise<ResolveConflictResponse> {
+  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<ResolveConflictResponse>(response);
 }
 
 export function annotateVaultItem(

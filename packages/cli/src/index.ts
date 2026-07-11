@@ -8,6 +8,7 @@ import { runPublish } from './commands/publish';
 import { runVault } from './commands/vault';
 import { runContext } from './commands/context';
 import { runHook } from './commands/hook';
+import { runAsk, runConflicts, runInbox, runReply } from './commands/inbox';
 import { runWs } from './commands/ws';
 import { runStatus } from './commands/status';
 import { runDaemon } from './commands/daemon';
@@ -30,6 +31,12 @@ Usage:
   teambridge sync
   teambridge enter <NAME>
   teambridge publish <TARGET_FILE> <TEXT>
+  teambridge ask <PARTICIPANT> <QUESTION>
+  teambridge inbox [--all]
+  teambridge reply <MESSAGE_ID> <ANSWER>
+  teambridge conflicts [--open]
+  teambridge conflicts detect
+  teambridge conflicts resolve <CONFLICT_ID> <RESOLUTION>
   teambridge vault read <PATH>
   teambridge vault context
   teambridge vault search <QUERY>
@@ -110,6 +117,26 @@ async function main(): Promise<void> {
 
     if (command === 'publish') {
       await runPublish(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'ask') {
+      await runAsk(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'inbox') {
+      await runInbox(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'reply') {
+      await runReply(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'conflicts') {
+      await runConflicts(argv.slice(1), options);
       return;
     }
 

@@ -18,9 +18,14 @@ const api = vi.hoisted(() => ({
   listWorkspaces: vi.fn(),
   getWorkspaceStatus: vi.fn(),
   getVaultContext: vi.fn(),
+  getContextDeltas: vi.fn(),
   getRepoContext: vi.fn(),
   getRelayStatus: vi.fn(),
-  getWorkspaceEvents: vi.fn()
+  getWorkspaceEvents: vi.fn(),
+  listInbox: vi.fn(),
+  replyInbox: vi.fn(),
+  listConflicts: vi.fn(),
+  resolveConflict: vi.fn()
 }));
 
 vi.mock('./api/teambridgeClient', () => api);
@@ -156,6 +161,9 @@ describe('DashboardPage', () => {
     api.listKnownRepos.mockResolvedValue({ repos: [] });
     api.getRelayStatus.mockResolvedValue({ configured: false, loggedIn: false, pending: 0, sync: [] });
     api.getWorkspaceEvents.mockResolvedValue({ events: [] });
+    api.getContextDeltas.mockResolvedValue({ workspaceId: 'ws_track1', sessionName: 'data-ingestion', lastSeenSeq: 0, latestSeq: 0, deltas: [] });
+    api.listInbox.mockResolvedValue({ messages: [] });
+    api.listConflicts.mockResolvedValue({ conflicts: [] });
   });
 
   it('loads tracks and renders vault content for the selected track', async () => {

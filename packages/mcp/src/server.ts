@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolveMcpResource, type McpResourceContext } from './resources';
 import { resolveWorkspaceContext } from './resolution';
-import { getWorkspaceStatus, readVaultFile, getVaultContext, publishEvent, searchVault } from './daemon-client';
+import { askInbox, getWorkspaceStatus, readVaultFile, publishEvent, replyInbox, searchVault } from './daemon-client';
 
 const SERVER_NAME = 'teambridge';
 const SERVER_VERSION = '0.1.0';
@@ -155,11 +155,13 @@ export function createServer(): McpServer {
         text: z.string()
       }
     },
-    async () => {
-      return {
-        content: [{ type: 'text', text: 'Inbox endpoints not yet implemented. Phase 3 Step 1 required.' }],
-        isError: true
-      };
+    async ({ to, text }) => {
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const wsId = ctx.workspaceId ?? ctx.sessionName;
+      if (!wsId) throw new Error('Unable to resolve workspace for ask');
+      const result = await askInbox(wsId, { to, text }, ctx);
+      if (!result.ok) throw new Error(result.error.message);
+      return { content: [{ type: 'text', text: JSON.stringify(result.data.message) }] };
     }
   );
 
@@ -173,11 +175,13 @@ export function createServer(): McpServer {
         text: z.string()
       }
     },
-    async () => {
-      return {
-        content: [{ type: 'text', text: 'Inbox endpoints not yet implemented. Phase 3 Step 1 required.' }],
-        isError: true
-      };
+    async ({ messageId, text }) => {
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const wsId = ctx.workspaceId ?? ctx.sessionName;
+      if (!wsId) throw new Error('Unable to resolve workspace for reply');
+      const result = await replyInbox(wsId, messageId, { text }, ctx);
+      if (!result.ok) throw new Error(result.error.message);
+      return { content: [{ type: 'text', text: JSON.stringify(result.data.message) }] };
     }
   );
 

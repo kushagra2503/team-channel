@@ -1,4 +1,5 @@
 import type { VaultCheckpoint } from './checkpoints';
+import type { Conflict } from './conflicts';
 import type { TeambridgeError } from './errors';
 import type { WorkspaceEvent } from './events';
 import type { WorktreeInfo, RepoContext } from './git';
@@ -83,8 +84,54 @@ export type EventListResponse = {
   nextSeq?: number;
 };
 
+export type ContextDelta = {
+  seq: number;
+  targetFile: string;
+  author?: string;
+  actorId: string;
+  text: string;
+  createdAt: string;
+};
+
+export type DeltaContextResponse = {
+  workspaceId: string;
+  sessionName: string;
+  lastSeenSeq: number;
+  latestSeq: number;
+  deltas: ContextDelta[];
+};
+
+export type HookContextResponse = DeltaContextResponse & {
+  context?: string;
+  truncated: boolean;
+};
+
 export type InboxResponse = {
   messages: InboxMessage[];
+};
+
+export type AskResponse = {
+  message: InboxMessage;
+  event: WorkspaceEvent;
+};
+
+export type ReplyResponse = {
+  message: InboxMessage;
+  event: WorkspaceEvent;
+};
+
+export type ConflictListResponse = {
+  conflicts: Conflict[];
+};
+
+export type DetectConflictsResponse = {
+  conflicts: Conflict[];
+  events: WorkspaceEvent[];
+};
+
+export type ResolveConflictResponse = {
+  conflict: Conflict;
+  event: WorkspaceEvent;
 };
 
 export type VaultReadResponse = {
@@ -100,8 +147,6 @@ export type VaultContextResponse = {
 };
 
 export type VaultAnnotateResponseBody = VaultAnnotateResponse;
-
-export type HookContextResponse = VaultContextResponse;
 
 export type JoinWorkspaceResponse = {
   manifest: WorkspaceManifest;

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { LocalUserProfile, RelayStatusResponse, VaultCheckpoint, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Conflict, ContextDelta, InboxMessage, LocalUserProfile, RelayStatusResponse, VaultCheckpoint, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 import type { ProjectMember } from '@teambridge/core';
 import { motion } from 'motion/react';
 import { SidebarContent } from '@/components/ui/sidebar';
@@ -9,6 +9,9 @@ import { TrackParticipantsPanel } from './TrackParticipantsPanel';
 import { RelaySyncHealth } from './RelaySyncHealth';
 import { EventFeed } from './EventFeed';
 import { CheckpointState } from './CheckpointState';
+import { InboxPanel } from './InboxPanel';
+import { ConflictsPanel } from './ConflictsPanel';
+import { RecentDeltasPanel } from './RecentDeltasPanel';
 import { displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 
@@ -33,6 +36,14 @@ export type TeamSidebarProps = {
   events?: WorkspaceEvent[];
   eventsError?: string;
   latestCheckpoint?: VaultCheckpoint;
+  deltas?: ContextDelta[];
+  deltasError?: string;
+  inboxMessages?: InboxMessage[];
+  inboxError?: string;
+  conflicts?: Conflict[];
+  conflictsError?: string;
+  onReplyInbox?: (messageId: string, text: string) => Promise<void>;
+  onResolveConflict?: (conflictId: string, resolutionText: string) => Promise<void>;
 };
 
 const TEAM_SIDEBAR_WIDTH = 288; // w-72
@@ -104,7 +115,15 @@ export function TeamSidebar({
   relayError,
   events,
   eventsError,
-  latestCheckpoint
+  latestCheckpoint,
+  deltas,
+  deltasError,
+  inboxMessages,
+  inboxError,
+  conflicts,
+  conflictsError,
+  onReplyInbox,
+  onResolveConflict
 }: TeamSidebarProps) {
   const [view, setView] = useState<MembersView>('all');
 
@@ -164,7 +183,10 @@ export function TeamSidebar({
                 config={{ daemonBaseUrl, repoRoot } as TeambridgeClientConfig}
                 avatarRev={avatarRev}
               />
+              <RecentDeltasPanel deltas={deltas} error={deltasError} />
               <CheckpointState latestCheckpoint={latestCheckpoint} />
+              <InboxPanel messages={inboxMessages} error={inboxError} onReply={onReplyInbox} />
+              <ConflictsPanel conflicts={conflicts} error={conflictsError} onResolve={onResolveConflict} />
             </div>
           )}
         </SidebarContent>

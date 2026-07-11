@@ -66,6 +66,45 @@ const reader = {
   },
   async getRelayStatus() {
     return { ok: true, data: relayStatus };
+  },
+  async listInbox(workspaceId) {
+    assert.equal(workspaceId, 'ws_123');
+    return {
+      ok: true,
+      data: {
+        messages: [
+          {
+            id: 'msg_1',
+            workspaceId,
+            fromUserId: 'user_ronish',
+            toUserId: 'user_nihal',
+            status: 'pending',
+            body: 'Can backend cap retries?',
+            createdAt
+          }
+        ]
+      }
+    };
+  },
+  async listConflicts(workspaceId) {
+    assert.equal(workspaceId, 'ws_123');
+    return {
+      ok: true,
+      data: {
+        conflicts: [
+          {
+            id: 'conf_1',
+            workspaceId,
+            kind: 'content',
+            status: 'open',
+            summary: 'Conflict in decisions.md',
+            eventIds: ['evt_1'],
+            affectedPaths: ['decisions.md'],
+            createdAt
+          }
+        ]
+      }
+    };
   }
 };
 
@@ -134,6 +173,12 @@ test('resources can use sessionName as the daemon workspace identifier', async (
     },
     async getRelayStatus() {
       return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
+    },
+    async listInbox() {
+      throw new Error('not used');
+    },
+    async listConflicts() {
+      throw new Error('not used');
     }
   };
 
@@ -159,6 +204,12 @@ test('participants resource propagates workspace status failures', async () => {
       throw new Error('not used');
     },
     async getRelayStatus() {
+      throw new Error('not used');
+    },
+    async listInbox() {
+      throw new Error('not used');
+    },
+    async listConflicts() {
       throw new Error('not used');
     }
   };
@@ -198,10 +249,12 @@ test('vault, inbox, conflict, and unknown resources have stable behavior', async
   assert.deepEqual(vault.data.context.includedPaths, ['decisions.md']);
 
   const inbox = await resolveMcpResource('teambridge://inbox', { workspaceId: 'ws_123' }, reader);
-  assert.deepEqual(inbox, { ok: true, data: { messages: [] } });
+  assert.equal(inbox.ok, true);
+  assert.equal(inbox.data.messages[0].id, 'msg_1');
 
   const conflicts = await resolveMcpResource('teambridge://conflicts', { workspaceId: 'ws_123' }, reader);
-  assert.deepEqual(conflicts, { ok: true, data: { conflicts: [] } });
+  assert.equal(conflicts.ok, true);
+  assert.equal(conflicts.data.conflicts[0].id, 'conf_1');
 
   const missing = await resolveMcpResource('teambridge://missing', { workspaceId: 'ws_123' }, reader);
   assert.equal(missing.ok, false);
@@ -230,6 +283,12 @@ test('workspace resource degrades gracefully when relay is not configured', asyn
     },
     async getRelayStatus() {
       return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
+    },
+    async listInbox() {
+      throw new Error('not used');
+    },
+    async listConflicts() {
+      throw new Error('not used');
     }
   };
 
@@ -251,6 +310,12 @@ test('workspace resource returns error when workspace status fails, without fetc
     async getRelayStatus() {
       relayCalled = true;
       return { ok: true, data: relayStatus };
+    },
+    async listInbox() {
+      throw new Error('not used');
+    },
+    async listConflicts() {
+      throw new Error('not used');
     }
   };
 

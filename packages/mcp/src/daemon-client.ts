@@ -1,8 +1,13 @@
 import type {
   ApiResult,
+  AskResponse,
+  ConflictListResponse,
   DaemonClientOptions,
   DaemonQueryParams,
+  InboxResponse,
   RelayStatusResponse,
+  ReplyResponse,
+  ResolveConflictResponse,
   VaultContextResponse,
   VaultReadResponse,
   WorkspaceEvent,
@@ -77,6 +82,58 @@ export function publishEvent(
 ): Promise<ApiResult<{ event: WorkspaceEvent }>> {
   return postJson<{ event: WorkspaceEvent }>(
     `/workspaces/${encodeURIComponent(workspaceId)}/events`,
+    body,
+    options
+  );
+}
+
+export function listInbox(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<InboxResponse>> {
+  return getJson<InboxResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/inbox`, options);
+}
+
+export function askInbox(
+  workspaceId: string,
+  body: { to: string; text: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<AskResponse>> {
+  return postJson<AskResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`,
+    body,
+    options
+  );
+}
+
+export function replyInbox(
+  workspaceId: string,
+  messageId: string,
+  body: { text: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ReplyResponse>> {
+  return postJson<ReplyResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`,
+    body,
+    options
+  );
+}
+
+export function listConflicts(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ConflictListResponse>> {
+  return getJson<ConflictListResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts`, options);
+}
+
+export function resolveConflict(
+  workspaceId: string,
+  conflictId: string,
+  body: { resolutionText: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ResolveConflictResponse>> {
+  return postJson<ResolveConflictResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
     body,
     options
   );

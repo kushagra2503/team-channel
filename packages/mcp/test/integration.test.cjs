@@ -146,27 +146,27 @@ test('tools/list returns all 6 registered tool names', async () => {
   }
 });
 
-test('tools/call team_ask stub returns isError: true', async () => {
+test('tools/call team_ask reports an error without workspace context', async () => {
   const server = await bootServer();
   try {
     const res = await server.request('tools/call', {
       name: 'team_ask',
       arguments: { to: 'nihal', text: 'test' }
     });
-    assert.equal(res.result.isError, true);
+    assert.ok(res.error || res.result?.isError);
   } finally {
     server.kill();
   }
 });
 
-test('tools/call team_reply stub returns isError: true', async () => {
+test('tools/call team_reply reports an error without workspace context', async () => {
   const server = await bootServer();
   try {
     const res = await server.request('tools/call', {
       name: 'team_reply',
       arguments: { messageId: 'msg_1', text: 'test' }
     });
-    assert.equal(res.result.isError, true);
+    assert.ok(res.error || res.result?.isError);
   } finally {
     server.kill();
   }

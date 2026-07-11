@@ -23,6 +23,17 @@ export function currentSessionNameFromBranch(cwd: string = process.cwd()): strin
   return match ? match[1] : null;
 }
 
+export function currentParticipantSlugFromBranch(cwd: string = process.cwd()): string | null {
+  let branch: string;
+  try {
+    branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+  const match = branch.match(PARTICIPANT_BRANCH_PATTERN);
+  return match ? branch.slice(`teambridge/${match[1]}/`.length) : null;
+}
+
 export async function resolveCurrentTrack(options: ClientOptions, cwd: string = process.cwd()): Promise<Workspace> {
   const sessionName = currentSessionNameFromBranch(cwd);
   if (!sessionName) {
