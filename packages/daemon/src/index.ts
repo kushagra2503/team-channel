@@ -20,6 +20,7 @@ import type {
   ConflictDetectedPayload,
   ConflictResolvedPayload,
   ConflictsResponse,
+  ContextPointerResponse,
   EventListResponse,
   InboxMessage,
   InboxResponse,
@@ -38,6 +39,7 @@ import type {
   PublishEventRequest,
   RepoContext,
   RepoContextResponse,
+  SaveContextPointerRequest,
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   SyncStateEntry,
@@ -1976,6 +1978,38 @@ async function detectAndEmitConflictForPublish(
   return appendConflictDetectedEvent(repoRoot, workspace, event.targetFile, summary, eventIds);
 }
 
+function contextPointerPath(repoRoot: string, sessionName: string, displayName: string): string {
+  return join(repoRoot, '.teambridge', 'workspaces', sessionName, `.context.${safeDisplayName(displayName)}.json`);
+}
+
+async function readContextPointer(
+  repoRoot: string,
+  sessionName: string,
+  displayName: string
+): Promise<ContextPointerResponse | null> {
+  const path = contextPointerPath(repoRoot, sessionName, displayName);
+  if (!existsSync(path)) {
+    return null;
+  }
+  try {
+    const content = await readFile(path, 'utf8');
+    return JSON.parse(content) as ContextPointerResponse;
+  } catch {
+    return null;
+  }
+}
+
+async function writeContextPointer(
+  repoRoot: string,
+  pointer: ContextPointerResponse
+): Promise<string> {
+  const dir = join(repoRoot, '.teambridge', 'workspaces', pointer.sessionName);
+  mkdirSync(dir, { recursive: true });
+  const path = contextPointerPath(repoRoot, pointer.sessionName, pointer.displayName);
+  await writeFile(path, `${JSON.stringify(pointer, null, 2)}\n`);
+  return path;
+}
+
 function rowToWorktree(row: Record<string, unknown>): WorktreeInfo {
   return {
     workspaceId: String(row.workspace_id),
@@ -3435,6 +3469,64 @@ async function handleRequest(state: AppState, request: IncomingMessage, response
     } catch (error) {
       sendJson(response, 400, fail('INVALID_REQUEST', error instanceof Error ? error.message : 'Unable to resolve conflict'));
     }
+    return;
+  }
+
+  const contextPointerMatch = url.pathname.match(/^\/workspaces\/([^/]+)\/context-pointer$/);
+  if (method === 'GET' && contextPointerMatch) {
+    const workspaceIdentifier = decodeURIComponent(contextPointerMatch[1]);
+    const repoRoot = getRepoRoot(resolve(url.searchParams.get('repoRoot') ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const profile = await readLocalUserProfile(repoRoot);
+    if (!profile?.displayName) {
+      sendJson(response, 400, fail('INVALID_REQUEST', 'Local user profile is not set'));
+      return;
+    }
+    const pointer = await readContextPointer(repoRoot, workspace.sessionName, profile.displayName);
+    if (!pointer) {
+      sendJson<ContextPointerResponse>(response, 200, ok({
+        workspaceId: workspace.id,
+        sessionName: workspace.sessionName,
+        displayName: profile.displayName,
+        lastSeenSeq: 0,
+        updatedAt: new Date().toISOString()
+      }));
+      return;
+    }
+    sendJson<ContextPointerResponse>(response, 200, ok(pointer));
+    return;
+  }
+
+  if (method === 'POST' && contextPointerMatch) {
+    const workspaceIdentifier = decodeURIComponent(contextPointerMatch[1]);
+    const body = ContextPointerBodySchema.parse(await readJsonBody<unknown>(request));
+    const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
+    rememberRepoRoot(state.defaultRepoRoot, repoRoot);
+    const workspace = getWorkspaceByIdentifier(repoRoot, workspaceIdentifier);
+    if (!workspace) {
+      sendJson(response, 404, fail('WORKSPACE_NOT_FOUND', `Workspace ${workspaceIdentifier} was not found`));
+      return;
+    }
+    const profile = await readLocalUserProfile(repoRoot);
+    if (!profile?.displayName) {
+      sendJson(response, 400, fail('INVALID_REQUEST', 'Local user profile is not set'));
+      return;
+    }
+    const now = new Date().toISOString();
+    const pointer: ContextPointerResponse = {
+      workspaceId: workspace.id,
+      sessionName: workspace.sessionName,
+      displayName: profile.displayName,
+      lastSeenSeq: body.lastSeenSeq,
+      updatedAt: now
+    };
+    await writeContextPointer(repoRoot, pointer);
+    sendJson<ContextPointerResponse>(response, 200, ok(pointer));
     return;
   }
 

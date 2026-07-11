@@ -92,6 +92,18 @@ export type ConflictsResponse = {
   conflicts: Conflict[];
 };
 
+export type ContextPointerResponse = {
+  workspaceId: string;
+  sessionName: string;
+  displayName: string;
+  lastSeenSeq: number;
+  updatedAt: string;
+};
+
+export type SaveContextPointerRequest = {
+  lastSeenSeq: number;
+};
+
 export type VaultReadResponse = {
   file: VaultFile;
 };
