@@ -135,6 +135,18 @@ export async function apiGet(path, { repoRoot, baseUrl }) {
   return { response, body };
 }
 
+export async function apiPost(path, body, { repoRoot, baseUrl }) {
+  const url = new URL(path, baseUrl);
+  url.searchParams.set('repoRoot', repoRoot);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const responseBody = await response.json();
+  return { response, body: responseBody };
+}
+
 export function pathsEqual(left, right) {
   return realpathSync(left) === realpathSync(right);
 }
