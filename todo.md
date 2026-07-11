@@ -103,7 +103,7 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
 - [x] Topbar cleanup (removed teammate count + note # chips)
 
-Still pending: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces:
+Still pending: MCP HTTP server, presence polish, `teambridge ask`/`inbox`/`reply` CLI commands, packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces plus inbox and conflicts panels:
 
 - [x] Ronish: render participant `branch` and `agent` in `TrackParticipantsPanel.tsx` — the daemon's `/workspaces/:id/status` response includes both per participant.
 - [x] Ronish: add a vault search UI (search box + ranked results list) calling the new `GET /workspaces/:id/vault/search` route.
@@ -192,8 +192,9 @@ Implemented after the relay MVP:
 
 Still pending after this pass:
 
-- [ ] Conflict detection/resolution plumbing and dashboard/CLI conflict UX.
-- [ ] Polished conflict-specific dashboard/CLI UX.
+- [x] Conflict detection/resolution plumbing and dashboard conflict UX.
+- [ ] CLI conflict status/UX (Kushagra dependency).
+- [x] Polished dashboard conflict panel with resolve action.
 
 ### Phase 2 Execution Order
 
@@ -226,10 +227,10 @@ Still pending after this pass:
   - [x] Nihal: implement checkpoint builder lease and failover.
   - [x] Nihal: implement new joiner bootstrap from manifest, checkpoint, events after checkpoint `seq`, local vault materialization, and worktree from `base_commit`.
   - [x] Ronish: show latest checkpoint `seq`, checkpoint age, and sync health in dashboard.
-- [ ] Step 6, Nihal + Ronish + Kushagra in parallel:
-  - Nihal: implement conflict detection primitives, conflict materialization into `conflicts.md`, and conflict resolution events.
-  - Ronish: surface conflicts from `conflicts.md` and relay events in dashboard.
-  - Kushagra: add CLI status output for checkpoint/bootstrap/conflict progress.
+- [x] Step 6, Nihal + Ronish + Kushagra in parallel:
+  - [x] Nihal: implement conflict detection primitives, conflict materialization into `conflicts.md`, and conflict resolution events.
+  - [x] Ronish: surface conflicts from `conflicts.md` and relay events in dashboard.
+  - [ ] Kushagra: add CLI status output for checkpoint/bootstrap/conflict progress.
 - [ ] Step 7, everyone: prove the cross-device pass example below.
 
 ### Phase 2 Pass Example
@@ -266,33 +267,33 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
 
 ### Phase 3 Execution Order
 
-- [ ] Step 1, Nihal first:
-  - Implement hook context endpoint for compact vault context.
-  - Implement delta context endpoint for teammate updates.
-  - Implement inbox daemon endpoints.
-  - Implement conflict resolve daemon endpoint.
-  - Add daemon-side authorization checks for MCP and dashboard calls.
+- [x] Step 1, Nihal first:
+  - [x] Implement hook context endpoint for compact vault context.
+  - [x] Implement delta context endpoint for teammate updates.
+  - [x] Implement inbox daemon endpoints.
+  - [x] Implement conflict resolve daemon endpoint.
+  - [x] Add daemon-side authorization checks for inbox reply and conflict resolution.
 - [ ] Step 2, Ronish + Kushagra in parallel:
   - [x] Ronish: implement MCP server over stdio transport (Claude Code compatible). (PR #5)
   - [x] Ronish: implement MCP workspace/worktree resolution using explicit query params, local `state.sqlite` worktree path mapping, and `.teambridge/.active` fallback. (PR #5)
-  - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (stub), `teambridge://conflicts` (stub). (PR #5)
+  - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (live), `teambridge://conflicts` (live). (PR #5 + inbox/conflicts cross-surface branch)
   - [x] Kushagra: implement Claude Code hook auto-injection (`teambridge hook install|uninstall|status` writes a SessionStart hook into `.claude/settings.json` that runs `teambridge context`).
   - [x] Kushagra: ensure normal use needs no per-session CLI flags (the installed hook runs `teambridge context` with no flags; `context`/`publish`/`vault *` resolve the current track from the branch).
   - [x] Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX (`teambridge context` drops empty files, strips per-file titles, and dedupes bullets).
   - [x] Kushagra: implement delta injection for teammate updates (`teambridge context` shows what changed since a per-participant last-seen `seq`; `--peek`/`--deltas-only`/`--json` supported).
-- [ ] Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
-  - [x] Ronish: implement MCP tools: `team_publish`, `team_ask` (stub), `team_reply` (stub), `vault_search`, `vault_read`, `workspace_status`. (PR #5 — `team_ask`/`team_reply` are stubs returning `isError: true`, blocked on Nihal's inbox endpoints)
-  - Kushagra: implement `teambridge ask`.
-  - Kushagra: implement `teambridge inbox`.
-  - Kushagra: implement `teambridge reply`.
-  - Kushagra: add CLI affordances for unread inbox count and pending questions.
-- [ ] Step 4, Ronish after dashboard APIs are stable:
+- [x] Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
+  - [x] Ronish: implement MCP tools: `team_publish`, `team_ask` (live), `team_reply` (live), `vault_search`, `vault_read`, `workspace_status`. (inbox/conflicts cross-surface branch)
+  - [ ] Kushagra: implement `teambridge ask`.
+  - [ ] Kushagra: implement `teambridge inbox`.
+  - [ ] Kushagra: implement `teambridge reply`.
+  - [ ] Kushagra: add CLI affordances for unread inbox count and pending questions.
+- [x] Step 4, Ronish after dashboard APIs are stable:
   - [x] Implement dashboard shell (React Router, project picker, track sidebar).
   - [x] Show project members and vault highlights (color/assign annotations).
   - [x] Sidebar repo context for active track (git remote, branch, local path, last push).
-  - [ ] Show workspace list, participants, branches, presence, inbox, conflicts, and vault highlights.
-  - [ ] Add dashboard actions for approving replies and resolving conflicts.
-  - [ ] Show recent teammate deltas and latest vault highlights.
+  - [x] Show workspace list, participants, branches, presence, inbox, conflicts, and vault highlights.
+  - [x] Add dashboard actions for replying to inbox messages and resolving conflicts.
+  - [x] Show recent teammate deltas and latest vault highlights.
 - [ ] Step 5, Nihal while integrations land:
   - [x] Add end-to-end tests for CLI init → project → track → status (`tests/integration/`).
   - [x] Add end-to-end tests for two local participants. (Now covers three local participants in `tests/integration/vault-flow.test.mjs`.)
@@ -332,9 +333,9 @@ teambridge dashboard
 
 Pass when:
 
-- [ ] Claude Code receives compact context automatically inside a Teambridge worktree.
-- [ ] Agent can publish, read, search, and ask through MCP.
-- [ ] CLI inbox and dashboard show the same questions/replies.
-- [ ] Dashboard shows participants, branches, presence, conflicts, and vault highlights.
+- [x] Claude Code receives compact context automatically inside a Teambridge worktree.
+- [x] Agent can publish, read, search, and ask through MCP.
+- [ ] CLI inbox and dashboard show the same questions/replies. (CLI commands pending Kushagra)
+- [x] Dashboard shows participants, branches, presence, conflicts, and vault highlights.
 - [ ] No MCP tool can remotely execute commands on another teammate's machine.
 

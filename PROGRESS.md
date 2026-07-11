@@ -5,15 +5,15 @@ digest; the authoritative checklist stays in [`todo.md`](./todo.md), and the
 per-phase build plan lives in
 [`report/team-implementation-plan.md`](./report/team-implementation-plan.md).
 
-_Last updated: 2026-07-08._
+_Last updated: 2026-07-12._
 
 ## At a glance
 
 | Phase | Theme | Status |
 |-------|-------|--------|
 | Phase 1 | Local-first foundation (daemon, CLI, vault, dashboard) | ✅ Complete |
-| Phase 2 | Supabase relay + cross-device sync | 🟡 Relay live; conflicts pending |
-| Phase 3 | Agent UX (MCP server, hooks, inbox) | 🟡 MCP server live; inbox/hooks pending |
+| Phase 2 | Supabase relay + cross-device sync | 🟡 Relay live; dashboard conflict UX done, CLI conflict UX pending |
+| Phase 3 | Agent UX (MCP server, hooks, inbox) | 🟡 MCP server + dashboard inbox/conflicts live; CLI ask/inbox/reply pending |
 
 ## What works today
 
@@ -45,17 +45,19 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
 - **Dashboard** (`apps/dashboard`) — project picker, track sidebar, project
   members, vault highlights with color/assign, participant branch/agent,
   vault search + single-file viewer, worktree "enter" affordance, sidebar
-  repo context panel, relay-session merge.
+  repo context panel, relay-session merge, inbox panel with reply actions,
+  conflicts panel with resolution, and teammate delta updates.
 - **Core** (`packages/core`) — shared contracts in `src/contracts/`, the
   starting point for any API/event/MCP change.
 - **MCP** (`packages/mcp`) — MCP server over stdio transport using
   `@modelcontextprotocol/sdk`. Five resources registered (`workspace`,
-  `participants`, `vault/context`, `inbox` stub, `conflicts` stub) and six
-  tools (`team_publish`, `vault_search`, `vault_read`, `workspace_status` —
-  all live; `team_ask`, `team_reply` — stubs returning not-implemented).
-  Workspace resolution from explicit params or `.teambridge/.active` fallback.
-  Start with `teambridge mcp`. Integration tests spawn the server over stdio
-  and verify JSON-RPC handshake, resource/tool lists, and stub errors.
+  `participants`, `vault/context`, `inbox`, `conflicts`) and six tools
+  (`team_publish`, `vault_search`, `vault_read`, `workspace_status`,
+  `team_ask`, `team_reply`) — all calling the daemon. Workspace resolution
+  from explicit params, local `state.sqlite` worktree mapping, or
+  `.teambridge/.active` fallback. Start with `teambridge mcp`. Integration tests
+  spawn the server over stdio and verify JSON-RPC handshake, resource/tool
+  lists, live resource reads, and full ask/reply/conflict flows.
 
 ## Phase 1 — Local-first foundation ✅
 
@@ -100,7 +102,7 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
 
 **Still pending:**
 
-- Conflict detection/resolution plumbing and conflict UX (CLI + dashboard).
+- CLI conflict status/UX (Kushagra dependency). Dashboard conflict detection/resolution UX is live.
 
 ## Phase 3 — Agent UX, MCP, inbox 🟡
 
@@ -111,17 +113,27 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   `teambridge mcp`.
 - Five MCP resources registered: `teambridge://workspace` (with relay status),
   `teambridge://participants`, `teambridge://vault/context`,
-  `teambridge://inbox` (stub), `teambridge://conflicts` (stub).
+  `teambridge://inbox`, `teambridge://conflicts` — all backed by daemon calls.
 - Six MCP tools registered: `team_publish`, `vault_search`, `vault_read`,
-  `workspace_status` (all calling the daemon); `team_ask`, `team_reply`
-  (stubs returning `isError: true` — blocked on daemon inbox endpoints).
-- Workspace resolution from explicit params or `.teambridge/.active` fallback.
+  `workspace_status`, `team_ask`, `team_reply` — all calling the daemon.
+- Workspace resolution from explicit params, local `state.sqlite` worktree
+  mapping, or `.teambridge/.active` fallback.
 - Integration tests spawning the server over stdio, verifying initialize
   handshake, resources/list, tools/list, and stub error responses.
 - MCP resource contracts include relay-backed workspace state with graceful
   degradation when relay is unavailable.
 - Dashboard relay screens: sync health, realtime event feed, checkpoint state,
   presence panel.
+- Dashboard inbox panel with live `team_ask`/`team_reply` flow and reply
+  affordance for messages addressed to the local user.
+- Dashboard conflicts panel showing open/resolved conflicts, affected paths,
+  and a resolution action for open conflicts.
+- Dashboard teammate delta panel based on per-participant context pointers
+  (`lastSeenSeq`), with a "Mark seen" update action.
+- Daemon inbox endpoints (`GET /workspaces/:id/inbox`,
+  `POST /workspaces/:id/inbox/ask`, `POST /workspaces/:id/inbox/:id/reply`) and
+  conflict endpoints (`GET /workspaces/:id/conflicts`,
+  `POST /workspaces/:id/conflicts/:id/resolve`) with authorization checks.
 - Claude Code hook auto-injection: `teambridge hook install` writes a
   SessionStart hook into `.claude/settings.json` that runs `teambridge
   context`, so an agent opening a worktree gets shared context with no
@@ -133,10 +145,8 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
 
 **Still pending:**
 
-- Inbox: `teambridge ask|inbox|reply`, dashboard approval UI.
-- Daemon inbox endpoints (Nihal — Phase 3 Step 1).
-- Daemon conflict resolve endpoint (Nihal — Phase 3 Step 1).
-- Dashboard actions for approving replies and resolving conflicts.
+- CLI inbox commands: `teambridge ask|inbox|reply` (Kushagra dependency).
+- Dashboard approval/reply UI already live for inbox and conflicts.
 - End-to-end tests for offline/reconnect sync and new joiner bootstrap.
 
 ## Known gaps / follow-ups
