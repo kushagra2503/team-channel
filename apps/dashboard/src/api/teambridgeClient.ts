@@ -1,12 +1,18 @@
 import type {
   ApiResult,
+  Conflict,
+  ConflictsResponse,
+  ContextPointerResponse,
   EventListResponse,
+  InboxMessage,
+  InboxResponse,
   LocalUserProfileResponse,
   Project,
   ProjectListResponse,
   ProjectMemberListResponse,
   RelayStatusResponse,
   RepoContextResponse,
+  SaveContextPointerRequest,
   TrackListResponse,
   VaultAnnotateResponseBody,
   VaultContextResponse,
@@ -330,4 +336,104 @@ export async function regeneratePfp(
     body: JSON.stringify({ participantId, ...options })
   });
   return unwrapApiResult<{ participantId: string; meta: unknown }>(response);
+}
+
+export function getInbox(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<InboxResponse> {
+  return getJson<InboxResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/inbox`, config, undefined, signal);
+}
+
+export function askInbox(
+  workspaceId: string,
+  body: { to: string; text: string },
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<InboxMessage> {
+  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
+  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(bodyWithRepo),
+    signal
+  }).then((response) => unwrapApiResult<InboxMessage>(response));
+}
+
+export function replyInbox(
+  workspaceId: string,
+  messageId: string,
+  body: { text: string },
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<InboxMessage> {
+  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
+  return fetch(
+    buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, config),
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(bodyWithRepo),
+      signal
+    }
+  ).then((response) => unwrapApiResult<InboxMessage>(response));
+}
+
+export function getConflicts(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ConflictsResponse> {
+  return getJson<ConflictsResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts`, config, undefined, signal);
+}
+
+export function resolveConflict(
+  workspaceId: string,
+  conflictId: string,
+  body: { resolutionText: string },
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<Conflict> {
+  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
+  return fetch(
+    buildTeambridgeUrl(
+      `/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
+      config
+    ),
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(bodyWithRepo),
+      signal
+    }
+  ).then((response) => unwrapApiResult<Conflict>(response));
+}
+
+export function getContextPointer(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ContextPointerResponse> {
+  return getJson<ContextPointerResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`,
+    config,
+    undefined,
+    signal
+  );
+}
+
+export function setContextPointer(
+  workspaceId: string,
+  body: SaveContextPointerRequest,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ContextPointerResponse> {
+  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
+  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(bodyWithRepo),
+    signal
+  }).then((response) => unwrapApiResult<ContextPointerResponse>(response));
 }
