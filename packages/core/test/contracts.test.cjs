@@ -281,6 +281,17 @@ test('ConflictSchema validates an open conflict', () => {
   assert.deepEqual(ConflictSchema.parse(conflict), conflict);
 });
 
+test('ConflictSchema validates a resolved conflict with resolutionText', () => {
+  const resolved = {
+    ...conflict,
+    status: 'resolved',
+    resolvedAt: createdAt,
+    resolutionEventId: 'evt_resolve_001',
+    resolutionText: 'Merged both versions'
+  };
+  assert.deepEqual(ConflictSchema.parse(resolved), resolved);
+});
+
 test('ConflictsResponseSchema validates a list of conflicts', () => {
   assert.deepEqual(ConflictsResponseSchema.parse({ conflicts: [conflict] }), { conflicts: [conflict] });
 });

@@ -246,7 +246,8 @@ export const ConflictSchema = z.object({
   affectedPaths: z.array(z.string().min(1)).optional(),
   createdAt: z.string().datetime(),
   resolvedAt: z.string().datetime().optional(),
-  resolutionEventId: z.string().optional()
+  resolutionEventId: z.string().optional(),
+  resolutionText: z.string().optional()
 });
 
 export const ConflictsResponseSchema = z.object({
