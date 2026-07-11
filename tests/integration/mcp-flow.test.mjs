@@ -187,7 +187,16 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
   assert.ok(!readAfterPublish.result.isError);
   assert.match(readAfterPublish.result.content[0].text, /MCP smoke test published this note/);
 
-  // --- Conflicts resource: two publishes to observations.md created an open conflict ---
+  // --- Conflicts resource: a publish with conflict markers creates an open conflict ---
+  const conflictPublishRes = await mcp.request('tools/call', {
+    name: 'team_publish',
+    arguments: {
+      targetFile: 'observations.md',
+      text: '<<<<<<< HEAD\nSQLite FTS5 is fast\n=======\nPostgres is fast\n>>>>>>> branch\n'
+    }
+  });
+  assert.ok(!conflictPublishRes.result.isError, `team_publish conflict failed: ${conflictPublishRes.result.content?.[0]?.text}`);
+
   const conflictsRes = await mcp.request('resources/read', { uri: 'teambridge://conflicts' });
   assert.ok(conflictsRes.result, 'resources/read should return a result');
   assert.ok(conflictsRes.result.contents?.[0], 'resources/read should return contents');

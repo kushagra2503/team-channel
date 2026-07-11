@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type {
   Conflict,
+  ContextDelta,
   ContextPointerResponse,
   InboxMessage,
   LocalUserProfile,
@@ -21,6 +22,7 @@ import { CheckpointState } from './CheckpointState';
 import { InboxPanel } from './InboxPanel';
 import { ConflictsPanel } from './ConflictsPanel';
 import { TeammateDeltaPanel } from './TeammateDeltaPanel';
+import { RecentDeltasPanel } from './RecentDeltasPanel';
 import { displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
 
@@ -46,15 +48,17 @@ export type TeamSidebarProps = {
   events?: WorkspaceEvent[];
   eventsError?: string;
   latestCheckpoint?: VaultCheckpoint;
+  deltas?: ContextDelta[];
+  deltasError?: string;
   inboxMessages?: InboxMessage[];
   inboxError?: string;
-  onInboxReply?: (message: InboxMessage) => void;
   conflicts?: Conflict[];
   conflictsError?: string;
-  onConflictResolve?: (conflict: Conflict) => void;
   pointer?: ContextPointerResponse | null;
   pointerError?: string;
   onMarkSeen?: () => void;
+  onReplyInbox?: (messageId: string, text: string) => Promise<void>;
+  onResolveConflict?: (conflictId: string, resolutionText: string) => Promise<void>;
 };
 
 const TEAM_SIDEBAR_WIDTH = 288; // w-72
@@ -178,15 +182,17 @@ export function TeamSidebar({
   events,
   eventsError,
   latestCheckpoint,
+  deltas,
+  deltasError,
   inboxMessages,
   inboxError,
-  onInboxReply,
   conflicts,
   conflictsError,
-  onConflictResolve,
   pointer,
   pointerError,
-  onMarkSeen
+  onMarkSeen,
+  onReplyInbox,
+  onResolveConflict
 }: TeamSidebarProps) {
   const [tab, setTab] = useState<TeamSidebarTab>('team');
   const [membersView, setMembersView] = useState<MembersView>('all');
@@ -271,29 +277,38 @@ export function TeamSidebar({
               localUser={localUser}
               participants={trackStatus?.participants}
               config={config}
-              workspaceId={trackStatus?.workspace.id}
               error={inboxError}
               avatarRev={avatarRev}
-              onReply={onInboxReply}
+              onReply={onReplyInbox}
             />
           ) : tab === 'conflicts' ? (
             <ConflictsPanel
               conflicts={conflicts}
-              config={config}
-              workspaceId={trackStatus?.workspace.id}
               error={conflictsError}
-              onResolve={onConflictResolve}
+              onResolve={onResolveConflict}
             />
           ) : (
-            <TeammateDeltaPanel
-              events={events}
-              participants={trackStatus?.participants}
-              pointer={pointer}
-              config={config}
-              error={pointerError}
-              avatarRev={avatarRev}
-              onMarkSeen={onMarkSeen}
-            />
+            <div className="flex flex-col gap-2">
+              <RelaySyncHealth status={relayStatus} error={relayError} />
+              <EventFeed
+                events={events}
+                error={eventsError}
+                participants={trackStatus?.participants}
+                config={config}
+                avatarRev={avatarRev}
+              />
+              <TeammateDeltaPanel
+                events={events}
+                participants={trackStatus?.participants}
+                pointer={pointer}
+                config={config}
+                error={pointerError}
+                avatarRev={avatarRev}
+                onMarkSeen={onMarkSeen}
+              />
+              <RecentDeltasPanel deltas={deltas} error={deltasError} />
+              <CheckpointState latestCheckpoint={latestCheckpoint} />
+            </div>
           )}
         </SidebarContent>
       </div>

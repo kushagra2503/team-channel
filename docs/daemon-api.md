@@ -74,10 +74,19 @@ The dashboard reads the same `displayName` for project roster avatars via `/avat
 | GET | `/workspaces/:id/status?repoRoot=` | Workspace + participants + `lastSeq` |
 | GET | `/workspaces/:id/events?repoRoot=` | Event log |
 | POST | `/workspaces/:id/events` | Append `publish` event |
+| GET | `/workspaces/:id/context/hook?repoRoot=&sinceSeq=&limit=&maxBytes=&excludeActorId=&full=&deltasOnly=` | Compact hook-friendly vault context plus recent publish deltas |
+| GET | `/workspaces/:id/context/deltas?repoRoot=&sinceSeq=&limit=&excludeActorId=` | Recent publish deltas for dashboard/hooks |
 | GET | `/workspaces/:id/vault/read?repoRoot=&path=` | Read one vault file |
 | GET | `/workspaces/:id/vault/context?repoRoot=` | Concatenated vault context for agents/UI |
+| GET | `/workspaces/:id/vault/search?repoRoot=&q=` | Search indexed vault lines |
 | POST | `/workspaces/:id/vault/annotate` | Update row color/assign in markdown (see below) |
 | POST | `/workspaces/:id/vault/rebuild` | Rebuild vault from `events.jsonl` |
+| GET | `/workspaces/:id/inbox?repoRoot=&status=` | List ask/reply inbox messages derived from workspace events |
+| POST | `/workspaces/:id/inbox/ask` | Append a `team_ask` event; body `{ repoRoot?, to, text, actorId? }` |
+| POST | `/workspaces/:id/inbox/:messageId/reply` | Append a `team_reply` event; body `{ repoRoot?, text, actorId? }` |
+| GET | `/workspaces/:id/conflicts?repoRoot=&status=` | List conflicts derived from workspace events |
+| POST | `/workspaces/:id/conflicts/detect` | Scan publish events for conflict markers and append missing `conflict_detected` events |
+| POST | `/workspaces/:id/conflicts/:conflictId/resolve` | Append a `conflict_resolved` event; body `{ repoRoot?, resolutionText, actorId? }` |
 | GET | `/workspaces/:id/participants/:participantId/avatar?repoRoot=` | Avatar PNG for participant |
 
 ### POST `/workspaces/:id/vault/annotate`
@@ -100,6 +109,33 @@ Persists vault row metadata in the markdown file.
 
 Response: `{ file, context }` with updated file content and fresh vault context.
 
+### GET `/workspaces/:id/context/hook`
+
+Returns compact vault context plus structured deltas since `sinceSeq`. Pass `deltasOnly=true` to omit the context body, `full=true` to skip compaction, and `excludeActorId` to hide the caller's own publishes.
+
+### GET `/workspaces/:id/context/deltas`
+
+Returns publish events as dashboard-friendly deltas ordered newest first:
+
+```json
+{
+  "workspaceId": "ws_...",
+  "sessionName": "handoff-flow",
+  "lastSeenSeq": 3,
+  "latestSeq": 8,
+  "deltas": [
+    {
+      "seq": 8,
+      "targetFile": "decisions.md",
+      "author": "Kushagra",
+      "actorId": "user_...",
+      "text": "Use a three-attempt retry cap.",
+      "createdAt": "2026-07-10T12:00:00.000Z"
+    }
+  ]
+}
+```
+
 ## Avatars (by name)
 
 | Method | Path | Description |
@@ -121,9 +157,6 @@ Optional query params for dither tuning: `query`, `size`, `algorithm`, `bayerLev
 
 These appear in team plans but have **no handler** in the daemon today:
 
-- `GET .../vault/search`
-- Inbox routes (`/inbox`, ask/reply)
-- Conflict routes (`/conflicts`, resolve)
 - `GET .../participants` as a standalone list (participants come from `/status`)
 
 ## Related docs

@@ -89,11 +89,11 @@ const reader = {
   async getRelayStatus() {
     return { ok: true, data: relayStatus };
   },
-  async getInbox(workspaceId) {
+  async listInbox(workspaceId) {
     assert.equal(workspaceId, 'ws_123');
     return { ok: true, data: { messages: [inboxMessage] } };
   },
-  async getConflicts(workspaceId) {
+  async listConflicts(workspaceId) {
     assert.equal(workspaceId, 'ws_123');
     return { ok: true, data: { conflicts: [conflict] } };
   }
@@ -165,10 +165,10 @@ test('resources can use sessionName as the daemon workspace identifier', async (
     async getRelayStatus() {
       return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
     },
-    async getInbox() {
+    async listInbox() {
       throw new Error('not used');
     },
-    async getConflicts() {
+    async listConflicts() {
       throw new Error('not used');
     }
   };
@@ -197,10 +197,10 @@ test('participants resource propagates workspace status failures', async () => {
     async getRelayStatus() {
       throw new Error('not used');
     },
-    async getInbox() {
+    async listInbox() {
       throw new Error('not used');
     },
-    async getConflicts() {
+    async listConflicts() {
       throw new Error('not used');
     }
   };
@@ -273,10 +273,10 @@ test('workspace resource degrades gracefully when relay is not configured', asyn
     async getRelayStatus() {
       return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
     },
-    async getInbox() {
+    async listInbox() {
       throw new Error('not used');
     },
-    async getConflicts() {
+    async listConflicts() {
       throw new Error('not used');
     }
   };
@@ -300,10 +300,10 @@ test('workspace resource returns error when workspace status fails, without fetc
       relayCalled = true;
       return { ok: true, data: relayStatus };
     },
-    async getInbox() {
+    async listInbox() {
       throw new Error('not used');
     },
-    async getConflicts() {
+    async listConflicts() {
       throw new Error('not used');
     }
   };

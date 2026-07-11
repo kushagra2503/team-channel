@@ -1,6 +1,6 @@
 import type {
   ApiResult,
-  Conflict,
+  ConflictListResponse,
   InboxResponse,
   McpRequestContext,
   McpResourceName,
@@ -9,7 +9,7 @@ import type {
   WorkspaceStatusResponse
 } from '@teambridge/core';
 import { apiFail, apiOk, MCP_RESOURCE_NAMES as CORE_MCP_RESOURCE_NAMES } from '@teambridge/core';
-import { getConflicts, getInbox, getRelayStatus, getVaultContext, getWorkspaceStatus, type DaemonClientOptions } from './daemon-client';
+import { getRelayStatus, getVaultContext, getWorkspaceStatus, listConflicts, listInbox, type DaemonClientOptions } from './daemon-client';
 
 export const MCP_RESOURCE_NAMES = CORE_MCP_RESOURCE_NAMES;
 
@@ -18,7 +18,7 @@ export type ParticipantsResourceResponse = {
 };
 
 export type ConflictsResourceResponse = {
-  conflicts: Conflict[];
+  conflicts: ConflictListResponse['conflicts'];
 };
 
 export type McpResourceResponse =
@@ -34,16 +34,16 @@ export type McpDaemonReader = {
   getWorkspaceStatus: typeof getWorkspaceStatus;
   getVaultContext: typeof getVaultContext;
   getRelayStatus: typeof getRelayStatus;
-  getInbox: typeof getInbox;
-  getConflicts: typeof getConflicts;
+  listInbox: typeof listInbox;
+  listConflicts: typeof listConflicts;
 };
 
 const defaultReader: McpDaemonReader = {
   getWorkspaceStatus,
   getVaultContext,
   getRelayStatus,
-  getInbox,
-  getConflicts
+  listInbox,
+  listConflicts
 };
 
 function resolveWorkspaceId(context: McpResourceContext): string | undefined {
@@ -89,8 +89,8 @@ export async function resolveMcpResource(
   }
 
   if (name === 'teambridge://inbox') {
-    return reader.getInbox(workspaceId, context);
+    return reader.listInbox(workspaceId, context);
   }
 
-  return reader.getConflicts(workspaceId, context);
+  return reader.listConflicts(workspaceId, context);
 }

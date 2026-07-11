@@ -12,8 +12,8 @@ _Last updated: 2026-07-12._
 | Phase | Theme | Status |
 |-------|-------|--------|
 | Phase 1 | Local-first foundation (daemon, CLI, vault, dashboard) | ✅ Complete |
-| Phase 2 | Supabase relay + cross-device sync | 🟡 Relay live; dashboard conflict UX done, CLI conflict UX pending |
-| Phase 3 | Agent UX (MCP server, hooks, inbox) | 🟡 MCP server + dashboard inbox/conflicts live; CLI ask/inbox/reply pending |
+| Phase 2 | Supabase relay + cross-device sync | ✅ Relay live; conflicts implemented |
+| Phase 3 | Agent UX (MCP server, hooks, inbox) | ✅ MCP, hooks, inbox, dashboard polish live |
 
 ## What works today
 
@@ -46,7 +46,8 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   members, vault highlights with color/assign, participant branch/agent,
   vault search + single-file viewer, worktree "enter" affordance, sidebar
   repo context panel, relay-session merge, inbox panel with reply actions,
-  conflicts panel with resolution, and teammate delta updates.
+  conflicts panel with resolution, recent teammate deltas, and teammate delta
+  updates.
 - **Core** (`packages/core`) — shared contracts in `src/contracts/`, the
   starting point for any API/event/MCP change.
 - **MCP** (`packages/mcp`) — MCP server over stdio transport using
@@ -100,11 +101,13 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   discovery, join, checkpoint bootstrap, realtime receive, presence, remote
   events, and cleanup.
 
-**Still pending:**
+**Live-verified after inbox/conflict pass:**
 
-- CLI conflict status/UX (Kushagra dependency). Dashboard conflict detection/resolution UX is live.
+- Conflict-marker parsing from publish text, `conflict_detected` /
+  `conflict_resolved` events, `conflicts.md` materialization, CLI conflict
+  commands, and dashboard conflict resolve UI.
 
-## Phase 3 — Agent UX, MCP, inbox 🟡
+## Phase 3 — Agent UX, MCP, inbox ✅
 
 **Live-verified:**
 
@@ -119,7 +122,7 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
 - Workspace resolution from explicit params, local `state.sqlite` worktree
   mapping, or `.teambridge/.active` fallback.
 - Integration tests spawning the server over stdio, verifying initialize
-  handshake, resources/list, tools/list, and stub error responses.
+  handshake, resources/list, tools/list, and workspace-resolution errors.
 - MCP resource contracts include relay-backed workspace state with graceful
   degradation when relay is unavailable.
 - Dashboard relay screens: sync health, realtime event feed, checkpoint state,
@@ -130,10 +133,22 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   and a resolution action for open conflicts.
 - Dashboard teammate delta panel based on per-participant context pointers
   (`lastSeenSeq`), with a "Mark seen" update action.
+- Dashboard recent teammate deltas panel in the Relay view.
 - Daemon inbox endpoints (`GET /workspaces/:id/inbox`,
   `POST /workspaces/:id/inbox/ask`, `POST /workspaces/:id/inbox/:id/reply`) and
   conflict endpoints (`GET /workspaces/:id/conflicts`,
-  `POST /workspaces/:id/conflicts/:id/resolve`) with authorization checks.
+  `POST /workspaces/:id/conflicts/:id/resolve`) with participant-level actor
+  validation.
+- `teambridge ask|inbox|reply` CLI commands, live MCP ask/reply, and end-to-end
+  local verification in `tests/integration/inbox-conflicts-flow.test.mjs`.
+- Conflict-marker parser, `conflicts.md` materialization, and `teambridge
+  conflicts` CLI command.
+- Daemon hook/delta context endpoints (`/context/hook`, `/context/deltas`) for
+  IDE hooks and dashboard callers, covered by
+  `tests/integration/context-hook-flow.test.mjs`.
+- Mock-relay end-to-end verification for offline/reconnect retry and late
+  joiner checkpoint bootstrap in
+  `tests/integration/relay-reconnect-bootstrap.test.mjs`.
 - Claude Code hook auto-injection: `teambridge hook install` writes a
   SessionStart hook into `.claude/settings.json` that runs `teambridge
   context`, so an agent opening a worktree gets shared context with no
@@ -143,12 +158,6 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   (`--peek`/`--deltas-only`/`--json`). Covered by
   `tests/integration/context-hook-flow.test.mjs`.
 
-**Still pending:**
-
-- CLI inbox commands: `teambridge ask|inbox|reply` (Kushagra dependency).
-- Dashboard approval/reply UI already live for inbox and conflicts.
-- End-to-end tests for offline/reconnect sync and new joiner bootstrap.
-
 ## Known gaps / follow-ups
 
 - **Naming hybrid:** UI/docs say "track"; several APIs and types still say
@@ -156,7 +165,6 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   A future breaking change may rename to `/tracks/*`. See
   [`docs/CONCEPTS.md`](./docs/CONCEPTS.md).
 - No packaged installer / IDE auto-launch daemon yet.
-- Offline/reconnect and new-joiner-bootstrap e2e tests are still pending.
 
 ## Where to look next
 

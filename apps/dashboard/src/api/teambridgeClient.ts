@@ -1,8 +1,9 @@
 import type {
   ApiResult,
-  Conflict,
-  ConflictsResponse,
+  AskResponse,
+  ConflictListResponse,
   ContextPointerResponse,
+  DeltaContextResponse,
   EventListResponse,
   InboxMessage,
   InboxResponse,
@@ -11,7 +12,9 @@ import type {
   ProjectListResponse,
   ProjectMemberListResponse,
   RelayStatusResponse,
+  ReplyResponse,
   RepoContextResponse,
+  ResolveConflictResponse,
   SaveContextPointerRequest,
   TrackListResponse,
   VaultAnnotateResponseBody,
@@ -192,6 +195,20 @@ export function getWorkspaceEvents(
   );
 }
 
+export function getContextDeltas(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  params: { sinceSeq?: number; limit?: number; excludeActorId?: string } = {},
+  signal?: AbortSignal
+): Promise<DeltaContextResponse> {
+  return getJson<DeltaContextResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/context/deltas`,
+    config,
+    params,
+    signal
+  );
+}
+
 export function getRepoContext(
   config: TeambridgeClientConfig,
   workspaceId?: string,
@@ -266,6 +283,79 @@ export function searchVault(
     { q: query },
     signal
   );
+}
+
+export function listInbox(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<InboxResponse> {
+  return getJson<InboxResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/inbox`,
+    config,
+    undefined,
+    signal
+  );
+}
+
+export async function askInbox(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  body: { to: string; text: string; actorId?: string },
+  signal?: AbortSignal
+): Promise<AskResponse> {
+  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<AskResponse>(response);
+}
+
+export async function replyInbox(
+  workspaceId: string,
+  messageId: string,
+  config: TeambridgeClientConfig,
+  body: { text: string; actorId?: string },
+  signal?: AbortSignal
+): Promise<ReplyResponse> {
+  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<ReplyResponse>(response);
+}
+
+export function listConflicts(
+  workspaceId: string,
+  config: TeambridgeClientConfig,
+  signal?: AbortSignal
+): Promise<ConflictListResponse> {
+  return getJson<ConflictListResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/conflicts`,
+    config,
+    undefined,
+    signal
+  );
+}
+
+export async function resolveConflict(
+  workspaceId: string,
+  conflictId: string,
+  config: TeambridgeClientConfig,
+  body: { resolutionText: string; actorId?: string },
+  signal?: AbortSignal
+): Promise<ResolveConflictResponse> {
+  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, config), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
+    signal
+  });
+  return unwrapApiResult<ResolveConflictResponse>(response);
 }
 
 export function annotateVaultItem(
@@ -347,78 +437,6 @@ export async function regeneratePfp(
     body: JSON.stringify({ participantId, ...options })
   });
   return unwrapApiResult<{ participantId: string; meta: unknown }>(response);
-}
-
-export function getInbox(
-  workspaceId: string,
-  config: TeambridgeClientConfig,
-  signal?: AbortSignal
-): Promise<InboxResponse> {
-  return getJson<InboxResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/inbox`, config, undefined, signal);
-}
-
-export function askInbox(
-  workspaceId: string,
-  body: { to: string; text: string },
-  config: TeambridgeClientConfig,
-  signal?: AbortSignal
-): Promise<InboxMessage> {
-  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
-  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, config), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(bodyWithRepo),
-    signal: withDefaultTimeout(signal)
-  }).then((response) => unwrapApiResult<InboxMessage>(response));
-}
-
-export function replyInbox(
-  workspaceId: string,
-  messageId: string,
-  body: { text: string },
-  config: TeambridgeClientConfig,
-  signal?: AbortSignal
-): Promise<InboxMessage> {
-  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
-  return fetch(
-    buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, config),
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(bodyWithRepo),
-      signal: withDefaultTimeout(signal)
-    }
-  ).then((response) => unwrapApiResult<InboxMessage>(response));
-}
-
-export function getConflicts(
-  workspaceId: string,
-  config: TeambridgeClientConfig,
-  signal?: AbortSignal
-): Promise<ConflictsResponse> {
-  return getJson<ConflictsResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts`, config, undefined, signal);
-}
-
-export function resolveConflict(
-  workspaceId: string,
-  conflictId: string,
-  body: { resolutionText: string },
-  config: TeambridgeClientConfig,
-  signal?: AbortSignal
-): Promise<Conflict> {
-  const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
-  return fetch(
-    buildTeambridgeUrl(
-      `/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
-      config
-    ),
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(bodyWithRepo),
-      signal: withDefaultTimeout(signal)
-    }
-  ).then((response) => unwrapApiResult<Conflict>(response));
 }
 
 export function getContextPointer(

@@ -1,19 +1,20 @@
 import type {
   ApiResult,
-  Conflict,
-  ConflictsResponse,
+  AskResponse,
+  ConflictListResponse,
   ContextPointerResponse,
   DaemonClientOptions,
   DaemonQueryParams,
-  InboxMessage,
   InboxResponse,
   RelayStatusResponse,
+  ReplyResponse,
+  ResolveConflictResponse,
   VaultContextResponse,
   VaultReadResponse,
+  VaultSearchResponse,
   WorkspaceEvent,
   WorkspaceListResponse,
-  WorkspaceStatusResponse,
-  VaultSearchResponse
+  WorkspaceStatusResponse
 } from '@teambridge/core';
 import { buildDaemonUrl } from '@teambridge/core';
 
@@ -94,6 +95,61 @@ export function publishEvent(
   );
 }
 
+export function listInbox(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<InboxResponse>> {
+  return getJson<InboxResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/inbox`, options);
+}
+
+export function askInbox(
+  workspaceId: string,
+  body: { to: string; text: string; actorId?: string; deviceId?: string; dedupeKey?: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<AskResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
+  return postJson<AskResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`,
+    bodyWithRepo,
+    options
+  );
+}
+
+export function replyInbox(
+  workspaceId: string,
+  messageId: string,
+  body: { text: string; actorId?: string; deviceId?: string; dedupeKey?: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ReplyResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
+  return postJson<ReplyResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`,
+    bodyWithRepo,
+    options
+  );
+}
+
+export function listConflicts(
+  workspaceId: string,
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ConflictListResponse>> {
+  return getJson<ConflictListResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts`, options);
+}
+
+export function resolveConflict(
+  workspaceId: string,
+  conflictId: string,
+  body: { resolutionText: string; actorId?: string; deviceId?: string; dedupeKey?: string },
+  options: DaemonClientOptions = {}
+): Promise<ApiResult<ResolveConflictResponse>> {
+  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
+  return postJson<ResolveConflictResponse>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
+    bodyWithRepo,
+    options
+  );
+}
+
 export function searchVault(
   workspaceId: string,
   query: string,
@@ -111,55 +167,14 @@ export function getInbox(
   workspaceId: string,
   options: DaemonClientOptions = {}
 ): Promise<ApiResult<InboxResponse>> {
-  return getJson<InboxResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/inbox`, options);
-}
-
-export function askInbox(
-  workspaceId: string,
-  body: { to: string; text: string },
-  options: DaemonClientOptions = {}
-): Promise<ApiResult<InboxMessage>> {
-  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
-  return postJson<InboxMessage>(
-    `/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`,
-    bodyWithRepo,
-    options
-  );
-}
-
-export function replyInbox(
-  workspaceId: string,
-  messageId: string,
-  body: { text: string },
-  options: DaemonClientOptions = {}
-): Promise<ApiResult<InboxMessage>> {
-  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
-  return postJson<InboxMessage>(
-    `/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`,
-    bodyWithRepo,
-    options
-  );
+  return listInbox(workspaceId, options);
 }
 
 export function getConflicts(
   workspaceId: string,
   options: DaemonClientOptions = {}
-): Promise<ApiResult<ConflictsResponse>> {
-  return getJson<ConflictsResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts`, options);
-}
-
-export function resolveConflict(
-  workspaceId: string,
-  conflictId: string,
-  body: { resolutionText: string },
-  options: DaemonClientOptions = {}
-): Promise<ApiResult<Conflict>> {
-  const bodyWithRepo = options.repoRoot ? { ...body, repoRoot: options.repoRoot } : body;
-  return postJson<Conflict>(
-    `/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`,
-    bodyWithRepo,
-    options
-  );
+): Promise<ApiResult<ConflictListResponse>> {
+  return listConflicts(workspaceId, options);
 }
 
 export function getContextPointer(

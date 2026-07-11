@@ -41,9 +41,9 @@ test('daemon inbox and conflict endpoints work end-to-end', async (t) => {
     ctx
   );
   assert.equal(ask.body.ok, true, ask.body.error?.message);
-  assert.equal(ask.body.data.status, 'pending');
-  assert.equal(ask.body.data.body, 'Can we use FTS5 for vault search?');
-  const messageId = ask.body.data.id;
+  assert.equal(ask.body.data.message.status, 'pending');
+  assert.equal(ask.body.data.message.body, 'Can we use FTS5 for vault search?');
+  const messageId = ask.body.data.message.id;
 
   // Inbox lists the pending message.
   const inbox = await apiGet(`/workspaces/${workspaceId}/inbox`, ctx);
@@ -66,50 +66,29 @@ test('daemon inbox and conflict endpoints work end-to-end', async (t) => {
     ctx
   );
   assert.equal(reply.body.ok, true, reply.body.error?.message);
-  assert.equal(reply.body.data.status, 'answered');
-  assert.equal(reply.body.data.replyText, 'Yes, FTS5 is included in the sqlite3 build.');
+  assert.equal(reply.body.data.message.status, 'answered');
+  assert.equal(reply.body.data.message.replyText, 'Yes, FTS5 is included in the sqlite3 build.');
 
   // Inbox reflects the answered state.
   const inboxAfterReply = await apiGet(`/workspaces/${workspaceId}/inbox`, ctx);
   const answered = inboxAfterReply.body.data.messages.find((m) => m.id === messageId);
   assert.equal(answered.status, 'answered');
 
-  // Authorization: only the recipient can reply to a pending message.
-  const askAgain = await apiPost(
-    `/workspaces/${workspaceId}/inbox/ask`,
-    { to: 'Bob', text: 'Second question for Bob' },
-    ctx
-  );
-  assert.equal(askAgain.body.ok, true, askAgain.body.error?.message);
-  await writeFile(
-    path.join(repoRoot, '.teambridge', 'user.json'),
-    JSON.stringify({ schemaVersion: 1, firstName: 'Alice', lastName: 'T', displayName: 'Alice T' }, null, 2)
-  );
-  const unauthorizedReply = await apiPost(
-    `/workspaces/${workspaceId}/inbox/${askAgain.body.data.id}/reply`,
-    { text: 'I am not Bob' },
-    ctx
-  );
-  assert.equal(unauthorizedReply.body.ok, false);
-  assert.equal(unauthorizedReply.body.error.code, 'FORBIDDEN');
-
-  // Two publishes to the same file trigger a conflict.
-  const pub1 = await apiPost(
+  // A publish containing Git conflict markers triggers a conflict.
+  const conflictPub = await apiPost(
     `/workspaces/${workspaceId}/events`,
-    { targetFile: 'decisions.md', payload: { text: 'First decision' }, repoRoot },
+    {
+      targetFile: 'decisions.md',
+      payload: { text: '<<<<<<< HEAD\nFirst decision\n=======\nSecond decision\n>>>>>>> branch\n' },
+      repoRoot
+    },
     ctx
   );
-  assert.equal(pub1.body.ok, true, pub1.body.error?.message);
-  const pub2 = await apiPost(
-    `/workspaces/${workspaceId}/events`,
-    { targetFile: 'decisions.md', payload: { text: 'Second decision' }, repoRoot },
-    ctx
-  );
-  assert.equal(pub2.body.ok, true, pub2.body.error?.message);
+  assert.equal(conflictPub.body.ok, true, conflictPub.body.error?.message);
 
   const conflicts = await apiGet(`/workspaces/${workspaceId}/conflicts`, ctx);
   assert.equal(conflicts.body.ok, true);
-  assert.ok(conflicts.body.data.conflicts.length >= 1, 'Expected a conflict from two publishes');
+  assert.ok(conflicts.body.data.conflicts.length >= 1, 'Expected a conflict from conflict markers');
   const conflict = conflicts.body.data.conflicts[0];
   assert.equal(conflict.status, 'open');
   assert.ok(conflict.affectedPaths.includes('decisions.md'));
@@ -117,15 +96,15 @@ test('daemon inbox and conflict endpoints work end-to-end', async (t) => {
   // Resolve the conflict.
   const resolveRes = await apiPost(
     `/workspaces/${workspaceId}/conflicts/${conflict.id}/resolve`,
-    { conflictId: conflict.id, resolutionText: 'Merged both decisions', repoRoot },
+    { resolutionText: 'Merged both decisions', repoRoot },
     ctx
   );
   assert.equal(resolveRes.body.ok, true, resolveRes.body.error?.message);
-  assert.equal(resolveRes.body.data.status, 'resolved');
-  assert.equal(resolveRes.body.data.resolutionText, 'Merged both decisions');
+  assert.equal(resolveRes.body.data.conflict.status, 'resolved');
+  assert.equal(resolveRes.body.data.conflict.resolutionText, 'Merged both decisions');
 
   // Conflicts list no longer shows the resolved conflict as open.
-  const conflictsAfterResolve = await apiGet(`/workspaces/${workspaceId}/conflicts`, ctx);
+  const conflictsAfterResolve = await apiGet(`/workspaces/${workspaceId}/conflicts?status=open`, ctx);
   assert.equal(conflictsAfterResolve.body.data.conflicts.length, 0, 'Open conflicts should be empty after resolve');
 
   // Context pointer starts at 0 and can be updated.

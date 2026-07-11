@@ -2,7 +2,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { InboxPanel } from './InboxPanel';
 import { makeInboxMessage, makeParticipant } from '@/test/factories';
-import * as teambridgeClient from '@/api/teambridgeClient';
 
 const localUser = {
   schemaVersion: 1 as const,
@@ -19,7 +18,7 @@ describe('InboxPanel', () => {
       makeInboxMessage({ id: 'msg_1', body: 'Question one', status: 'pending' }),
       makeInboxMessage({ id: 'msg_2', body: 'Answered question', status: 'answered', replyText: 'Yes' })
     ];
-    render(<InboxPanel messages={messages} localUser={localUser} config={config} workspaceId="ws_123" />);
+    render(<InboxPanel messages={messages} localUser={localUser} config={config} />);
     expect(screen.getByText('Question one')).toBeTruthy();
     expect(screen.getByText('Answered question')).toBeTruthy();
     expect(screen.getByText('Yes')).toBeTruthy();
@@ -36,7 +35,7 @@ describe('InboxPanel', () => {
       makeParticipant({ id: 'user_ronish', displayName: 'ronish' })
     ];
     render(
-      <InboxPanel messages={messages} localUser={localUser} participants={participants} config={config} workspaceId="ws_123" />
+      <InboxPanel messages={messages} localUser={localUser} participants={participants} config={config} onReply={() => Promise.resolve()} />
     );
     const replyButtons = screen.getAllByText('Reply');
     expect(replyButtons).toHaveLength(1);
@@ -45,12 +44,7 @@ describe('InboxPanel', () => {
   it('submits a reply and invokes onReply', async () => {
     const message = makeInboxMessage({ id: 'msg_1', toUserId: 'user_nihal', status: 'pending' });
     const participants = [makeParticipant({ id: 'user_nihal', displayName: 'nihal' })];
-    const onReply = vi.fn();
-    const replySpy = vi.spyOn(teambridgeClient, 'replyInbox').mockResolvedValue({
-      ...message,
-      status: 'answered',
-      replyText: 'Yes, FTS5 works'
-    });
+    const onReply = vi.fn().mockResolvedValue(undefined);
 
     render(
       <InboxPanel
@@ -58,7 +52,6 @@ describe('InboxPanel', () => {
         localUser={localUser}
         participants={participants}
         config={config}
-        workspaceId="ws_123"
         onReply={onReply}
       />
     );
@@ -68,18 +61,17 @@ describe('InboxPanel', () => {
     fireEvent.click(screen.getByText('Send'));
 
     await waitFor(() => {
-      expect(replySpy).toHaveBeenCalledWith('ws_123', 'msg_1', { text: 'Yes, FTS5 works' }, config);
-      expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ status: 'answered', replyText: 'Yes, FTS5 works' }));
+      expect(onReply).toHaveBeenCalledWith('msg_1', 'Yes, FTS5 works');
     });
   });
 
   it('renders an empty inbox placeholder', () => {
-    render(<InboxPanel messages={[]} localUser={localUser} config={config} workspaceId="ws_123" />);
+    render(<InboxPanel messages={[]} localUser={localUser} config={config} />);
     expect(screen.getByText('No messages yet.')).toBeTruthy();
   });
 
   it('renders the error message when error is set', () => {
-    render(<InboxPanel error="Unable to load inbox" localUser={localUser} config={config} workspaceId="ws_123" />);
+    render(<InboxPanel error="Unable to load inbox" localUser={localUser} config={config} />);
     expect(screen.getByText('Unable to load inbox')).toBeTruthy();
   });
 });

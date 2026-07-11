@@ -11,17 +11,15 @@ import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName } from './participantDisplay';
 import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
-import { replyInbox } from '@/api/teambridgeClient';
 
 export type InboxPanelProps = {
   messages?: InboxMessage[];
   localUser?: LocalUserProfile | null;
   participants?: Participant[];
   config?: TeambridgeClientConfig;
-  workspaceId?: string;
   error?: string;
   avatarRev?: number;
-  onReply?: (message: InboxMessage) => void;
+  onReply?: (messageId: string, text: string) => Promise<void>;
 };
 
 const STATUS_STYLES: Record<InboxMessage['status'], { label: string; className: string }> = {
@@ -40,14 +38,12 @@ export function InboxPanel({
   localUser,
   participants = [],
   config,
-  workspaceId,
   error,
   avatarRev,
   onReply
 }: InboxPanelProps) {
-  const [replyingId, setReplyingId] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
   const [replyError, setReplyError] = useState<string | null>(null);
 
   if (error) {
@@ -69,18 +65,17 @@ export function InboxPanel({
   const sorted = [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const handleReply = async (messageId: string) => {
-    if (!replyText.trim() || !workspaceId || !config) return;
-    setSubmitting(true);
+    const text = drafts[messageId]?.trim();
+    if (!text || !onReply) return;
+    setBusy(messageId);
     setReplyError(null);
     try {
-      const replied = await replyInbox(workspaceId, messageId, { text: replyText.trim() }, config);
-      setReplyingId(null);
-      setReplyText('');
-      onReply?.(replied);
+      await onReply(messageId, text);
+      setDrafts((current) => ({ ...current, [messageId]: '' }));
     } catch (err) {
       setReplyError(err instanceof Error ? err.message : 'Unable to send reply');
     } finally {
-      setSubmitting(false);
+      setBusy(null);
     }
   };
 
@@ -97,7 +92,8 @@ export function InboxPanel({
             const toName = toParticipant?.displayName ?? message.toUserId.replace(/^user_/, '');
             const avatarUrl = config ? avatarUrlForDisplayName(fromName, config, avatarRev) : undefined;
             const isRecipient = localUser?.displayName === toName;
-            const canReply = message.status === 'pending' && isRecipient;
+            const canReply = message.status === 'pending' && isRecipient && onReply;
+            const isReplying = busy === message.id || drafts[message.id] !== undefined;
 
             return (
               <motion.div
@@ -130,8 +126,7 @@ export function InboxPanel({
                     <button
                       type="button"
                       onClick={() => {
-                        setReplyingId(message.id);
-                        setReplyText('');
+                        setDrafts((current) => ({ ...current, [message.id]: '' }));
                         setReplyError(null);
                       }}
                       className="text-[11px] text-primary hover:underline"
@@ -140,13 +135,13 @@ export function InboxPanel({
                     </button>
                   ) : null}
                 </div>
-                {replyingId === message.id ? (
+                {isReplying ? (
                   <div className="mt-2 flex flex-col gap-1.5">
                     <Input
                       aria-label="Reply text"
-                      placeholder="Write a reply..."
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
+                      placeholder="Write a reply…"
+                      value={drafts[message.id] ?? ''}
+                      onChange={(e) => setDrafts((current) => ({ ...current, [message.id]: e.target.value }))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
@@ -155,15 +150,20 @@ export function InboxPanel({
                       }}
                       className="h-7 text-xs"
                     />
-                    {replyError ? <p role="alert" className="text-[10px] text-destructive">{replyError}</p> : null}
+                    {replyError && busy === message.id ? (
+                      <p role="alert" className="text-[10px] text-destructive">{replyError}</p>
+                    ) : null}
                     <div className="flex justify-end gap-1.5">
                       <Button
                         type="button"
                         variant="ghost"
                         size="xs"
                         onClick={() => {
-                          setReplyingId(null);
-                          setReplyText('');
+                          setDrafts((current) => {
+                            const next = { ...current };
+                            delete next[message.id];
+                            return next;
+                          });
                           setReplyError(null);
                         }}
                       >
@@ -172,10 +172,10 @@ export function InboxPanel({
                       <Button
                         type="button"
                         size="xs"
-                        disabled={!replyText.trim() || submitting}
+                        disabled={!drafts[message.id]?.trim() || busy === message.id}
                         onClick={() => handleReply(message.id)}
                       >
-                        {submitting ? 'Sending...' : 'Send'}
+                        {busy === message.id ? 'Sending…' : 'Send'}
                       </Button>
                     </div>
                   </div>

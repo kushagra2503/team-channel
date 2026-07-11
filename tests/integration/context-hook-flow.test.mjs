@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createTempGitRepo, parseCreatedProjectId, removeTempDir, runCli, startTestDaemon } from './helpers.mjs';
+import { apiGet, createTempGitRepo, parseCreatedProjectId, removeTempDir, runCli, startTestDaemon } from './helpers.mjs';
 
 function parseWorktreePath(output) {
   const match = output.match(/Worktree: (.+)/);
@@ -91,6 +91,21 @@ test('init relay-mode config + context deltas + hook install/uninstall', async (
   assert.equal(parsed.lastSeenSeq, 1);
   assert.equal(parsed.deltas.length, 1);
   assert.equal(parsed.deltas[0].targetFile, 'observations.md');
+
+  // Daemon-specific context endpoints expose the same compact hook context and
+  // structured deltas for IDE hooks/dashboard callers.
+  const hookContext = await apiGet(`/workspaces/${parsed.workspaceId}/context/hook?sinceSeq=1&deltasOnly=true`, ctx);
+  assert.equal(hookContext.response.status, 200);
+  assert.equal(hookContext.body.ok, true);
+  assert.equal(hookContext.body.data.context, undefined);
+  assert.equal(hookContext.body.data.latestSeq, 2);
+  assert.equal(hookContext.body.data.deltas[0].targetFile, 'observations.md');
+
+  const daemonDeltas = await apiGet(`/workspaces/${parsed.workspaceId}/context/deltas?sinceSeq=0&limit=1`, ctx);
+  assert.equal(daemonDeltas.response.status, 200);
+  assert.equal(daemonDeltas.body.ok, true);
+  assert.equal(daemonDeltas.body.data.deltas.length, 1);
+  assert.equal(daemonDeltas.body.data.deltas[0].seq, 2);
 
   // --- Claude Code hook auto-injection (`teambridge hook`) ---
   const settingsFile = join(worktree, '.claude', 'settings.json');

@@ -1,11 +1,17 @@
 import type {
+  AskResponse,
   ApiResult,
+  ConflictListResponse,
   CreateProjectResponse,
+  DetectConflictsResponse,
   EventListResponse,
+  InboxResponse,
   JoinWorkspaceResponse,
   LocalUserProfile,
   ProjectListResponse,
   RelayMode,
+  ReplyResponse,
+  ResolveConflictResponse,
   StartWorkspaceResponse,
   TeambridgeConfig,
   TrackListResponse,
@@ -204,6 +210,67 @@ export async function searchVault(
   query: string
 ): Promise<ApiResult<VaultSearchResponse>> {
   return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/search`, options, { q: query }));
+}
+
+export async function listInbox(
+  options: ClientOptions,
+  workspaceId: string,
+  status?: string
+): Promise<ApiResult<InboxResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox`, options, status ? { status } : undefined));
+}
+
+export async function askInbox(
+  options: ClientOptions,
+  workspaceId: string,
+  body: { to: string; text: string; actorId?: string }
+): Promise<ApiResult<AskResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, options), {
+    method: 'POST',
+    body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
+}
+
+export async function replyInbox(
+  options: ClientOptions,
+  workspaceId: string,
+  messageId: string,
+  body: { text: string; actorId?: string }
+): Promise<ApiResult<ReplyResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, options), {
+    method: 'POST',
+    body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
+}
+
+export async function listConflicts(
+  options: ClientOptions,
+  workspaceId: string,
+  status?: string
+): Promise<ApiResult<ConflictListResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts`, options, status ? { status } : undefined));
+}
+
+export async function detectConflicts(
+  options: ClientOptions,
+  workspaceId: string
+): Promise<ApiResult<DetectConflictsResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts/detect`, options), {
+    method: 'POST',
+    body: JSON.stringify({ repoRoot: options.repoRoot })
+  });
+}
+
+export async function resolveConflict(
+  options: ClientOptions,
+  workspaceId: string,
+  conflictId: string,
+  body: { resolutionText: string; actorId?: string }
+): Promise<ApiResult<ResolveConflictResponse>> {
+  return request(buildDaemonUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, options), {
+    method: 'POST',
+    body: JSON.stringify({ ...body, repoRoot: options.repoRoot })
+  });
 }
 
 export async function getWorkspaceStatus(

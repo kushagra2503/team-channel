@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ConflictDetectedPayload, ConflictResolvedPayload, PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@teambridge/core';
+import type { Conflict, PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@teambridge/core';
 import {
   extractVaultAnnotations,
   parseVaultListLine,
@@ -25,7 +25,7 @@ const INITIAL_CONTENT: Record<PhaseOneVaultFile, string> = {
   'blockers.md': '# Blockers\n',
   'test-results.md': '# Test Results\n',
   'attempts.md': '# Attempts\n',
-  'conflicts.md': '# Conflicts\n'
+  'conflicts.md': '# Conflicts\n\nNo conflicts detected.\n'
 };
 
 export async function initializePhaseOneVault(vaultDir: string): Promise<void> {
@@ -74,30 +74,114 @@ export async function materializePublishEvent(vaultDir: string, event: Workspace
   if (targetFile === 'README.md') {
     throw new Error('README.md is not a publish target');
   }
+  if (targetFile === 'conflicts.md') {
+    throw new Error('conflicts.md is managed by Teambridge and is not a publish target');
+  }
 
   await initializePhaseOneVault(vaultDir);
   await appendFile(join(vaultDir, targetFile), formatPublishText(event.payload.text));
 }
 
-function formatConflictText(event: WorkspaceEvent<ConflictDetectedPayload | ConflictResolvedPayload>): string {
-  if (event.type === 'conflict_detected') {
-    const { targetFile, summary } = event.payload as ConflictDetectedPayload;
-    return `- ${event.createdAt} OPEN: ${summary} (${targetFile})\n`;
-  }
-  const { conflictId, resolutionText } = event.payload as ConflictResolvedPayload;
-  return `- ${event.createdAt} RESOLVED ${conflictId}: ${resolutionText.replace(/\n/g, ' ')}\n`;
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
-export async function materializeConflictEvent(
-  vaultDir: string,
-  event: WorkspaceEvent<ConflictDetectedPayload | ConflictResolvedPayload>
-): Promise<void> {
-  if (event.type !== 'conflict_detected' && event.type !== 'conflict_resolved') {
-    return;
+function conflictFromDetectedEvent(event: WorkspaceEvent): Conflict | null {
+  if (event.type !== 'conflict_detected' || typeof event.payload !== 'object' || event.payload === null) {
+    return null;
   }
 
-  await initializePhaseOneVault(vaultDir);
-  await appendFile(join(vaultDir, 'conflicts.md'), formatConflictText(event));
+  const payload = event.payload as Record<string, unknown>;
+  const id = String(payload.conflictId ?? payload.id ?? `conf_${event.id}`);
+  const kind = String(payload.kind ?? 'unknown');
+  return {
+    id,
+    workspaceId: event.workspaceId,
+    kind: kind === 'content' || kind === 'vault' || kind === 'branch' ? kind : 'unknown',
+    status: 'open',
+    summary: String(payload.summary ?? 'Conflict detected'),
+    eventIds: stringArray(payload.eventIds).length > 0 ? stringArray(payload.eventIds) : [event.id],
+    affectedPaths: stringArray(payload.affectedPaths),
+    createdAt: String(payload.createdAt ?? event.createdAt)
+  };
+}
+
+function applyConflictResolution(conflict: Conflict, event: WorkspaceEvent): Conflict {
+  const payload = typeof event.payload === 'object' && event.payload !== null
+    ? event.payload as Record<string, unknown>
+    : {};
+  return {
+    ...conflict,
+    status: 'resolved',
+    resolvedAt: String(payload.resolvedAt ?? event.createdAt),
+    resolutionEventId: event.id
+  };
+}
+
+function deriveConflicts(events: WorkspaceEvent[]): Conflict[] {
+  const conflicts = new Map<string, Conflict>();
+
+  for (const event of events) {
+    if (event.type === 'conflict_detected') {
+      const conflict = conflictFromDetectedEvent(event);
+      if (conflict) conflicts.set(conflict.id, conflict);
+    } else if (event.type === 'conflict_resolved' && typeof event.payload === 'object' && event.payload !== null) {
+      const conflictId = String((event.payload as Record<string, unknown>).conflictId ?? '');
+      const existing = conflictId ? conflicts.get(conflictId) : undefined;
+      if (existing) conflicts.set(conflictId, applyConflictResolution(existing, event));
+    }
+  }
+
+  return [...conflicts.values()].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+}
+
+export function renderConflictsMarkdown(conflicts: Conflict[], events: WorkspaceEvent[]): string {
+  const resolutionByConflictId = new Map<string, string>();
+  for (const event of events) {
+    if (event.type !== 'conflict_resolved' || typeof event.payload !== 'object' || event.payload === null) continue;
+    const payload = event.payload as Record<string, unknown>;
+    const conflictId = String(payload.conflictId ?? '');
+    const resolutionText = String(payload.resolutionText ?? '').trim();
+    if (conflictId && resolutionText) resolutionByConflictId.set(conflictId, resolutionText);
+  }
+
+  const lines = ['# Conflicts', ''];
+  if (conflicts.length === 0) {
+    lines.push('No conflicts detected.', '');
+    return lines.join('\n');
+  }
+
+  const open = conflicts.filter((conflict) => conflict.status === 'open');
+  const resolved = conflicts.filter((conflict) => conflict.status !== 'open');
+
+  lines.push('## Open');
+  if (open.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const conflict of open) {
+      lines.push(`- [${conflict.id}] ${conflict.summary}`);
+      if (conflict.affectedPaths?.length) lines.push(`  - affected: ${conflict.affectedPaths.join(', ')}`);
+      if (conflict.eventIds.length) lines.push(`  - events: ${conflict.eventIds.join(', ')}`);
+    }
+  }
+
+  lines.push('', '## Resolved');
+  if (resolved.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const conflict of resolved) {
+      lines.push(`- [${conflict.id}] ${conflict.summary}`);
+      const resolution = resolutionByConflictId.get(conflict.id);
+      if (resolution) lines.push(`  - resolution: ${resolution}`);
+      if (conflict.resolvedAt) lines.push(`  - resolved: ${conflict.resolvedAt}`);
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
 }
 
 export async function readEventsJsonl(eventsPath: string): Promise<WorkspaceEvent[]> {
@@ -132,10 +216,9 @@ export async function rebuildPhaseOneVault(vaultDir: string, eventsPath: string)
   for (const event of events) {
     if (event.type === 'publish') {
       await materializePublishEvent(vaultDir, event as WorkspaceEvent<PublishEventPayload>);
-    } else if (event.type === 'conflict_detected' || event.type === 'conflict_resolved') {
-      await materializeConflictEvent(vaultDir, event as WorkspaceEvent<ConflictDetectedPayload | ConflictResolvedPayload>);
     }
   }
+  await writeFile(join(vaultDir, 'conflicts.md'), renderConflictsMarkdown(deriveConflicts(events), events));
 
   for (const file of PHASE_ONE_VAULT_FILES) {
     const annotations = preserved.get(file);

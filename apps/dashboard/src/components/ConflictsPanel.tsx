@@ -7,15 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/relative-time';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
-import { resolveConflict } from '@/api/teambridgeClient';
 
 export type ConflictsPanelProps = {
   conflicts?: Conflict[];
-  config?: TeambridgeClientConfig;
-  workspaceId?: string;
   error?: string;
-  onResolve?: (conflict: Conflict) => void;
+  onResolve?: (conflictId: string, resolutionText: string) => Promise<void>;
 };
 
 const STATUS_STYLES: Record<Conflict['status'], { label: string; className: string }> = {
@@ -24,10 +20,9 @@ const STATUS_STYLES: Record<Conflict['status'], { label: string; className: stri
   ignored: { label: 'ignored', className: 'bg-muted text-muted-foreground' }
 };
 
-export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolve }: ConflictsPanelProps) {
-  const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [resolutionText, setResolutionText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+export function ConflictsPanel({ conflicts, error, onResolve }: ConflictsPanelProps) {
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
 
   if (error) {
@@ -51,18 +46,21 @@ export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolv
   );
 
   const handleResolve = async (conflictId: string) => {
-    if (!resolutionText.trim() || !workspaceId || !config) return;
-    setSubmitting(true);
+    const text = drafts[conflictId]?.trim();
+    if (!text || !onResolve) return;
+    setBusy(conflictId);
     setResolveError(null);
     try {
-      const resolved = await resolveConflict(workspaceId, conflictId, { resolutionText: resolutionText.trim() }, config);
-      setResolvingId(null);
-      setResolutionText('');
-      onResolve?.(resolved);
+      await onResolve(conflictId, text);
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[conflictId];
+        return next;
+      });
     } catch (err) {
       setResolveError(err instanceof Error ? err.message : 'Unable to resolve conflict');
     } finally {
-      setSubmitting(false);
+      setBusy(null);
     }
   };
 
@@ -74,6 +72,8 @@ export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolv
           {sorted.map((conflict, i) => {
             const statusStyle = STATUS_STYLES[conflict.status];
             const isOpen = conflict.status === 'open';
+            const canResolve = isOpen && onResolve;
+            const isResolving = busy === conflict.id || drafts[conflict.id] !== undefined;
 
             return (
               <motion.div
@@ -106,13 +106,12 @@ export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolv
                     <p className="text-muted-foreground">{conflict.resolutionText}</p>
                   </div>
                 ) : null}
-                {isOpen ? (
+                {canResolve ? (
                   <div className="mt-1.5 flex justify-end">
                     <button
                       type="button"
                       onClick={() => {
-                        setResolvingId(conflict.id);
-                        setResolutionText('');
+                        setDrafts((current) => ({ ...current, [conflict.id]: '' }));
                         setResolveError(null);
                       }}
                       className="text-[11px] text-primary hover:underline"
@@ -121,13 +120,13 @@ export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolv
                     </button>
                   </div>
                 ) : null}
-                {resolvingId === conflict.id ? (
+                {isResolving ? (
                   <div className="mt-2 flex flex-col gap-1.5">
                     <Input
                       aria-label="Resolution text"
                       placeholder="How was this resolved?"
-                      value={resolutionText}
-                      onChange={(e) => setResolutionText(e.target.value)}
+                      value={drafts[conflict.id] ?? ''}
+                      onChange={(e) => setDrafts((current) => ({ ...current, [conflict.id]: e.target.value }))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
@@ -136,15 +135,20 @@ export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolv
                       }}
                       className="h-7 text-xs"
                     />
-                    {resolveError ? <p role="alert" className="text-[10px] text-destructive">{resolveError}</p> : null}
+                    {resolveError && busy === conflict.id ? (
+                      <p role="alert" className="text-[10px] text-destructive">{resolveError}</p>
+                    ) : null}
                     <div className="flex justify-end gap-1.5">
                       <Button
                         type="button"
                         variant="ghost"
                         size="xs"
                         onClick={() => {
-                          setResolvingId(null);
-                          setResolutionText('');
+                          setDrafts((current) => {
+                            const next = { ...current };
+                            delete next[conflict.id];
+                            return next;
+                          });
                           setResolveError(null);
                         }}
                       >
@@ -153,10 +157,10 @@ export function ConflictsPanel({ conflicts, config, workspaceId, error, onResolv
                       <Button
                         type="button"
                         size="xs"
-                        disabled={!resolutionText.trim() || submitting}
+                        disabled={!drafts[conflict.id]?.trim() || busy === conflict.id}
                         onClick={() => handleResolve(conflict.id)}
                       >
-                        {submitting ? 'Saving...' : 'Save'}
+                        {busy === conflict.id ? 'Saving…' : 'Save'}
                       </Button>
                     </div>
                   </div>

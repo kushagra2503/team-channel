@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolveMcpResource, type McpResourceContext } from './resources';
 import { resolveWorkspaceContext } from './resolution';
-import { getWorkspaceStatus, readVaultFile, getVaultContext, publishEvent, searchVault, askInbox, replyInbox } from './daemon-client';
+import { askInbox, getWorkspaceStatus, publishEvent, readVaultFile, replyInbox, searchVault } from './daemon-client';
 
 const SERVER_NAME = 'teambridge';
 const SERVER_VERSION = '0.1.0';
@@ -164,10 +164,10 @@ export function createServer(): McpServer {
     async ({ to, text }) => {
       const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
-      if (!wsId) throw new Error('Unable to resolve workspace for team_ask');
+      if (!wsId) throw new Error('Unable to resolve workspace for ask');
       const result = await askInbox(wsId, { to, text }, ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(result.data.message) }] };
     }
   );
 
@@ -184,10 +184,10 @@ export function createServer(): McpServer {
     async ({ messageId, text }) => {
       const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
-      if (!wsId) throw new Error('Unable to resolve workspace for team_reply');
+      if (!wsId) throw new Error('Unable to resolve workspace for reply');
       const result = await replyInbox(wsId, messageId, { text }, ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(result.data.message) }] };
     }
   );
 
