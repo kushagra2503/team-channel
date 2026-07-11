@@ -1,4 +1,4 @@
-import type { Conflict, InboxMessage, Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Conflict, ContextPointerResponse, InboxMessage, Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
 
 export const createdAt = '2026-06-22T00:00:00.000Z';
 
@@ -125,6 +125,17 @@ export function makeConflict(overrides: Partial<Conflict> = {}): Conflict {
     eventIds: ['evt_001', 'evt_002'],
     affectedPaths: ['decisions.md'],
     createdAt,
+    ...overrides
+  };
+}
+
+export function makeContextPointer(overrides: Partial<ContextPointerResponse> = {}): ContextPointerResponse {
+  return {
+    workspaceId: 'ws_123',
+    sessionName: 'billing-refactor',
+    displayName: 'ronish',
+    lastSeenSeq: 3,
+    updatedAt: createdAt,
     ...overrides
   };
 }
