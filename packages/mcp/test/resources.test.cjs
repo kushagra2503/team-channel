@@ -43,6 +43,28 @@ const workspaceStatus = {
   lastSeq: 2
 };
 
+const inboxMessage = {
+  id: 'msg_001',
+  workspaceId: 'ws_123',
+  fromUserId: 'user_ronish',
+  toUserId: 'user_nihal',
+  status: 'pending',
+  body: 'How should we structure the conflict API?',
+  eventId: 'evt_ask_001',
+  createdAt
+};
+
+const conflict = {
+  id: 'conflict_001',
+  workspaceId: 'ws_123',
+  kind: 'vault',
+  status: 'open',
+  summary: 'Two publishes to decisions.md',
+  eventIds: ['evt_001', 'evt_002'],
+  affectedPaths: ['decisions.md'],
+  createdAt
+};
+
 const reader = {
   async getWorkspaceStatus(workspaceId) {
     assert.equal(workspaceId, 'ws_123');
@@ -66,6 +88,14 @@ const reader = {
   },
   async getRelayStatus() {
     return { ok: true, data: relayStatus };
+  },
+  async getInbox(workspaceId) {
+    assert.equal(workspaceId, 'ws_123');
+    return { ok: true, data: { messages: [inboxMessage] } };
+  },
+  async getConflicts(workspaceId) {
+    assert.equal(workspaceId, 'ws_123');
+    return { ok: true, data: { conflicts: [conflict] } };
   }
 };
 
@@ -134,6 +164,12 @@ test('resources can use sessionName as the daemon workspace identifier', async (
     },
     async getRelayStatus() {
       return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
+    },
+    async getInbox() {
+      throw new Error('not used');
+    },
+    async getConflicts() {
+      throw new Error('not used');
     }
   };
 
@@ -159,6 +195,12 @@ test('participants resource propagates workspace status failures', async () => {
       throw new Error('not used');
     },
     async getRelayStatus() {
+      throw new Error('not used');
+    },
+    async getInbox() {
+      throw new Error('not used');
+    },
+    async getConflicts() {
       throw new Error('not used');
     }
   };
@@ -198,10 +240,10 @@ test('vault, inbox, conflict, and unknown resources have stable behavior', async
   assert.deepEqual(vault.data.context.includedPaths, ['decisions.md']);
 
   const inbox = await resolveMcpResource('teambridge://inbox', { workspaceId: 'ws_123' }, reader);
-  assert.deepEqual(inbox, { ok: true, data: { messages: [] } });
+  assert.deepEqual(inbox, { ok: true, data: { messages: [inboxMessage] } });
 
   const conflicts = await resolveMcpResource('teambridge://conflicts', { workspaceId: 'ws_123' }, reader);
-  assert.deepEqual(conflicts, { ok: true, data: { conflicts: [] } });
+  assert.deepEqual(conflicts, { ok: true, data: { conflicts: [conflict] } });
 
   const missing = await resolveMcpResource('teambridge://missing', { workspaceId: 'ws_123' }, reader);
   assert.equal(missing.ok, false);
@@ -230,6 +272,12 @@ test('workspace resource degrades gracefully when relay is not configured', asyn
     },
     async getRelayStatus() {
       return { ok: false, error: { code: 'RELAY_NOT_CONFIGURED', message: 'Relay not configured' } };
+    },
+    async getInbox() {
+      throw new Error('not used');
+    },
+    async getConflicts() {
+      throw new Error('not used');
     }
   };
 
@@ -251,6 +299,12 @@ test('workspace resource returns error when workspace status fails, without fetc
     async getRelayStatus() {
       relayCalled = true;
       return { ok: true, data: relayStatus };
+    },
+    async getInbox() {
+      throw new Error('not used');
+    },
+    async getConflicts() {
+      throw new Error('not used');
     }
   };
 
@@ -350,6 +404,62 @@ test('searchVault with limit includes it in the query string', async () => {
     assert.equal(result.ok, true);
     assert.deepEqual(seen, [
       'http://127.0.0.1:9473/workspaces/ws_123/vault/search?repoRoot=%2Ftmp%2Frepo&q=invoice&limit=25'
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+const {
+  getInbox,
+  askInbox,
+  replyInbox,
+  getConflicts,
+  resolveConflict,
+  getContextPointer,
+  setContextPointer
+} = require('../dist');
+
+test('inbox and conflict fetch wrappers construct endpoints and bodies', async () => {
+  const seen = [];
+  const seenBodies = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, init) => {
+    seen.push(String(url));
+    seenBodies.push(init && init.body ? JSON.parse(init.body) : null);
+    return new Response(
+      JSON.stringify({ ok: true, data: { value: seen.length } }),
+      { headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    await getInbox('ws_123', { repoRoot: '/tmp/repo' });
+    await askInbox('ws_123', { to: 'nihal', text: 'hello' }, { repoRoot: '/tmp/repo' });
+    await replyInbox('ws_123', 'msg_1', { text: 'reply' }, { repoRoot: '/tmp/repo' });
+    await getConflicts('ws_123', { repoRoot: '/tmp/repo' });
+    await resolveConflict('ws_123', 'conflict_1', { resolutionText: 'fixed' }, { repoRoot: '/tmp/repo' });
+    await getContextPointer('ws_123', { repoRoot: '/tmp/repo' });
+    await setContextPointer('ws_123', { lastSeenSeq: 7 }, { repoRoot: '/tmp/repo' });
+
+    assert.deepEqual(seen, [
+      'http://127.0.0.1:9473/workspaces/ws_123/inbox?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/inbox/ask?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/inbox/msg_1/reply?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/conflicts?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/conflicts/conflict_1/resolve?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/context-pointer?repoRoot=%2Ftmp%2Frepo',
+      'http://127.0.0.1:9473/workspaces/ws_123/context-pointer?repoRoot=%2Ftmp%2Frepo'
+    ]);
+
+    assert.deepEqual(seenBodies, [
+      null,
+      { to: 'nihal', text: 'hello', repoRoot: '/tmp/repo' },
+      { text: 'reply', repoRoot: '/tmp/repo' },
+      null,
+      { resolutionText: 'fixed', repoRoot: '/tmp/repo' },
+      null,
+      { lastSeenSeq: 7, repoRoot: '/tmp/repo' }
     ]);
   } finally {
     global.fetch = originalFetch;

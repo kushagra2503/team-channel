@@ -146,7 +146,7 @@ test('tools/list returns all 6 registered tool names', async () => {
   }
 });
 
-test('tools/call team_ask stub returns isError: true', async () => {
+test('tools/call team_ask returns error when workspace context is missing', async () => {
   const server = await bootServer();
   try {
     const res = await server.request('tools/call', {
@@ -159,7 +159,7 @@ test('tools/call team_ask stub returns isError: true', async () => {
   }
 });
 
-test('tools/call team_reply stub returns isError: true', async () => {
+test('tools/call team_reply returns error when workspace context is missing', async () => {
   const server = await bootServer();
   try {
     const res = await server.request('tools/call', {

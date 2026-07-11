@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolveMcpResource, type McpResourceContext } from './resources';
 import { resolveWorkspaceContext } from './resolution';
-import { getWorkspaceStatus, readVaultFile, getVaultContext, publishEvent, searchVault } from './daemon-client';
+import { getWorkspaceStatus, readVaultFile, getVaultContext, publishEvent, searchVault, askInbox, replyInbox } from './daemon-client';
 
 const SERVER_NAME = 'teambridge';
 const SERVER_VERSION = '0.1.0';
@@ -18,7 +18,7 @@ export function createServer(): McpServer {
     'teambridge://workspace',
     { title: 'Workspace', description: 'Current workspace status with participants, worktrees, and relay sync state', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const result = await resolveMcpResource('teambridge://workspace', ctx);
       if (!result.ok) throw new Error(result.error.message);
       return { contents: [{ uri: 'teambridge://workspace', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
@@ -30,7 +30,7 @@ export function createServer(): McpServer {
     'teambridge://participants',
     { title: 'Participants', description: 'List of participants on the current track with status and presence', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const result = await resolveMcpResource('teambridge://participants', ctx);
       if (!result.ok) throw new Error(result.error.message);
       return { contents: [{ uri: 'teambridge://participants', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
@@ -42,7 +42,7 @@ export function createServer(): McpServer {
     'teambridge://vault/context',
     { title: 'Vault Context', description: 'Concatenated vault context for the current track', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const result = await resolveMcpResource('teambridge://vault/context', ctx);
       if (!result.ok) throw new Error(result.error.message);
       return { contents: [{ uri: 'teambridge://vault/context', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
@@ -52,18 +52,24 @@ export function createServer(): McpServer {
   server.registerResource(
     'inbox',
     'teambridge://inbox',
-    { title: 'Inbox', description: 'Team inbox messages (not yet implemented — awaiting daemon inbox endpoints)', mimeType: 'application/json' },
+    { title: 'Inbox', description: 'Team inbox messages on the current track', mimeType: 'application/json' },
     async () => {
-      return { contents: [{ uri: 'teambridge://inbox', mimeType: 'application/json', text: JSON.stringify({ messages: [] }) }] };
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const result = await resolveMcpResource('teambridge://inbox', ctx);
+      if (!result.ok) throw new Error(result.error.message);
+      return { contents: [{ uri: 'teambridge://inbox', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
   server.registerResource(
     'conflicts',
     'teambridge://conflicts',
-    { title: 'Conflicts', description: 'Detected conflicts (not yet implemented — awaiting daemon conflict endpoints)', mimeType: 'application/json' },
+    { title: 'Conflicts', description: 'Detected conflicts on the current track', mimeType: 'application/json' },
     async () => {
-      return { contents: [{ uri: 'teambridge://conflicts', mimeType: 'application/json', text: JSON.stringify({ conflicts: [] }) }] };
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const result = await resolveMcpResource('teambridge://conflicts', ctx);
+      if (!result.ok) throw new Error(result.error.message);
+      return { contents: [{ uri: 'teambridge://conflicts', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
@@ -80,7 +86,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ targetFile, text }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for publish');
       const result = await publishEvent(wsId, { targetFile, payload: { text } }, ctx);
@@ -100,7 +106,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ query, limit }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for search');
       const result = await searchVault(wsId, query, ctx, limit);
@@ -119,7 +125,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ path }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for read');
       const result = await readVaultFile(wsId, path, ctx);
@@ -136,7 +142,7 @@ export function createServer(): McpServer {
       inputSchema: {}
     },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for status');
       const result = await getWorkspaceStatus(wsId, ctx);
@@ -149,17 +155,19 @@ export function createServer(): McpServer {
     'team_ask',
     {
       title: 'Ask teammate',
-      description: 'Ask a question to a teammate (not yet implemented — awaiting daemon inbox endpoints)',
+      description: 'Ask a question to a teammate on the current track',
       inputSchema: {
         to: z.string().min(1),
         text: z.string()
       }
     },
-    async () => {
-      return {
-        content: [{ type: 'text', text: 'Inbox endpoints not yet implemented. Phase 3 Step 1 required.' }],
-        isError: true
-      };
+    async ({ to, text }) => {
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const wsId = ctx.workspaceId ?? ctx.sessionName;
+      if (!wsId) throw new Error('Unable to resolve workspace for team_ask');
+      const result = await askInbox(wsId, { to, text }, ctx);
+      if (!result.ok) throw new Error(result.error.message);
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
     }
   );
 
@@ -167,17 +175,19 @@ export function createServer(): McpServer {
     'team_reply',
     {
       title: 'Reply to teammate',
-      description: 'Reply to an inbox message (not yet implemented — awaiting daemon inbox endpoints)',
+      description: 'Reply to an inbox message on the current track',
       inputSchema: {
         messageId: z.string().min(1),
         text: z.string()
       }
     },
-    async () => {
-      return {
-        content: [{ type: 'text', text: 'Inbox endpoints not yet implemented. Phase 3 Step 1 required.' }],
-        isError: true
-      };
+    async ({ messageId, text }) => {
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const wsId = ctx.workspaceId ?? ctx.sessionName;
+      if (!wsId) throw new Error('Unable to resolve workspace for team_reply');
+      const result = await replyInbox(wsId, messageId, { text }, ctx);
+      if (!result.ok) throw new Error(result.error.message);
+      return { content: [{ type: 'text', text: JSON.stringify(result.data) }] };
     }
   );
 

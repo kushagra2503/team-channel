@@ -1,10 +1,11 @@
 /**
  * MCP + daemon integration smoke tests.
  *
- * Exercises the 4 live MCP tools (workspace_status, vault_read, vault_search,
- * team_publish) and both stubs (team_ask, team_reply) against a real running
- * daemon. Verifies that the MCP server, daemon-client, and daemon are wired
- * together correctly — not just that JSON-RPC handshakes work in isolation.
+ * Exercises the 6 live MCP tools (workspace_status, vault_read, vault_search,
+ * team_publish, team_ask, team_reply) and the inbox/conflicts resources against a
+ * real running daemon. Verifies that the MCP server, daemon-client, and daemon
+ * are wired together correctly — not just that JSON-RPC handshakes work in
+ * isolation.
  */
 
 import test from 'node:test';
@@ -186,10 +187,51 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
   assert.ok(!readAfterPublish.result.isError);
   assert.match(readAfterPublish.result.content[0].text, /MCP smoke test published this note/);
 
-  // --- Stubs: team_ask and team_reply return isError: true ---
-  const askRes = await mcp.request('tools/call', { name: 'team_ask', arguments: { to: 'bob', text: 'hello?' } });
-  assert.equal(askRes.result.isError, true, 'team_ask should be stubbed with isError: true');
+  // --- Conflicts resource: two publishes to observations.md created an open conflict ---
+  const conflictsRes = await mcp.request('resources/read', { uri: 'teambridge://conflicts' });
+  assert.ok(conflictsRes.result, 'resources/read should return a result');
+  assert.ok(conflictsRes.result.contents?.[0], 'resources/read should return contents');
+  assert.ok(!conflictsRes.result.contents[0].text?.includes('not yet'), 'conflicts resource should be live');
+  const conflictsData = JSON.parse(conflictsRes.result.contents[0].text);
+  assert.ok(Array.isArray(conflictsData.conflicts), 'Expected conflicts array');
+  assert.ok(conflictsData.conflicts.length >= 1, 'Expected at least one open conflict');
+  const conflictSummaries = conflictsData.conflicts.map((c) => c.summary);
+  assert.ok(
+    conflictSummaries.some((s) => s.includes('observations.md')),
+    `No conflict mentioned observations.md: ${JSON.stringify(conflictSummaries)}`
+  );
 
-  const replyRes = await mcp.request('tools/call', { name: 'team_reply', arguments: { messageId: 'msg_1', text: 'reply' } });
-  assert.equal(replyRes.result.isError, true, 'team_reply should be stubbed with isError: true');
+  // --- team_ask: Alice asks Bob a question ---
+  const askRes = await mcp.request('tools/call', { name: 'team_ask', arguments: { to: 'Bob', text: 'Can we use FTS5 for vault search?' } });
+  assert.ok(!askRes.result.isError, `team_ask failed: ${askRes.result.content?.[0]?.text}`);
+  const askedMessage = JSON.parse(askRes.result.content[0].text);
+  assert.equal(askedMessage.status, 'pending');
+  assert.equal(askedMessage.body, 'Can we use FTS5 for vault search?');
+  assert.ok(askedMessage.id, 'asked message should have an id');
+
+  // --- team_reply: switch local profile to Bob so he can reply ---
+  // The CLI init short-circuits if a profile already exists, so write the local
+  // user.json directly to match Bob's participant displayName.
+  await writeFile(
+    pathJoin(repoRoot, '.teambridge', 'user.json'),
+    JSON.stringify({ schemaVersion: 1, firstName: 'Bob', lastName: 'B', displayName: 'Bob' }, null, 2)
+  );
+
+  const replyRes = await mcp.request('tools/call', {
+    name: 'team_reply',
+    arguments: { messageId: askedMessage.id, text: 'Yes, FTS5 is included in the sqlite3 build.' }
+  });
+  assert.ok(!replyRes.result.isError, `team_reply failed: ${replyRes.result.content?.[0]?.text}`);
+  const repliedMessage = JSON.parse(replyRes.result.content[0].text);
+  assert.equal(repliedMessage.status, 'answered');
+  assert.equal(repliedMessage.replyText, 'Yes, FTS5 is included in the sqlite3 build.');
+
+  // --- Inbox resource: the answered message appears ---
+  const inboxRes = await mcp.request('resources/read', { uri: 'teambridge://inbox' });
+  const inboxData = JSON.parse(inboxRes.result.contents[0].text);
+  assert.ok(Array.isArray(inboxData.messages), 'Expected messages array');
+  assert.ok(inboxData.messages.length >= 1, 'Expected at least one inbox message');
+  const repliedInInbox = inboxData.messages.find((m) => m.id === askedMessage.id);
+  assert.ok(repliedInInbox, 'asked message should be in inbox resource');
+  assert.equal(repliedInInbox.status, 'answered');
 });
