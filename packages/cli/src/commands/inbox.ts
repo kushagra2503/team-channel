@@ -1,5 +1,5 @@
-import type { Participant } from '@teambridge/core';
-import { avatarNameSlug } from '@teambridge/core';
+import type { Participant } from '@coord/core';
+import { avatarNameSlug } from '@coord/core';
 import type { ClientOptions } from '../daemon-client';
 import { askInbox, detectConflicts, getUserProfile, getWorkspaceStatus, listConflicts, listInbox, replyInbox, resolveConflict } from '../daemon-client';
 import { currentParticipantSlugFromBranch, resolveCurrentTrack } from '../lib/current-track';
@@ -29,7 +29,7 @@ export async function runAsk(argv: string[], options: ClientOptions): Promise<vo
   const to = args[0];
   const text = args.slice(1).join(' ');
   if (!to || !text.trim()) {
-    throw new Error('Usage: teambridge ask <participant> <question>');
+    throw new Error('Usage: coord ask <participant> <question>');
   }
 
   const track = await resolveCurrentTrack(options);
@@ -61,7 +61,7 @@ export async function runReply(argv: string[], options: ClientOptions): Promise<
   const messageId = args[0];
   const text = args.slice(1).join(' ');
   if (!messageId || !text.trim()) {
-    throw new Error('Usage: teambridge reply <message_id> <answer>');
+    throw new Error('Usage: coord reply <message_id> <answer>');
   }
 
   const track = await resolveCurrentTrack(options);
@@ -80,7 +80,7 @@ export async function runConflicts(argv: string[], options: ClientOptions): Prom
     const conflictId = args[0];
     const resolutionText = args.slice(1).join(' ');
     if (!conflictId || !resolutionText.trim()) {
-      throw new Error('Usage: teambridge conflicts resolve <conflict_id> <resolution>');
+      throw new Error('Usage: coord conflicts resolve <conflict_id> <resolution>');
     }
     const actor = await localParticipant(options, track.id);
     const result = await resolveConflict(options, track.id, conflictId, { resolutionText, actorId: actor?.id });

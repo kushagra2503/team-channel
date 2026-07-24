@@ -1,4 +1,4 @@
-import type { Participant, ParticipantStatus } from '@teambridge/core';
+import type { Participant, ParticipantStatus } from '@coord/core';
 import { normalizeDisplayName } from '@/lib/avatar-identity';
 
 export type PinnedLocalUser = {

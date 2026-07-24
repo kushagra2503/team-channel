@@ -33,9 +33,9 @@ test('resolveRepoRoot returns the repo root unchanged when run from the main wor
 
 test('resolveRepoRoot resolves to the main repo root when run from inside a linked worktree', () => {
   const repo = makeRepo();
-  const worktreePath = path.join(repo, '.teambridge', 'worktrees', 'auth', 'kushagra');
+  const worktreePath = path.join(repo, '.coord', 'worktrees', 'auth', 'kushagra');
   try {
-    git(['worktree', 'add', '-b', 'teambridge/auth/kushagra', worktreePath, 'HEAD'], repo);
+    git(['worktree', 'add', '-b', 'coord/auth/kushagra', worktreePath, 'HEAD'], repo);
     assert.equal(resolveRepoRoot(worktreePath), repo);
   } finally {
     rmSync(repo, { recursive: true, force: true });
@@ -44,9 +44,9 @@ test('resolveRepoRoot resolves to the main repo root when run from inside a link
 
 test('resolveRepoRoot resolves to the main repo root from a subdirectory nested inside a linked worktree', () => {
   const repo = makeRepo();
-  const worktreePath = path.join(repo, '.teambridge', 'worktrees', 'auth', 'kushagra');
+  const worktreePath = path.join(repo, '.coord', 'worktrees', 'auth', 'kushagra');
   try {
-    git(['worktree', 'add', '-b', 'teambridge/auth/kushagra', worktreePath, 'HEAD'], repo);
+    git(['worktree', 'add', '-b', 'coord/auth/kushagra', worktreePath, 'HEAD'], repo);
     const nested = path.join(worktreePath);
     assert.equal(resolveRepoRoot(nested), repo);
   } finally {

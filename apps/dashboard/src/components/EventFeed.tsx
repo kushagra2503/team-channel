@@ -1,19 +1,19 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import type { Participant, WorkspaceEvent, WorkspaceEventType } from '@teambridge/core';
+import type { Participant, WorkspaceEvent, WorkspaceEventType } from '@coord/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/relative-time';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName } from './participantDisplay';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 
 export type EventFeedProps = {
   events?: WorkspaceEvent[];
   error?: string;
   participants?: Participant[];
-  config?: TeambridgeClientConfig;
+  config?: CoordClientConfig;
   avatarRev?: number;
   maxItems?: number;
 };

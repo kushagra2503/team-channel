@@ -5,7 +5,7 @@ import { resolveCurrentTrack } from '../lib/current-track';
 async function runVaultRead(argv: string[], options: ClientOptions): Promise<void> {
   const path = argv.find((arg) => !arg.startsWith('-'));
   if (!path) {
-    throw new Error('Usage: teambridge vault read <path>');
+    throw new Error('Usage: coord vault read <path>');
   }
 
   const track = await resolveCurrentTrack(options);
@@ -34,7 +34,7 @@ async function runVaultContext(_argv: string[], options: ClientOptions): Promise
 async function runVaultSearch(argv: string[], options: ClientOptions): Promise<void> {
   const query = argv.filter((arg) => !arg.startsWith('-')).join(' ');
   if (!query.trim()) {
-    throw new Error('Usage: teambridge vault search <query>');
+    throw new Error('Usage: coord vault search <query>');
   }
 
   const track = await resolveCurrentTrack(options);
@@ -67,5 +67,5 @@ export async function runVault(argv: string[], options: ClientOptions): Promise<
     await runVaultSearch(argv.slice(1), options);
     return;
   }
-  throw new Error('Usage: teambridge vault read <path>|context|search <query>');
+  throw new Error('Usage: coord vault read <path>|context|search <query>');
 }

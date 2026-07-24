@@ -8,7 +8,7 @@ export async function runPublish(argv: string[], options: ClientOptions): Promis
   const text = positional[1];
 
   if (!targetFile || !text) {
-    throw new Error('Usage: teambridge publish <target_file> <text>');
+    throw new Error('Usage: coord publish <target_file> <text>');
   }
   if (!text.trim()) {
     throw new Error('publish text must not be empty.');

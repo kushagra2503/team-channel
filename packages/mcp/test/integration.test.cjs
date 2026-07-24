@@ -11,11 +11,11 @@ const SERVER_SCRIPT = path.resolve(__dirname, '../dist/server.js');
 
 // All 5 resource URIs registered by the server.
 const EXPECTED_RESOURCE_URIS = [
-  'teambridge://workspace',
-  'teambridge://participants',
-  'teambridge://vault/context',
-  'teambridge://inbox',
-  'teambridge://conflicts'
+  'coord://workspace',
+  'coord://participants',
+  'coord://vault/context',
+  'coord://inbox',
+  'coord://conflicts'
 ];
 
 // All 6 tool names registered by the server.
@@ -35,7 +35,7 @@ const EXPECTED_TOOL_NAMES = [
 function createMcpServer() {
   const child = spawn('node', [SERVER_SCRIPT], {
     cwd: REPO_ROOT,
-    env: { ...process.env, TEAMBRIDGE_REPO_ROOT: os.tmpdir() },
+    env: { ...process.env, COORD_REPO_ROOT: os.tmpdir() },
     stdio: ['pipe', 'pipe', 'pipe']
   });
 
@@ -94,7 +94,7 @@ async function bootServer() {
       capabilities: {},
       clientInfo: { name: 'test', version: '0.1' }
     });
-    assert.equal(init.result.serverInfo.name, 'teambridge');
+    assert.equal(init.result.serverInfo.name, 'coord');
     server.notify('notifications/initialized', {});
     return server;
   } catch (err) {
@@ -103,7 +103,7 @@ async function bootServer() {
   }
 }
 
-test('initialize handshake returns teambridge server info', async () => {
+test('initialize handshake returns coord server info', async () => {
   const server = createMcpServer();
   try {
     const result = await server.request('initialize', {
@@ -111,7 +111,7 @@ test('initialize handshake returns teambridge server info', async () => {
       capabilities: {},
       clientInfo: { name: 'test', version: '0.1' }
     });
-    assert.equal(result.result.serverInfo.name, 'teambridge');
+    assert.equal(result.result.serverInfo.name, 'coord');
     server.notify('notifications/initialized', {});
   } finally {
     server.kill();

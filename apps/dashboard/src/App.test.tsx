@@ -28,7 +28,7 @@ const api = vi.hoisted(() => ({
   resolveConflict: vi.fn()
 }));
 
-vi.mock('./api/teambridgeClient', () => api);
+vi.mock('./api/coordClient', () => api);
 
 function renderAtRoute(path: string, element: React.ReactElement, withSidebar = false) {
   const routes = (
@@ -72,11 +72,11 @@ describe('ProjectSelectionPage', () => {
   });
 
   it('shows an error message when the API is unreachable', async () => {
-    api.listProjects.mockRejectedValue(new Error('Unable to reach local Condominium daemon.'));
+    api.listProjects.mockRejectedValue(new Error('Unable to reach local Coord daemon.'));
 
     renderAtRoute('/projects', <ProjectSelectionPage />);
 
-    expect(await screen.findByText('Unable to reach local Condominium daemon.')).toBeTruthy();
+    expect(await screen.findByText('Unable to reach local Coord daemon.')).toBeTruthy();
   });
 
   it('shows empty state when no projects exist', async () => {
@@ -92,7 +92,7 @@ describe('ProjectSelectionPage', () => {
     api.listKnownRepos.mockResolvedValue({
       repos: [
         {
-          repoRoot: '/tmp/teambridge-dummy-repo',
+          repoRoot: '/tmp/coord-dummy-repo',
           lastSeenAt: '2026-01-01T00:00:00.000Z',
           projects: [
             { id: 'proj_dummy', name: 'Dummy Repo', description: 'Local test repo', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
@@ -116,7 +116,7 @@ describe('ProjectSelectionPage', () => {
     api.listKnownRepos.mockResolvedValue({
       repos: [
         {
-          repoRoot: '/tmp/teambridge-dummy-repo',
+          repoRoot: '/tmp/coord-dummy-repo',
           lastSeenAt: '2026-01-01T00:00:00.000Z',
           projects: [
             { id: 'proj_dummy', name: 'Dummy Repo', description: 'Local test repo', status: 'active', createdAt: '2026-01-01T00:00:00.000Z' }
@@ -129,7 +129,7 @@ describe('ProjectSelectionPage', () => {
 
     expect(await screen.findByText('Current Repo')).toBeTruthy();
     expect(screen.getByText('Dummy Repo')).toBeTruthy();
-    expect(screen.getByText('/tmp/teambridge-dummy-repo')).toBeTruthy();
+    expect(screen.getByText('/tmp/coord-dummy-repo')).toBeTruthy();
   });
 });
 

@@ -1,4 +1,4 @@
-export type TeambridgeErrorCode =
+export type CoordErrorCode =
   | 'WORKSPACE_NOT_FOUND'
   | 'WORKTREE_NOT_FOUND'
   | 'PROJECT_NOT_FOUND'
@@ -10,8 +10,8 @@ export type TeambridgeErrorCode =
   | 'NOT_FOUND'
   | 'INTERNAL_ERROR';
 
-export type TeambridgeError = {
-  code: TeambridgeErrorCode;
+export type CoordError = {
+  code: CoordErrorCode;
   message: string;
   details?: unknown;
 };

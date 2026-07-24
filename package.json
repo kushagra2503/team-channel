@@ -1,15 +1,15 @@
 {
-  "name": "teambridge",
+  "name": "coord",
   "version": "0.0.0",
   "private": true,
-  "description": "Condominium — shared workspace for teams building with AI agents.",
+  "description": "Coord — shared workspace for teams building with AI agents.",
   "scripts": {
     "build": "pnpm -r build",
-    "dashboard": "pnpm --filter @teambridge/dashboard dev --host 127.0.0.1",
-    "dashboard:preview": "pnpm --filter @teambridge/dashboard build && pnpm --filter @teambridge/dashboard exec vite preview --host 127.0.0.1 --port 5173",
-    "daemon": "pnpm --filter @teambridge/daemon start",
-    "cli": "pnpm --filter @teambridge/cli start --",
-    "teambridge": "node packages/cli/dist/index.js",
+    "dashboard": "pnpm --filter @coord/dashboard dev --host 127.0.0.1",
+    "dashboard:preview": "pnpm --filter @coord/dashboard build && pnpm --filter @coord/dashboard exec vite preview --host 127.0.0.1 --port 5173",
+    "daemon": "pnpm --filter @coord/daemon start",
+    "cli": "pnpm --filter @coord/cli start --",
+    "coord": "node packages/cli/dist/index.js",
     "seed": "node scripts/seed-demo.mjs",
     "test": "pnpm -r --if-present test",
     "test:integration": "pnpm build && node --test --test-concurrency=1 tests/integration/*.test.mjs"

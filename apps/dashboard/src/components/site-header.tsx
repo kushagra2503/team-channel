@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { IconSettings, IconUsers } from '@tabler/icons-react';
-import type { Project, RelayStatusResponse, Workspace } from '@teambridge/core';
+import type { Project, RelayStatusResponse, Workspace } from '@coord/core';
 
 import {
   Breadcrumb,

@@ -26,11 +26,11 @@ export async function getFreePort() {
 }
 
 export async function createTempGitRepo() {
-  const dir = await mkdtemp(join(tmpdir(), 'teambridge-it-'));
+  const dir = await mkdtemp(join(tmpdir(), 'coord-it-'));
   execFileSync('git', ['init', '-b', 'main'], { cwd: dir, stdio: 'ignore' });
-  execFileSync('git', ['config', 'user.email', 'teambridge-test@local'], { cwd: dir, stdio: 'ignore' });
-  execFileSync('git', ['config', 'user.name', 'Teambridge Test'], { cwd: dir, stdio: 'ignore' });
-  await writeFile(join(dir, 'README.md'), '# teambridge integration fixture\n');
+  execFileSync('git', ['config', 'user.email', 'coord-test@local'], { cwd: dir, stdio: 'ignore' });
+  execFileSync('git', ['config', 'user.name', 'Coord Test'], { cwd: dir, stdio: 'ignore' });
+  await writeFile(join(dir, 'README.md'), '# coord integration fixture\n');
   execFileSync('git', ['add', 'README.md'], { cwd: dir, stdio: 'ignore' });
   execFileSync('git', ['commit', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
   return dir;
@@ -64,8 +64,8 @@ export async function startTestDaemon(repoRoot) {
       cwd: repoRoot,
       env: {
         ...process.env,
-        TEAMBRIDGE_DAEMON_PORT: String(port),
-        TEAMBRIDGE_REPO_ROOT: repoRoot
+        COORD_DAEMON_PORT: String(port),
+        COORD_REPO_ROOT: repoRoot
       },
       stdio: ['ignore', 'pipe', 'pipe']
     }
@@ -110,8 +110,8 @@ export function runCli(args, { repoRoot, baseUrl, cwd }) {
       cwd: cwd ?? repoRoot,
       env: {
         ...process.env,
-        TEAMBRIDGE_DAEMON_URL: baseUrl,
-        TEAMBRIDGE_REPO_ROOT: repoRoot
+        COORD_DAEMON_URL: baseUrl,
+        COORD_REPO_ROOT: repoRoot
       },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe']

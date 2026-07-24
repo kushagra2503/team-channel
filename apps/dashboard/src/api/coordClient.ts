@@ -24,16 +24,16 @@ import type {
   VaultItemAnnotation,
   WorkspaceListResponse,
   WorkspaceStatusResponse
-} from '@teambridge/core';
+} from '@coord/core';
 import { avatarNameSlug } from '@/lib/avatar-identity';
 
 export const DEFAULT_DAEMON_BASE_URL = 'http://127.0.0.1:9473';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-export type TeambridgeQueryParams = Record<string, string | number | boolean | undefined>;
+export type CoordQueryParams = Record<string, string | number | boolean | undefined>;
 
-export type TeambridgeClientConfig = {
+export type CoordClientConfig = {
   daemonBaseUrl?: string;
   repoRoot?: string;
 };
@@ -65,10 +65,10 @@ function normalizeDaemonBaseUrl(value: string | null | undefined): string {
   }
 }
 
-export function buildTeambridgeUrl(
+export function buildCoordUrl(
   path: string,
-  config: TeambridgeClientConfig = {},
-  params: TeambridgeQueryParams = {}
+  config: CoordClientConfig = {},
+  params: CoordQueryParams = {}
 ): string {
   const url = new URL(path, config.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL);
 
@@ -106,29 +106,29 @@ function withDefaultTimeout(signal?: AbortSignal): AbortSignal | undefined {
 
 async function getJson<T>(
   path: string,
-  config: TeambridgeClientConfig,
-  params?: TeambridgeQueryParams,
+  config: CoordClientConfig,
+  params?: CoordQueryParams,
   signal?: AbortSignal
 ): Promise<T> {
-  const response = await fetch(buildTeambridgeUrl(path, config, params), { signal: withDefaultTimeout(signal) });
+  const response = await fetch(buildCoordUrl(path, config, params), { signal: withDefaultTimeout(signal) });
   return unwrapApiResult<T>(response);
 }
 
-export function getDefaultClientConfig(): TeambridgeClientConfig {
+export function getDefaultClientConfig(): CoordClientConfig {
   const env = import.meta.env;
   const query = new URLSearchParams(window.location.search);
   return {
-    daemonBaseUrl: normalizeDaemonBaseUrl(query.get('daemonBaseUrl') ?? env.VITE_TEAMBRIDGE_DAEMON_URL),
-    repoRoot: query.get('repoRoot') ?? env.VITE_TEAMBRIDGE_REPO_ROOT
+    daemonBaseUrl: normalizeDaemonBaseUrl(query.get('daemonBaseUrl') ?? env.VITE_COORD_DAEMON_URL),
+    repoRoot: query.get('repoRoot') ?? env.VITE_COORD_REPO_ROOT
   };
 }
 
-export function listKnownRepos(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<{ repos: KnownRepo[] }> {
+export function listKnownRepos(config: CoordClientConfig, signal?: AbortSignal): Promise<{ repos: KnownRepo[] }> {
   return getJson<{ repos: KnownRepo[] }>('/repos', { daemonBaseUrl: config.daemonBaseUrl }, undefined, signal);
 }
 
-export async function registerRepo(config: TeambridgeClientConfig, repoRoot: string, signal?: AbortSignal): Promise<{ repoRoot: string }> {
-  const response = await fetch(buildTeambridgeUrl('/repos/register', { daemonBaseUrl: config.daemonBaseUrl }), {
+export async function registerRepo(config: CoordClientConfig, repoRoot: string, signal?: AbortSignal): Promise<{ repoRoot: string }> {
+  const response = await fetch(buildCoordUrl('/repos/register', { daemonBaseUrl: config.daemonBaseUrl }), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ repoRoot }),
@@ -137,16 +137,16 @@ export async function registerRepo(config: TeambridgeClientConfig, repoRoot: str
   return unwrapApiResult<{ repoRoot: string }>(response);
 }
 
-export function listWorkspaces(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<WorkspaceListResponse> {
+export function listWorkspaces(config: CoordClientConfig, signal?: AbortSignal): Promise<WorkspaceListResponse> {
   return getJson<WorkspaceListResponse>('/workspaces', config, undefined, signal);
 }
 
-export function listProjects(config: TeambridgeClientConfig, signal?: AbortSignal): Promise<ProjectListResponse> {
+export function listProjects(config: CoordClientConfig, signal?: AbortSignal): Promise<ProjectListResponse> {
   return getJson<ProjectListResponse>('/projects', config, undefined, signal);
 }
 
 export function getUserProfile(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<LocalUserProfileResponse> {
   return getJson<LocalUserProfileResponse>('/user/profile', config, undefined, signal);
@@ -154,7 +154,7 @@ export function getUserProfile(
 
 export function getProjectMembers(
   projectId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<ProjectMemberListResponse> {
   return getJson<ProjectMemberListResponse>(`/projects/${encodeURIComponent(projectId)}/members`, config, undefined, signal);
@@ -162,21 +162,21 @@ export function getProjectMembers(
 
 export function getProjectTracks(
   projectId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<TrackListResponse> {
   return getJson<TrackListResponse>(`/projects/${encodeURIComponent(projectId)}/tracks`, config, undefined, signal);
 }
 
 export function listRelaySessions(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<{ sessions: TrackListResponse['tracks'] }> {
   return getJson<{ sessions: TrackListResponse['tracks'] }>('/relay/sessions', config, undefined, signal);
 }
 
 export function getRelayStatus(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<RelayStatusResponse> {
   return getJson<RelayStatusResponse>('/relay/status', config, undefined, signal);
@@ -184,7 +184,7 @@ export function getRelayStatus(
 
 export function getWorkspaceEvents(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<EventListResponse> {
   return getJson<EventListResponse>(
@@ -197,7 +197,7 @@ export function getWorkspaceEvents(
 
 export function getContextDeltas(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   params: { sinceSeq?: number; limit?: number; excludeActorId?: string } = {},
   signal?: AbortSignal
 ): Promise<DeltaContextResponse> {
@@ -210,7 +210,7 @@ export function getContextDeltas(
 }
 
 export function getRepoContext(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   workspaceId?: string,
   signal?: AbortSignal
 ): Promise<RepoContextResponse> {
@@ -223,11 +223,11 @@ export function getRepoContext(
 }
 
 export async function openRepoPath(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   path: string,
   signal?: AbortSignal
 ): Promise<{ opened: string }> {
-  const response = await fetch(buildTeambridgeUrl('/repo/open-path', config), {
+  const response = await fetch(buildCoordUrl('/repo/open-path', config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ path, repoRoot: config.repoRoot }),
@@ -238,7 +238,7 @@ export async function openRepoPath(
 
 export function getWorkspaceStatus(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<WorkspaceStatusResponse> {
   return getJson<WorkspaceStatusResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/status`, config, undefined, signal);
@@ -246,7 +246,7 @@ export function getWorkspaceStatus(
 
 export function getVaultContext(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<VaultContextResponse> {
   return getJson<VaultContextResponse>(
@@ -260,7 +260,7 @@ export function getVaultContext(
 export function readVaultFile(
   workspaceId: string,
   path: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<VaultReadResponse> {
   return getJson<VaultReadResponse>(
@@ -274,7 +274,7 @@ export function readVaultFile(
 export function searchVault(
   workspaceId: string,
   query: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<VaultSearchResponse> {
   return getJson<VaultSearchResponse>(
@@ -287,7 +287,7 @@ export function searchVault(
 
 export function listInbox(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<InboxResponse> {
   return getJson<InboxResponse>(
@@ -300,11 +300,11 @@ export function listInbox(
 
 export async function askInbox(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   body: { to: string; text: string; actorId?: string },
   signal?: AbortSignal
 ): Promise<AskResponse> {
-  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, config), {
+  const response = await fetch(buildCoordUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/ask`, config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
@@ -316,11 +316,11 @@ export async function askInbox(
 export async function replyInbox(
   workspaceId: string,
   messageId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   body: { text: string; actorId?: string },
   signal?: AbortSignal
 ): Promise<ReplyResponse> {
-  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, config), {
+  const response = await fetch(buildCoordUrl(`/workspaces/${encodeURIComponent(workspaceId)}/inbox/${encodeURIComponent(messageId)}/reply`, config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
@@ -331,7 +331,7 @@ export async function replyInbox(
 
 export function listConflicts(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<ConflictListResponse> {
   return getJson<ConflictListResponse>(
@@ -345,11 +345,11 @@ export function listConflicts(
 export async function resolveConflict(
   workspaceId: string,
   conflictId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   body: { resolutionText: string; actorId?: string },
   signal?: AbortSignal
 ): Promise<ResolveConflictResponse> {
-  const response = await fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, config), {
+  const response = await fetch(buildCoordUrl(`/workspaces/${encodeURIComponent(workspaceId)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...body, repoRoot: config.repoRoot }),
@@ -360,11 +360,11 @@ export async function resolveConflict(
 
 export function annotateVaultItem(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   annotation: VaultItemAnnotation,
   signal?: AbortSignal
 ): Promise<VaultAnnotateResponseBody> {
-  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/annotate`, config), {
+  return fetch(buildCoordUrl(`/workspaces/${encodeURIComponent(workspaceId)}/vault/annotate`, config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...annotation, repoRoot: config.repoRoot }),
@@ -374,10 +374,10 @@ export function annotateVaultItem(
 
 export function buildDisplayNameAvatarUrl(
   displayName: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   rev?: number | string
 ): string {
-  return buildTeambridgeUrl(
+  return buildCoordUrl(
     `/avatars/by-name/${encodeURIComponent(avatarNameSlug(displayName))}`,
     config,
     rev !== undefined ? { v: rev } : {}
@@ -403,11 +403,11 @@ export type PfpPreviewResult = {
 };
 
 export async function previewPfp(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   options: PfpPreviewOptions,
   signal?: AbortSignal
 ): Promise<PfpPreviewResult> {
-  const response = await fetch(buildTeambridgeUrl('/dev/pfp/preview', config), {
+  const response = await fetch(buildCoordUrl('/dev/pfp/preview', config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(options),
@@ -427,11 +427,11 @@ export async function previewPfp(
 }
 
 export async function regeneratePfp(
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   participantId: string,
   options: PfpPreviewOptions
 ): Promise<{ participantId: string; meta: unknown }> {
-  const response = await fetch(buildTeambridgeUrl('/dev/pfp/regenerate', config), {
+  const response = await fetch(buildCoordUrl('/dev/pfp/regenerate', config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ participantId, ...options })
@@ -441,7 +441,7 @@ export async function regeneratePfp(
 
 export function getContextPointer(
   workspaceId: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<ContextPointerResponse> {
   return getJson<ContextPointerResponse>(
@@ -455,11 +455,11 @@ export function getContextPointer(
 export function setContextPointer(
   workspaceId: string,
   body: SaveContextPointerRequest,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   signal?: AbortSignal
 ): Promise<ContextPointerResponse> {
   const bodyWithRepo = config.repoRoot ? { ...body, repoRoot: config.repoRoot } : body;
-  return fetch(buildTeambridgeUrl(`/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`, config), {
+  return fetch(buildCoordUrl(`/workspaces/${encodeURIComponent(workspaceId)}/context-pointer`, config), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(bodyWithRepo),

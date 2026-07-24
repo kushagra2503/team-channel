@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { IconRefresh, IconSparkles } from '@tabler/icons-react';
 import {
-  buildTeambridgeUrl,
+  buildCoordUrl,
   previewPfp,
   type PfpPreviewOptions,
-  type TeambridgeClientConfig
-} from '@/api/teambridgeClient';
+  type CoordClientConfig
+} from '@/api/coordClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,7 +50,7 @@ function randomHexColor(): string {
   return rgbToHex({ r: Math.round((r1 + m) * 255), g: Math.round((g1 + m) * 255), b: Math.round((b1 + m) * 255) });
 }
 
-export function DevPfpPanel({ config }: { config: TeambridgeClientConfig }) {
+export function DevPfpPanel({ config }: { config: CoordClientConfig }) {
   const [query, setQuery] = useState('flower close up');
   const [size, setSize] = useState(220);
   const [algorithm, setAlgorithm] = useState<Algorithm>('bayer');
@@ -92,7 +92,7 @@ export function DevPfpPanel({ config }: { config: TeambridgeClientConfig }) {
     }
   }
 
-  const directPreviewUrl = buildTeambridgeUrl('/dev/pfp/preview', config);
+  const directPreviewUrl = buildCoordUrl('/dev/pfp/preview', config);
 
   return (
     <div className="flex flex-col gap-6">

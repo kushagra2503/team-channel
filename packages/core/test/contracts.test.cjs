@@ -9,12 +9,12 @@ const {
   PublishEventSchema,
   RelayStatusResponseSchema,
   StartWorkspaceResponseSchema,
-  TeambridgeConfigSchema,
+  CoordConfigSchema,
   VaultContextSchema,
   WorkspaceManifestSchema,
   WorkspaceStatusResponseSchema
 } = require('../dist');
-const contracts = require('@teambridge/core/contracts');
+const contracts = require('@coord/core/contracts');
 
 const createdAt = '2026-06-22T00:00:00.000Z';
 
@@ -22,7 +22,7 @@ const participant = {
   id: 'user_nihal',
   displayName: 'nihal',
   workspaceId: 'ws_123',
-  branch: 'teambridge/billing-refactor/nihal',
+  branch: 'coord/billing-refactor/nihal',
   agent: 'claude-code',
   status: 'active',
   lastSeenAt: createdAt
@@ -62,8 +62,8 @@ test('WorkspaceStatusResponseSchema includes participants and worktrees', () => 
       {
         workspaceId: 'ws_123',
         userId: 'user_nihal',
-        path: '/tmp/repo/.teambridge/worktrees/billing-refactor/nihal',
-        branch: 'teambridge/billing-refactor/nihal',
+        path: '/tmp/repo/.coord/worktrees/billing-refactor/nihal',
+        branch: 'coord/billing-refactor/nihal',
         baseCommit: 'abc123',
         currentCommit: 'abc123',
         dirty: false
@@ -157,11 +157,11 @@ test('apiOk and apiFail preserve ApiResult envelope shape', () => {
 });
 
 test('core package keeps contracts subpath export available', () => {
-  assert.equal(contracts.MCP_RESOURCE_NAMES.includes('teambridge://workspace'), true);
+  assert.equal(contracts.MCP_RESOURCE_NAMES.includes('coord://workspace'), true);
   assert.equal(typeof contracts.WorkspaceManifestSchema.parse, 'function');
 });
 
-test('TeambridgeConfigSchema keeps repo config defaults stable', () => {
+test('CoordConfigSchema keeps repo config defaults stable', () => {
   const config = {
     schemaVersion: 1,
     defaultRelayMode: 'local',
@@ -174,8 +174,8 @@ test('TeambridgeConfigSchema keeps repo config defaults stable', () => {
     }
   };
 
-  assert.deepEqual(TeambridgeConfigSchema.parse(config), config);
-  assert.throws(() => TeambridgeConfigSchema.parse({ ...config, defaultRelayMode: 'remote' }));
+  assert.deepEqual(CoordConfigSchema.parse(config), config);
+  assert.throws(() => CoordConfigSchema.parse({ ...config, defaultRelayMode: 'remote' }));
 });
 
 test('RelayMode accepts both local and supabase', () => {

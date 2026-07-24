@@ -30,16 +30,16 @@ export type ParticipantWorktreeResult = {
 };
 
 /**
- * Worktrees live under `.teambridge/`, which must be gitignored or the linked
+ * Worktrees live under `.coord/`, which must be gitignored or the linked
  * worktree shows as an untracked dir in the superproject. The repo's root
- * .gitignore normally covers `.teambridge/`; if it doesn't, drop a self-contained
- * `.teambridge/.gitignore` (`*`) rather than editing the user's root ignore.
+ * .gitignore normally covers `.coord/`; if it doesn't, drop a self-contained
+ * `.coord/.gitignore` (`*`) rather than editing the user's root ignore.
  */
-function ensureTeambridgeIgnored(git: GitRunner, repoRoot: string): void {
-  if (isGitIgnored(git, repoRoot, '.teambridge/worktrees')) {
+function ensureCoordIgnored(git: GitRunner, repoRoot: string): void {
+  if (isGitIgnored(git, repoRoot, '.coord/worktrees')) {
     return;
   }
-  const dir = join(repoRoot, '.teambridge');
+  const dir = join(repoRoot, '.coord');
   mkdirSync(dir, { recursive: true });
   const ignoreFile = join(dir, '.gitignore');
   if (!existsSync(ignoreFile)) {
@@ -49,7 +49,7 @@ function ensureTeambridgeIgnored(git: GitRunner, repoRoot: string): void {
 
 /**
  * Create (or reuse) an isolated git worktree for a joiner, cut from the track's
- * immutable base commit on branch `teambridge/<session>/<safeName>`. Read-only
+ * immutable base commit on branch `coord/<session>/<safeName>`. Read-only
  * preflight first; never clobbers an existing path it doesn't recognize.
  */
 export function prepareParticipantWorktree(
@@ -60,7 +60,7 @@ export function prepareParticipantWorktree(
   const branch = branchForParticipant(sessionName, displayName);
   const path = worktreePathFor(repoRoot, sessionName, displayName);
 
-  ensureTeambridgeIgnored(git, repoRoot);
+  ensureCoordIgnored(git, repoRoot);
 
   // Idempotency / collision preflight (read-only).
   const registered = listWorktrees(git, repoRoot);

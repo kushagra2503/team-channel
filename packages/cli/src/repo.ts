@@ -8,9 +8,9 @@ function git(args: string[], cwd: string): string {
 
 /**
  * `git rev-parse --show-toplevel` returns a LINKED worktree's own path when run
- * from inside one (e.g. a Teambridge participant worktree under
- * `.teambridge/worktrees/<session>/<name>`), not the main repo root where
- * `.teambridge/state.sqlite` and the vault actually live. Commands meant to run
+ * from inside one (e.g. a Coord participant worktree under
+ * `.coord/worktrees/<session>/<name>`), not the main repo root where
+ * `.coord/state.sqlite` and the vault actually live. Commands meant to run
  * post-`enter` (`publish`, `vault *`) need the main root, so detect a linked
  * worktree and resolve back to it.
  *
@@ -29,7 +29,7 @@ export function resolveRepoRoot(cwd: string = process.cwd()): string {
   try {
     toplevel = git(['rev-parse', '--show-toplevel'], resolve(cwd));
   } catch {
-    throw new Error('Not inside a git repository. Run teambridge from your project repo root.');
+    throw new Error('Not inside a git repository. Run coord from your project repo root.');
   }
 
   let gitDir: string;
@@ -53,6 +53,6 @@ export function resolveRepoRoot(cwd: string = process.cwd()): string {
 }
 
 export function daemonBaseUrl(): string {
-  const port = process.env.TEAMBRIDGE_DAEMON_PORT ?? '9473';
-  return process.env.TEAMBRIDGE_DAEMON_URL ?? `http://127.0.0.1:${port}`;
+  const port = process.env.COORD_DAEMON_PORT ?? '9473';
+  return process.env.COORD_DAEMON_URL ?? `http://127.0.0.1:${port}`;
 }

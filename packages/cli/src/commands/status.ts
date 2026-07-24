@@ -24,7 +24,7 @@ export async function runStatus(_argv: string[], options: ClientOptions): Promis
       console.log(`Default project: ${profile.data.profile.defaultProjectId}`);
     }
   } else {
-    console.log('You: (not initialized — run teambridge init)');
+    console.log('You: (not initialized — run coord init)');
   }
 
   console.log(`Projects: ${projects.data.projects.length}`);

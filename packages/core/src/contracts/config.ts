@@ -1,7 +1,7 @@
 import type { AgentKind } from './participant';
 import type { RelayMode } from './workspace';
 
-export type TeambridgeConfig = {
+export type CoordConfig = {
   schemaVersion: 1;
   defaultRelayMode: RelayMode;
   daemonPort: number;
@@ -13,7 +13,7 @@ export type TeambridgeConfig = {
   };
 };
 
-/** Repo-local identity written by `teambridge init`; dashboard reads the same display name + avatar slug. */
+/** Repo-local identity written by `coord init`; dashboard reads the same display name + avatar slug. */
 export type LocalUserProfile = {
   schemaVersion: 1;
   firstName: string;

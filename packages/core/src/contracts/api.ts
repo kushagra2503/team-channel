@@ -1,6 +1,6 @@
 import type { VaultCheckpoint } from './checkpoints';
 import type { Conflict } from './conflicts';
-import type { TeambridgeError } from './errors';
+import type { CoordError } from './errors';
 import type { WorkspaceEvent } from './events';
 import type { WorktreeInfo, RepoContext } from './git';
 import type { InboxMessage } from './inbox';
@@ -17,7 +17,7 @@ export type ApiOk<T> = {
 
 export type ApiFail = {
   ok: false;
-  error: TeambridgeError;
+  error: CoordError;
 };
 
 export type ApiResult<T> = ApiOk<T> | ApiFail;
@@ -26,7 +26,7 @@ export function apiOk<T>(data: T): ApiOk<T> {
   return { ok: true, data };
 }
 
-export function apiFail(code: TeambridgeError['code'], message: string, details?: unknown): ApiFail {
+export function apiFail(code: CoordError['code'], message: string, details?: unknown): ApiFail {
   return {
     ok: false,
     error: { code, message, details }

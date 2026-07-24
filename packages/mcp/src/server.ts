@@ -5,7 +5,7 @@ import { resolveMcpResource, type McpResourceContext } from './resources';
 import { resolveWorkspaceContext } from './resolution';
 import { askInbox, getWorkspaceStatus, publishEvent, readVaultFile, replyInbox, searchVault } from './daemon-client';
 
-const SERVER_NAME = 'teambridge';
+const SERVER_NAME = 'coord';
 const SERVER_VERSION = '0.1.0';
 
 export function createServer(): McpServer {
@@ -15,61 +15,61 @@ export function createServer(): McpServer {
 
   server.registerResource(
     'workspace',
-    'teambridge://workspace',
+    'coord://workspace',
     { title: 'Workspace', description: 'Current workspace status with participants, worktrees, and relay sync state', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
-      const result = await resolveMcpResource('teambridge://workspace', ctx);
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
+      const result = await resolveMcpResource('coord://workspace', ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { contents: [{ uri: 'teambridge://workspace', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
+      return { contents: [{ uri: 'coord://workspace', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
   server.registerResource(
     'participants',
-    'teambridge://participants',
+    'coord://participants',
     { title: 'Participants', description: 'List of participants on the current track with status and presence', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
-      const result = await resolveMcpResource('teambridge://participants', ctx);
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
+      const result = await resolveMcpResource('coord://participants', ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { contents: [{ uri: 'teambridge://participants', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
+      return { contents: [{ uri: 'coord://participants', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
   server.registerResource(
     'vault-context',
-    'teambridge://vault/context',
+    'coord://vault/context',
     { title: 'Vault Context', description: 'Concatenated vault context for the current track', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
-      const result = await resolveMcpResource('teambridge://vault/context', ctx);
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
+      const result = await resolveMcpResource('coord://vault/context', ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { contents: [{ uri: 'teambridge://vault/context', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
+      return { contents: [{ uri: 'coord://vault/context', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
   server.registerResource(
     'inbox',
-    'teambridge://inbox',
+    'coord://inbox',
     { title: 'Inbox', description: 'Team inbox messages on the current track', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
-      const result = await resolveMcpResource('teambridge://inbox', ctx);
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
+      const result = await resolveMcpResource('coord://inbox', ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { contents: [{ uri: 'teambridge://inbox', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
+      return { contents: [{ uri: 'coord://inbox', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
   server.registerResource(
     'conflicts',
-    'teambridge://conflicts',
+    'coord://conflicts',
     { title: 'Conflicts', description: 'Detected conflicts on the current track', mimeType: 'application/json' },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
-      const result = await resolveMcpResource('teambridge://conflicts', ctx);
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
+      const result = await resolveMcpResource('coord://conflicts', ctx);
       if (!result.ok) throw new Error(result.error.message);
-      return { contents: [{ uri: 'teambridge://conflicts', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
+      return { contents: [{ uri: 'coord://conflicts', mimeType: 'application/json', text: JSON.stringify(result.data) }] };
     }
   );
 
@@ -86,7 +86,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ targetFile, text }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for publish');
       const result = await publishEvent(wsId, { targetFile, payload: { text } }, ctx);
@@ -106,7 +106,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ query, limit }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for search');
       const result = await searchVault(wsId, query, ctx, limit);
@@ -125,7 +125,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ path }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for read');
       const result = await readVaultFile(wsId, path, ctx);
@@ -142,7 +142,7 @@ export function createServer(): McpServer {
       inputSchema: {}
     },
     async () => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for status');
       const result = await getWorkspaceStatus(wsId, ctx);
@@ -162,7 +162,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ to, text }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for ask');
       const result = await askInbox(wsId, { to, text }, ctx);
@@ -182,7 +182,7 @@ export function createServer(): McpServer {
       }
     },
     async ({ messageId, text }) => {
-      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.TEAMBRIDGE_REPO_ROOT, baseUrl: process.env.TEAMBRIDGE_DAEMON_URL });
+      const ctx = await resolveWorkspaceContext({ repoRoot: process.env.COORD_REPO_ROOT, baseUrl: process.env.COORD_DAEMON_URL });
       const wsId = ctx.workspaceId ?? ctx.sessionName;
       if (!wsId) throw new Error('Unable to resolve workspace for reply');
       const result = await replyInbox(wsId, messageId, { text }, ctx);

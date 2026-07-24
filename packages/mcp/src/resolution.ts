@@ -11,7 +11,7 @@ export type ResolutionInput = {
 };
 
 export async function resolveWorkspaceContext(input: ResolutionInput): Promise<McpResourceContext> {
-  const baseUrl = input.baseUrl ?? process.env.TEAMBRIDGE_DAEMON_URL;
+  const baseUrl = input.baseUrl ?? process.env.COORD_DAEMON_URL;
 
   // 1. Explicit params
   if (input.workspaceId || input.sessionName) {
@@ -23,11 +23,11 @@ export async function resolveWorkspaceContext(input: ResolutionInput): Promise<M
     };
   }
 
-  // 2. .teambridge/.active fallback
+  // 2. .coord/.active fallback
   const repoRoot = input.repoRoot ?? findRepoRoot(process.cwd());
   if (repoRoot) {
     try {
-      const content = await readFile(resolve(repoRoot, '.teambridge/.active'), 'utf-8');
+      const content = await readFile(resolve(repoRoot, '.coord/.active'), 'utf-8');
       const sessionName = content.trim();
       if (sessionName) {
         return { sessionName, repoRoot, baseUrl };
@@ -38,7 +38,7 @@ export async function resolveWorkspaceContext(input: ResolutionInput): Promise<M
   }
 
   // 3. No resolution
-  throw new Error('Unable to resolve workspace. Provide workspaceId or sessionName, or ensure .teambridge/.active exists.');
+  throw new Error('Unable to resolve workspace. Provide workspaceId or sessionName, or ensure .coord/.active exists.');
 }
 
 function findRepoRoot(startDir: string): string | undefined {

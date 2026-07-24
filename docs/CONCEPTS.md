@@ -1,6 +1,6 @@
-# Condominium Concepts
+# Coord Concepts
 
-Canonical vocabulary for the Condominium codebase and dashboard. Use these terms in UI copy and new docs.
+Canonical vocabulary for the Coord codebase and dashboard. Use these terms in UI copy and new docs.
 
 ## Hierarchy
 
@@ -12,7 +12,7 @@ Project
 
 - **Project** — Organizational container for a product or initiative. Has a roster of **project members** (names, status, avatars). Example seed projects: Beacon, Silo, Forge (see `scripts/seed-demo.mjs`).
 - **Track** — A scoped piece of work within a project. Maps to a git session with its own vault, event log, and **participants** (people/agents active on that track). User-facing UI says "track"; several APIs and types still say **workspace** for backward compatibility.
-- **Vault** — Materialized markdown under `.teambridge/workspaces/{sessionName}/vault/`. Built from `events.jsonl`; not the cross-device source of truth in Phase 1 (events are).
+- **Vault** — Materialized markdown under `.coord/workspaces/{sessionName}/vault/`. Built from `events.jsonl`; not the cross-device source of truth in Phase 1 (events are).
 
 ## Two identity layers
 
@@ -27,8 +27,8 @@ Do not collapse these: a person is a **project member** once per project and a *
 
 | Concept | UI / docs | SQLite | HTTP (today) | On disk |
 |---------|-----------|--------|--------------|---------|
-| Track | track | `tracks` table | `/workspaces/*` mutations; `GET /tracks` list | `.teambridge/workspaces/{sessionName}/` |
-| Workspace type | — | — | `Workspace` in `@teambridge/core` | same as track dir |
+| Track | track | `tracks` table | `/workspaces/*` mutations; `GET /tracks` list | `.coord/workspaces/{sessionName}/` |
+| Workspace type | — | — | `Workspace` in `@coord/core` | same as track dir |
 | Project | project | `projects`, `project_members` | `GET /projects`, … | rows in `state.sqlite` |
 
 **Intentional hybrid:** reads expose `/projects` and `/tracks`; start/join/events/vault still use `/workspaces/*`. A future breaking change may rename those paths to `/tracks/*`.
@@ -36,7 +36,7 @@ Do not collapse these: a person is a **project member** once per project and a *
 ## Avatars
 
 - Display names map to a URL-safe **slug** (`avatarNameSlug`) — apostrophes become hyphens (`Flynn O'Brien` → `flynn-o-brien`).
-- On-disk id: `name_{slug}` under `.teambridge/avatars/`.
+- On-disk id: `name_{slug}` under `.coord/avatars/`.
 - Primary dashboard URL: `GET /avatars/by-name/:slug`.
 - Flower images come from Pexels when `PEXELS_API_KEY` is set; otherwise procedural fallback.
 
@@ -55,10 +55,10 @@ Written via `POST /workspaces/:id/vault/annotate`. Survives vault rebuild (extra
 
 ## Local user profile
 
-- Stored at `.teambridge/user.json` after `teambridge init` (first name, last name, computed `displayName`).
+- Stored at `.coord/user.json` after `coord init` (first name, last name, computed `displayName`).
 - Same `displayName` is used for project roster rows and track participants when using the CLI.
 - Avatar PNG is generated immediately via the daemon (`name_{slug}`); dashboard loads it through `/avatars/by-name/:slug`.
-- Optional `defaultProjectId` — CLI sets this when you create a project so `teambridge start` links sessions to the right project sidebar.
+- Optional `defaultProjectId` — CLI sets this when you create a project so `coord start` links sessions to the right project sidebar.
 
 ## Phase 1 vs later
 

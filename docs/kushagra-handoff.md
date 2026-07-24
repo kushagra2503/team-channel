@@ -12,13 +12,13 @@ The repo is a pnpm workspace:
 packages/core   shared contracts, types, and zod schemas
 packages/vault  vault helpers, materializer, context, and rebuild logic
 packages/daemon local backend HTTP server
-packages/cli    teambridge CLI (init, project create, start, join)
+packages/cli    coord CLI (init, project create, start, join)
 packages/mcp    MCP resource/tool name stubs (HTTP server pending)
 apps/dashboard  React dashboard (project picker, tracks, vault highlights)
 scripts/seed-demo.mjs   demo data — run via pnpm seed
 ```
 
-`core` is not the CLI. It is the shared contract layer. CLI should import public shapes from `@teambridge/core`, not from daemon internals.
+`core` is not the CLI. It is the shared contract layer. CLI should import public shapes from `@coord/core`, not from daemon internals.
 
 `vault` is not the CLI. It owns reusable vault behavior that the daemon uses.
 
@@ -26,7 +26,7 @@ scripts/seed-demo.mjs   demo data — run via pnpm seed
 
 ## How To Run Backend
 
-From the Teambridge repo:
+From the Coord repo:
 
 ```bash
 pnpm install
@@ -44,9 +44,9 @@ Right now we test with `curl` or the dashboard. The CLI will hide those HTTP cal
 
 ## Terminology
 
-- **Track** = workspace session (same row in `tracks` table, directory under `.teambridge/workspaces/`).
-- **Project** groups tracks and project members; CLI sets `projectId` on tracks via `teambridge start --project`.
-- **Local user** — `.teambridge/user.json` from `teambridge init`; dashboard avatars/roster use the same `displayName`.
+- **Track** = workspace session (same row in `tracks` table, directory under `.coord/workspaces/`).
+- **Project** groups tracks and project members; CLI sets `projectId` on tracks via `coord start --project`.
+- **Local user** — `.coord/user.json` from `coord init`; dashboard avatars/roster use the same `displayName`.
 
 ## Repo Config
 
@@ -61,7 +61,7 @@ POST /config/init
 creates:
 
 ```text
-repo/.teambridge/config.json
+repo/.coord/config.json
 ```
 
 Default config:
@@ -83,7 +83,7 @@ Default config:
 CLI mapping later:
 
 ```bash
-teambridge init
+coord init
 ```
 
 should call:
@@ -101,10 +101,10 @@ The daemon should run generally. Users should not normally start it with a repo 
 Good final UX:
 
 ```bash
-teambridge daemon
+coord daemon
 cd /some/repo
-teambridge init
-teambridge start billing-refactor main
+coord init
+coord start billing-refactor main
 ```
 
 The CLI should resolve the current working directory to the git repo root and send that as `repoRoot` in daemon requests.
@@ -167,7 +167,7 @@ POST /workspaces/:workspaceId/vault/rebuild
 
 ## CLI Command Mapping
 
-### `teambridge init`
+### `coord init`
 
 Call:
 
@@ -183,7 +183,7 @@ Body:
 }
 ```
 
-### `teambridge start billing-refactor main`
+### `coord start billing-refactor main`
 
 Call:
 
@@ -205,10 +205,10 @@ Body:
 The daemon creates:
 
 ```text
-.teambridge/state.sqlite
-.teambridge/workspaces/billing-refactor/manifest.json
-.teambridge/workspaces/billing-refactor/events.jsonl
-.teambridge/workspaces/billing-refactor/vault/
+.coord/state.sqlite
+.coord/workspaces/billing-refactor/manifest.json
+.coord/workspaces/billing-refactor/events.jsonl
+.coord/workspaces/billing-refactor/vault/
 ```
 
 It also stores:
@@ -220,7 +220,7 @@ worktree row
 local_sequences row with last_seq = 0
 ```
 
-### `teambridge join billing-refactor --as kushagra`
+### `coord join billing-refactor --as kushagra`
 
 Call:
 
@@ -242,7 +242,7 @@ The daemon loads the existing workspace, keeps the recorded `baseCommit`, create
 
 Actual git worktree creation is still CLI-side work.
 
-### `teambridge publish decisions.md "Backend is source of truth."`
+### `coord publish decisions.md "Backend is source of truth."`
 
 Call:
 
@@ -311,7 +311,7 @@ attempts.md
 
 ## Runtime Validation
 
-Nihal added `zod` schemas in `@teambridge/core`.
+Nihal added `zod` schemas in `@coord/core`.
 
 The daemon now validates request bodies and returns:
 
@@ -350,7 +350,7 @@ Participant
 PublishEvent
 VaultContext
 ApiResult
-TeambridgeConfig
+CoordConfig
 ```
 
 ## What Kushagra Should Build Next
@@ -370,14 +370,14 @@ print friendly output
 Main commands to wire first:
 
 ```bash
-teambridge init
-teambridge start <session_name> [base_ref]
-teambridge join <session_name> --as <display_name>
-teambridge publish <target_file> <text>
-teambridge vault read <path>
-teambridge vault context
-teambridge vault rebuild <session_name>
-teambridge status
+coord init
+coord start <session_name> [base_ref]
+coord join <session_name> --as <display_name>
+coord publish <target_file> <text>
+coord vault read <path>
+coord vault context
+coord vault rebuild <session_name>
+coord status
 ```
 
 The backend pieces for these are now mostly ready. The biggest remaining CLI-side responsibility is making the user experience clean and creating/managing actual git worktrees.

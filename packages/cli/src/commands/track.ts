@@ -1,4 +1,4 @@
-import type { ApiOk, LocalUserProfile, StartWorkspaceResponse } from '@teambridge/core';
+import type { ApiOk, LocalUserProfile, StartWorkspaceResponse } from '@coord/core';
 import type { ClientOptions } from '../daemon-client';
 import { getUserProfile, joinWorkspace, listProjects, listRelaySessions, listTracks, startTrack } from '../daemon-client';
 import { ask, parseFlag } from '../prompt';
@@ -34,7 +34,7 @@ export async function registerTrackStart(
     throw new Error(profile.error.message);
   }
   if (!profile.data.profile) {
-    throw new Error('Run `teambridge init` first to set your name and avatar.');
+    throw new Error('Run `coord init` first to set your name and avatar.');
   }
 
   const positionals = positionalArgs(argv, new Set(['--name', '--project', '--base-ref', '--base']));
@@ -69,7 +69,7 @@ export async function registerTrackStart(
       const picked = await ask('Project id for this track');
       projectId = picked.trim() || undefined;
     } else {
-      throw new Error('Create a project first: `teambridge project create`');
+      throw new Error('Create a project first: `coord project create`');
     }
   }
 
@@ -94,7 +94,7 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
     throw new Error(profile.error.message);
   }
   if (!profile.data.profile) {
-    throw new Error('Run `teambridge init` first to set your name and avatar.');
+    throw new Error('Run `coord init` first to set your name and avatar.');
   }
 
   const positionals = positionalArgs(argv, new Set(['--name', '--as']));
@@ -124,7 +124,7 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
     }
   }
   if (!track) {
-    throw new Error(`Session "${sessionName}" not found. Start it first or run \`teambridge sessions\` after \`teambridge login\`.`);
+    throw new Error(`Session "${sessionName}" not found. Start it first or run \`coord sessions\` after \`coord login\`.`);
   }
   if (track.status === 'archived') {
     throw new Error(`Session "${sessionName}" is archived.`);

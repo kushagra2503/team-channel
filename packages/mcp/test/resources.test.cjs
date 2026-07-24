@@ -34,7 +34,7 @@ const workspaceStatus = {
       id: 'user_ronish',
       displayName: 'ronish',
       workspaceId: 'ws_123',
-      branch: 'teambridge/billing-refactor/ronish',
+      branch: 'coord/billing-refactor/ronish',
       agent: 'cursor',
       status: 'active',
       lastSeenAt: createdAt
@@ -116,14 +116,14 @@ const relayStatus = {
 
 test('resource registry matches core MCP resource contract', () => {
   assert.deepEqual(MCP_RESOURCE_NAMES, [
-    'teambridge://workspace',
-    'teambridge://participants',
-    'teambridge://vault/context',
-    'teambridge://inbox',
-    'teambridge://conflicts'
+    'coord://workspace',
+    'coord://participants',
+    'coord://vault/context',
+    'coord://inbox',
+    'coord://conflicts'
   ]);
-  assert.equal(isMcpResourceName('teambridge://workspace'), true);
-  assert.equal(isMcpResourceName('teambridge://missing'), false);
+  assert.equal(isMcpResourceName('coord://workspace'), true);
+  assert.equal(isMcpResourceName('coord://missing'), false);
 });
 
 test('daemon URL builder includes repoRoot and encoded params', () => {
@@ -142,14 +142,14 @@ test('daemon URL builder includes repoRoot and encoded params', () => {
 });
 
 test('workspace and participant resources resolve through workspace status', async () => {
-  const workspace = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_123' }, reader);
+  const workspace = await resolveMcpResource('coord://workspace', { workspaceId: 'ws_123' }, reader);
   assert.equal(workspace.ok, true);
   assert.deepEqual(workspace.data.workspace, workspaceStatus.workspace);
   assert.deepEqual(workspace.data.participants, workspaceStatus.participants);
   assert.equal(workspace.data.lastSeq, workspaceStatus.lastSeq);
   assert.deepEqual(workspace.data.relayStatus, relayStatus);
 
-  const participants = await resolveMcpResource('teambridge://participants', { workspaceId: 'ws_123' }, reader);
+  const participants = await resolveMcpResource('coord://participants', { workspaceId: 'ws_123' }, reader);
   assert.deepEqual(participants, { ok: true, data: { participants: workspaceStatus.participants } });
 });
 
@@ -173,7 +173,7 @@ test('resources can use sessionName as the daemon workspace identifier', async (
     }
   };
 
-  const workspace = await resolveMcpResource('teambridge://workspace', { sessionName: 'billing-refactor' }, sessionReader);
+  const workspace = await resolveMcpResource('coord://workspace', { sessionName: 'billing-refactor' }, sessionReader);
   assert.equal(workspace.ok, true);
   assert.deepEqual(workspace.data.workspace, workspaceStatus.workspace);
   assert.equal(workspace.data.relayStatus, undefined);
@@ -205,7 +205,7 @@ test('participants resource propagates workspace status failures', async () => {
     }
   };
 
-  const participants = await resolveMcpResource('teambridge://participants', { workspaceId: 'ws_missing' }, failingReader);
+  const participants = await resolveMcpResource('coord://participants', { workspaceId: 'ws_missing' }, failingReader);
   assert.deepEqual(participants, fail);
 });
 
@@ -235,29 +235,29 @@ test('daemon fetch wrappers construct endpoints and preserve ApiResult envelopes
 });
 
 test('vault, inbox, conflict, and unknown resources have stable behavior', async () => {
-  const vault = await resolveMcpResource('teambridge://vault/context', { workspaceId: 'ws_123' }, reader);
+  const vault = await resolveMcpResource('coord://vault/context', { workspaceId: 'ws_123' }, reader);
   assert.equal(vault.ok, true);
   assert.deepEqual(vault.data.context.includedPaths, ['decisions.md']);
 
-  const inbox = await resolveMcpResource('teambridge://inbox', { workspaceId: 'ws_123' }, reader);
+  const inbox = await resolveMcpResource('coord://inbox', { workspaceId: 'ws_123' }, reader);
   assert.deepEqual(inbox, { ok: true, data: { messages: [inboxMessage] } });
 
-  const conflicts = await resolveMcpResource('teambridge://conflicts', { workspaceId: 'ws_123' }, reader);
+  const conflicts = await resolveMcpResource('coord://conflicts', { workspaceId: 'ws_123' }, reader);
   assert.deepEqual(conflicts, { ok: true, data: { conflicts: [conflict] } });
 
-  const missing = await resolveMcpResource('teambridge://missing', { workspaceId: 'ws_123' }, reader);
+  const missing = await resolveMcpResource('coord://missing', { workspaceId: 'ws_123' }, reader);
   assert.equal(missing.ok, false);
   assert.equal(missing.error.code, 'NOT_FOUND');
 });
 
 test('resources require workspace context', async () => {
-  const result = await resolveMcpResource('teambridge://workspace', {}, reader);
+  const result = await resolveMcpResource('coord://workspace', {}, reader);
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'INVALID_REQUEST');
 });
 
 test('workspace resource includes relay status when relay is configured', async () => {
-  const result = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_123' }, reader);
+  const result = await resolveMcpResource('coord://workspace', { workspaceId: 'ws_123' }, reader);
   assert.equal(result.ok, true);
   assert.deepEqual(result.data.relayStatus, relayStatus);
 });
@@ -281,7 +281,7 @@ test('workspace resource degrades gracefully when relay is not configured', asyn
     }
   };
 
-  const result = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_123' }, noRelayReader);
+  const result = await resolveMcpResource('coord://workspace', { workspaceId: 'ws_123' }, noRelayReader);
   assert.equal(result.ok, true);
   assert.deepEqual(result.data.workspace, workspaceStatus.workspace);
   assert.equal(result.data.relayStatus, undefined);
@@ -308,7 +308,7 @@ test('workspace resource returns error when workspace status fails, without fetc
     }
   };
 
-  const result = await resolveMcpResource('teambridge://workspace', { workspaceId: 'ws_missing' }, errorReader);
+  const result = await resolveMcpResource('coord://workspace', { workspaceId: 'ws_missing' }, errorReader);
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'WORKSPACE_NOT_FOUND');
   assert.equal(relayCalled, false);

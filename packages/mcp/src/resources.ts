@@ -7,8 +7,8 @@ import type {
   McpWorkspaceResourceResponse,
   VaultContextResponse,
   WorkspaceStatusResponse
-} from '@teambridge/core';
-import { apiFail, apiOk, MCP_RESOURCE_NAMES as CORE_MCP_RESOURCE_NAMES } from '@teambridge/core';
+} from '@coord/core';
+import { apiFail, apiOk, MCP_RESOURCE_NAMES as CORE_MCP_RESOURCE_NAMES } from '@coord/core';
 import { getRelayStatus, getVaultContext, getWorkspaceStatus, listConflicts, listInbox, type DaemonClientOptions } from './daemon-client';
 
 export const MCP_RESOURCE_NAMES = CORE_MCP_RESOURCE_NAMES;
@@ -60,15 +60,15 @@ export async function resolveMcpResource(
   reader: McpDaemonReader = defaultReader
 ): Promise<ApiResult<McpResourceResponse>> {
   if (!isMcpResourceName(name)) {
-    return apiFail('NOT_FOUND', `Unknown Teambridge MCP resource: ${name}`);
+    return apiFail('NOT_FOUND', `Unknown Coord MCP resource: ${name}`);
   }
 
   const workspaceId = resolveWorkspaceId(context);
   if (!workspaceId) {
-    return apiFail('INVALID_REQUEST', 'workspaceId or sessionName is required to resolve Teambridge MCP resources');
+    return apiFail('INVALID_REQUEST', 'workspaceId or sessionName is required to resolve Coord MCP resources');
   }
 
-  if (name === 'teambridge://workspace') {
+  if (name === 'coord://workspace') {
     const statusResult = await reader.getWorkspaceStatus(workspaceId, context);
     if (!statusResult.ok) return statusResult;
 
@@ -79,16 +79,16 @@ export async function resolveMcpResource(
     return apiOk(statusResult.data);
   }
 
-  if (name === 'teambridge://participants') {
+  if (name === 'coord://participants') {
     const status = await reader.getWorkspaceStatus(workspaceId, context);
     return status.ok ? apiOk({ participants: status.data.participants }) : status;
   }
 
-  if (name === 'teambridge://vault/context') {
+  if (name === 'coord://vault/context') {
     return reader.getVaultContext(workspaceId, context);
   }
 
-  if (name === 'teambridge://inbox') {
+  if (name === 'coord://inbox') {
     return reader.listInbox(workspaceId, context);
   }
 

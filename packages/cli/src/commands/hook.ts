@@ -5,14 +5,14 @@ import { getConfig } from '../daemon-client';
 import { parseFlag } from '../prompt';
 
 /**
- * The command a Teambridge worktree's Claude Code SessionStart hook runs. Its
+ * The command a Coord worktree's Claude Code SessionStart hook runs. Its
  * stdout is injected as additional context, so an agent opening the worktree
  * automatically sees the shared vault plus what changed since last time —
  * "hooks only make Claude Code feel automatic" (agent.md rule 7). No
  * per-session flags: once installed, it just runs.
  */
-const HOOK_COMMAND = 'teambridge context';
-const HOOK_MARKER = 'teambridge context';
+const HOOK_COMMAND = 'coord context';
+const HOOK_MARKER = 'coord context';
 
 type CommandHook = { type: 'command'; command: string };
 type SessionStartEntry = { matcher?: string; hooks: CommandHook[] };
@@ -30,7 +30,7 @@ function readSettings(path: string): ClaudeSettings {
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as ClaudeSettings;
   } catch {
-    throw new Error(`Could not parse ${path} as JSON — fix or remove it before running \`teambridge hook install\`.`);
+    throw new Error(`Could not parse ${path} as JSON — fix or remove it before running \`coord hook install\`.`);
   }
 }
 
@@ -39,12 +39,12 @@ function writeSettings(path: string, settings: ClaudeSettings): void {
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
 }
 
-function entryTargetsTeambridge(entry: SessionStartEntry): boolean {
+function entryTargetsCoord(entry: SessionStartEntry): boolean {
   return entry.hooks.some((hook) => hook.type === 'command' && hook.command.includes(HOOK_MARKER));
 }
 
 function isInstalled(settings: ClaudeSettings): boolean {
-  return (settings.hooks?.SessionStart ?? []).some(entryTargetsTeambridge);
+  return (settings.hooks?.SessionStart ?? []).some(entryTargetsCoord);
 }
 
 async function runHookInstall(argv: string[], options: ClientOptions, cwd: string): Promise<void> {
@@ -61,23 +61,23 @@ async function runHookInstall(argv: string[], options: ClientOptions, cwd: strin
   if (isInstalled(settings)) {
     // Refresh the command in case it changed, keep it idempotent.
     for (const entry of sessionStart) {
-      if (entryTargetsTeambridge(entry)) {
+      if (entryTargetsCoord(entry)) {
         entry.hooks = entry.hooks.map((hook) =>
           hook.command.includes(HOOK_MARKER) ? { type: 'command', command } : hook
         );
       }
     }
     writeSettings(path, settings);
-    console.log(`Teambridge SessionStart hook already present — refreshed in ${path}`);
+    console.log(`Coord SessionStart hook already present — refreshed in ${path}`);
   } else {
     sessionStart.push({ hooks: [{ type: 'command', command }] });
     writeSettings(path, settings);
-    console.log(`Installed Teambridge SessionStart hook in ${path}`);
+    console.log(`Installed Coord SessionStart hook in ${path}`);
     console.log(`Command: ${command}`);
   }
 
   if (!autoInject) {
-    console.log('Note: config.autoInject is false — the hook is installed but you disabled auto-injection in .teambridge/config.json.');
+    console.log('Note: config.autoInject is false — the hook is installed but you disabled auto-injection in .coord/config.json.');
   }
   console.log('New Claude Code sessions in this worktree will now receive shared context automatically.');
 }
@@ -91,7 +91,7 @@ function runHookUninstall(cwd: string): void {
   const settings = readSettings(path);
   const sessionStart = settings.hooks?.SessionStart;
   if (!sessionStart || !isInstalled(settings)) {
-    console.log('Teambridge SessionStart hook is not installed here.');
+    console.log('Coord SessionStart hook is not installed here.');
     return;
   }
 
@@ -108,7 +108,7 @@ function runHookUninstall(cwd: string): void {
     }
   }
   writeSettings(path, settings);
-  console.log(`Removed Teambridge SessionStart hook from ${path}`);
+  console.log(`Removed Coord SessionStart hook from ${path}`);
 }
 
 async function runHookStatus(options: ClientOptions, cwd: string): Promise<void> {
@@ -124,7 +124,7 @@ async function runHookStatus(options: ClientOptions, cwd: string): Promise<void>
     console.log(`config.autoInject: ${autoInject}`);
   }
   if (!installed) {
-    console.log('Run `teambridge hook install` from inside your worktree to enable auto-injection.');
+    console.log('Run `coord hook install` from inside your worktree to enable auto-injection.');
   }
 }
 
@@ -144,5 +144,5 @@ export async function runHook(argv: string[], options: ClientOptions): Promise<v
     await runHookStatus(options, cwd);
     return;
   }
-  throw new Error('Usage: teambridge hook install [--command CMD]|uninstall|status');
+  throw new Error('Usage: coord hook install [--command CMD]|uninstall|status');
 }

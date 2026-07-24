@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Conflict, ContextDelta, InboxMessage, Project, ProjectMember, LocalUserProfile, RelayStatusResponse, VaultContext, VaultItemAnnotation, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Conflict, ContextDelta, InboxMessage, Project, ProjectMember, LocalUserProfile, RelayStatusResponse, VaultContext, VaultItemAnnotation, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@coord/core';
 import {
   annotateVaultItem,
   getContextDeltas,
@@ -18,8 +18,8 @@ import {
   replyInbox,
   resolveConflict,
   DEFAULT_DAEMON_BASE_URL,
-  type TeambridgeClientConfig
-} from '@/api/teambridgeClient';
+  type CoordClientConfig
+} from '@/api/coordClient';
 import { useContextPointer } from '@/hooks/useContextPointer';
 import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
@@ -27,7 +27,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { TeamSidebar } from '@/components/team-sidebar';
 import { SidebarInset } from '@/components/ui/sidebar';
 import { VaultHighlights } from '@/components/VaultHighlights';
-import { buildDisplayNameAvatarUrl } from '@/api/teambridgeClient';
+import { buildDisplayNameAvatarUrl } from '@/api/coordClient';
 import { preloadAvatars } from '@/lib/avatar-cache';
 import { readCachedLocalIdentity, writeCachedLocalIdentity } from '@/lib/local-profile-cache';
 
@@ -43,7 +43,7 @@ export function DashboardPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
   const { setHeader, resetHeader } = useAppShell();
-  const clientConfig = useMemo<TeambridgeClientConfig>(() => getDefaultClientConfig(), []);
+  const clientConfig = useMemo<CoordClientConfig>(() => getDefaultClientConfig(), []);
 
   const cache = useMemo(
     () => createCache(clientConfig.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL),

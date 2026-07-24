@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { IconBug } from '@tabler/icons-react';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import { DevPfpPanel } from './dev-pfp-panel';
 export type SettingsDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  config: TeambridgeClientConfig;
+  config: CoordClientConfig;
 };
 
 type SettingsPage = 'dev';

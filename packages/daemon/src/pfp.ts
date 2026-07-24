@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFile, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import { avatarStorageId } from '@teambridge/core';
+import { avatarStorageId } from '@coord/core';
 
 export type DitherAlgorithm = 'floyd-steinberg' | 'atkinson' | 'bayer';
 
@@ -321,7 +321,7 @@ export function avatarNeedsRegeneration(meta: PfpMeta, expectedQuery = DEFAULT_Q
 }
 
 function avatarsDir(repoRoot: string): string {
-  return join(repoRoot, '.teambridge', 'avatars');
+  return join(repoRoot, '.coord', 'avatars');
 }
 
 function avatarPath(repoRoot: string, participantId: string): string {

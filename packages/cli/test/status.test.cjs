@@ -60,13 +60,13 @@ test('status prints profile, projects, and tracks when daemon calls succeed', as
 
 test('status fails when daemon is unreachable', async () => {
   const restore = stubStatus({
-    profile: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Cannot reach the teambridge daemon' } },
-    projects: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Cannot reach the teambridge daemon' } },
-    tracks: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Cannot reach the teambridge daemon' } }
+    profile: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Cannot reach the coord daemon' } },
+    projects: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Cannot reach the coord daemon' } },
+    tracks: { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Cannot reach the coord daemon' } }
   });
 
   try {
-    await assert.rejects(() => runStatus([], OPTIONS), /Cannot reach the teambridge daemon/);
+    await assert.rejects(() => runStatus([], OPTIONS), /Cannot reach the coord daemon/);
   } finally {
     restore();
   }

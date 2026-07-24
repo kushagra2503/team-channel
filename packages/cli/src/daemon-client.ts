@@ -13,15 +13,15 @@ import type {
   ReplyResponse,
   ResolveConflictResponse,
   StartWorkspaceResponse,
-  TeambridgeConfig,
+  CoordConfig,
   TrackListResponse,
   VaultContextResponse,
   VaultReadResponse,
   VaultSearchResponse,
   WorkspaceEvent,
   WorkspaceStatusResponse
-} from '@teambridge/core';
-import { apiFail, buildDaemonUrl } from '@teambridge/core';
+} from '@coord/core';
+import { apiFail, buildDaemonUrl } from '@coord/core';
 
 export type ClientOptions = {
   baseUrl?: string;
@@ -40,7 +40,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<ApiResul
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return apiFail('INTERNAL_ERROR', `Cannot reach the teambridge daemon at ${url} — is it running? (run \`pnpm daemon\`)\n  ${message}`);
+    return apiFail('INTERNAL_ERROR', `Cannot reach the coord daemon at ${url} — is it running? (run \`pnpm daemon\`)\n  ${message}`);
   }
 
   const text = await response.text();
@@ -57,7 +57,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<ApiResul
 export async function initConfig(
   options: ClientOptions,
   body: { relayMode?: RelayMode } = {}
-): Promise<ApiResult<{ config: TeambridgeConfig; path: string; created: boolean; updated: boolean }>> {
+): Promise<ApiResult<{ config: CoordConfig; path: string; created: boolean; updated: boolean }>> {
   return request(buildDaemonUrl('/config/init', options), {
     method: 'POST',
     body: JSON.stringify({ repoRoot: options.repoRoot, ...(body.relayMode ? { relayMode: body.relayMode } : {}) })
@@ -66,7 +66,7 @@ export async function initConfig(
 
 export async function getConfig(
   options: ClientOptions
-): Promise<ApiResult<{ config: TeambridgeConfig; path: string; exists: boolean }>> {
+): Promise<ApiResult<{ config: CoordConfig; path: string; exists: boolean }>> {
   return request(buildDaemonUrl('/config', options));
 }
 

@@ -29,7 +29,7 @@ This plan closes the remaining Phase 3 gaps that keep MCP, dashboard, and CLI fr
 
 ### Problem Frame
 
-Today the MCP server exposes `teambridge://inbox` and `teambridge://conflicts` as empty stubs, and `team_ask`/`team_reply` return `isError: true`. The dashboard has no inbox or conflict UI. The daemon has no inbox or conflict HTTP endpoints. As a result, the agent can publish and search vault content, but it cannot ask a teammate, see questions, or resolve conflicts — and the dashboard cannot show those workflows either. Once this work lands, an agent can ask a targeted question from the IDE, a teammate can reply from the dashboard, and the team can detect and resolve content conflicts without leaving the shared workspace.
+Today the MCP server exposes `coord://inbox` and `coord://conflicts` as empty stubs, and `team_ask`/`team_reply` return `isError: true`. The dashboard has no inbox or conflict UI. The daemon has no inbox or conflict HTTP endpoints. As a result, the agent can publish and search vault content, but it cannot ask a teammate, see questions, or resolve conflicts — and the dashboard cannot show those workflows either. Once this work lands, an agent can ask a targeted question from the IDE, a teammate can reply from the dashboard, and the team can detect and resolve content conflicts without leaving the shared workspace.
 
 ### Requirements
 
@@ -49,8 +49,8 @@ Today the MCP server exposes `teambridge://inbox` and `teambridge://conflicts` a
 
 **MCP**
 
-- R9. The MCP resource `teambridge://inbox` returns real messages from the daemon.
-- R10. The MCP resource `teambridge://conflicts` returns real conflicts from the daemon.
+- R9. The MCP resource `coord://inbox` returns real messages from the daemon.
+- R10. The MCP resource `coord://conflicts` returns real conflicts from the daemon.
 - R11. The MCP tool `team_ask` calls the daemon ask endpoint instead of returning a stub.
 - R12. The MCP tool `team_reply` calls the daemon reply endpoint instead of returning a stub.
 
@@ -58,7 +58,7 @@ Today the MCP server exposes `teambridge://inbox` and `teambridge://conflicts` a
 
 - R13. The dashboard shows an inbox panel with messages and a reply affordance for pending questions addressed to the local user.
 - R14. The dashboard shows a conflicts panel with open conflicts and a resolve affordance.
-- R15. The dashboard surfaces recent teammate deltas (publishes since the local user's last-seen seq) using the same context-pointer mechanism as `teambridge context`.
+- R15. The dashboard surfaces recent teammate deltas (publishes since the local user's last-seen seq) using the same context-pointer mechanism as `coord context`.
 - R16. Dashboard actions call the daemon endpoints and refresh the relevant panels.
 
 **Verification**
@@ -72,7 +72,7 @@ Today the MCP server exposes `teambridge://inbox` and `teambridge://conflicts` a
 **In scope:** Core contract schemas, daemon SQLite tables and HTTP endpoints, vault materialization for conflicts, MCP daemon client additions, MCP resource/tool real implementations, dashboard API client additions, dashboard inbox/conflicts/deltas UI, dashboard integration with the team sidebar, and per-package tests.
 
 **Deferred to Follow-Up Work:**
-- CLI `teambridge ask|inbox|reply` commands (Kushagra's Phase 3 Step 3 scope). The daemon endpoints are shaped so the CLI can use them without changes.
+- CLI `coord ask|inbox|reply` commands (Kushagra's Phase 3 Step 3 scope). The daemon endpoints are shaped so the CLI can use them without changes.
 - Supabase relay mirroring of `inbox_messages` and `conflicts` to remote `tc_` tables (Phase 2/3 follow-up once local behavior is solid).
 - Advanced conflict detection beyond same-targetFile collisions (e.g., semantic merge conflicts, branch-level conflicts).
 - Cross-surface end-to-end test that exercises MCP → CLI → dashboard in one flow (out of scope per the planning scope choice; kept as per-package tests).
@@ -93,9 +93,9 @@ Today the MCP server exposes `teambridge://inbox` and `teambridge://conflicts` a
 
 - **KTD4 — Conflicts materialize into `conflicts.md` alongside the Phase 1 flat vault files.** `packages/vault/src/index.ts` gains a `materializeConflictEvent` function that appends a line to `conflicts.md` (the same pattern used for `decisions.md`, `observations.md`, etc.). This keeps the vault the single readable artifact and lets `vault context` include conflict summaries automatically.
 
-- **KTD5 — MCP resources and tools share daemon-client functions with the dashboard.** `packages/mcp/src/daemon-client.ts` adds `getInbox`, `askInbox`, `replyInbox`, `getConflicts`, and `resolveConflict`. The dashboard API client (`apps/dashboard/src/api/teambridgeClient.ts`) calls the same HTTP endpoints. This guarantees that all surfaces read the same state.
+- **KTD5 — MCP resources and tools share daemon-client functions with the dashboard.** `packages/mcp/src/daemon-client.ts` adds `getInbox`, `askInbox`, `replyInbox`, `getConflicts`, and `resolveConflict`. The dashboard API client (`apps/dashboard/src/api/coordClient.ts`) calls the same HTTP endpoints. This guarantees that all surfaces read the same state.
 
-- **KTD6 — Teammate deltas use the existing context-pointer file via a new daemon endpoint.** The dashboard cannot read the local filesystem directly, so the daemon exposes `GET /workspaces/:id/context-pointer` and `POST /workspaces/:id/context-pointer`. These read/write the same `.context.{displayName}.json` files that `teambridge context` uses, keeping the dashboard and CLI in sync on "what's new since I last looked."
+- **KTD6 — Teammate deltas use the existing context-pointer file via a new daemon endpoint.** The dashboard cannot read the local filesystem directly, so the daemon exposes `GET /workspaces/:id/context-pointer` and `POST /workspaces/:id/context-pointer`. These read/write the same `.context.{displayName}.json` files that `coord context` uses, keeping the dashboard and CLI in sync on "what's new since I last looked."
 
 - **KTD7 — Dashboard reuses the relay-panel tab pattern for inbox and conflicts.** The team sidebar gains fourth and fifth tabs: "Inbox" and "Conflicts". Each panel follows the same polling, error-state, and motion-transition patterns as `RelaySyncHealth` and `EventFeed`.
 
@@ -104,7 +104,7 @@ Today the MCP server exposes `teambridge://inbox` and `teambridge://conflicts` a
 - The local user profile and participant rows are stable enough to resolve display names to participant IDs for inbox addressing.
 - The existing `WorkspaceEventType` enum (`team_ask`, `team_reply`, `conflict_detected`, `conflict_resolved`) already reflects the intended event shapes.
 - The daemon's `runSql`/`querySql` sqlite3 shell-out helpers are sufficient for the new tables and queries.
-- The MCP server is already wired to start via `teambridge mcp` and resolve the active workspace from `.teambridge/.active`.
+- The MCP server is already wired to start via `coord mcp` and resolve the active workspace from `.coord/.active`.
 
 ---
 
@@ -136,7 +136,7 @@ flowchart TB
   end
 
   subgraph Dashboard["apps/dashboard/src"]
-    L["teambridgeClient.ts: inbox + conflict functions"]
+    L["coordClient.ts: inbox + conflict functions"]
     M["InboxPanel.tsx + ConflictsPanel.tsx + TeammateDeltas.tsx"]
     N["team-sidebar.tsx: Inbox + Conflicts tabs"]
     O["DashboardPage.tsx: polling + error state"]
@@ -190,7 +190,7 @@ flowchart TB
 - Error path: `TeamReplyEventSchema` rejects a `team_reply` event with a missing `replyToMessageId` payload field.
 - Type compatibility: a plain `InboxMessage` object is assignable to the inferred schema type.
 
-**Verification:** `pnpm --filter @teambridge/core build && pnpm --filter @teambridge/core test` passes.
+**Verification:** `pnpm --filter @coord/core build && pnpm --filter @coord/core test` passes.
 
 ---
 
@@ -270,7 +270,7 @@ flowchart TB
 - Error path: replying to a message not addressed to the local user returns `FORBIDDEN`.
 - Integration: after ask + reply, `GET /inbox` returns both messages in correct order.
 
-**Verification:** `pnpm build` and `pnpm --filter @teambridge/daemon test` pass. The existing `mcp-flow` integration test still passes (stubs are unchanged until U6).
+**Verification:** `pnpm build` and `pnpm --filter @coord/daemon test` pass. The existing `mcp-flow` integration test still passes (stubs are unchanged until U6).
 
 ---
 
@@ -310,7 +310,7 @@ flowchart TB
 
 ### U5. Context-pointer daemon endpoints
 
-**Goal:** Let the dashboard read and write the same last-seen cursor that `teambridge context` uses, so teammate deltas are consistent across CLI and dashboard.
+**Goal:** Let the dashboard read and write the same last-seen cursor that `coord context` uses, so teammate deltas are consistent across CLI and dashboard.
 
 **Requirements:** R15
 
@@ -321,7 +321,7 @@ flowchart TB
 - `packages/core/src/contracts/api.ts` — add `ContextPointerResponse` and `SaveContextPointerRequest` types if not already present.
 - `packages/daemon/test/inbox-conflict.test.cjs` — add pointer tests.
 
-**Approach:** Reuse the existing `readContextPointer` / `writeContextPointer` logic from `packages/cli/src/lib/context-pointer.ts`. The daemon endpoints read/write the same JSON file under `.teambridge/workspaces/{sessionName}/.context.{displayName}.json`. The `GET` endpoint returns the pointer; the `POST` endpoint accepts `{ lastSeenSeq: number }` and updates the file. The display name used in the filename is derived from the authenticated local user profile for the workspace, so a participant cannot update another user's pointer.
+**Approach:** Reuse the existing `readContextPointer` / `writeContextPointer` logic from `packages/cli/src/lib/context-pointer.ts`. The daemon endpoints read/write the same JSON file under `.coord/workspaces/{sessionName}/.context.{displayName}.json`. The `GET` endpoint returns the pointer; the `POST` endpoint accepts `{ lastSeenSeq: number }` and updates the file. The display name used in the filename is derived from the authenticated local user profile for the workspace, so a participant cannot update another user's pointer.
 
 **Patterns to follow:** The existing pointer file shape and the daemon's `repoRoot` resolution pattern.
 
@@ -357,7 +357,7 @@ flowchart TB
 - Happy path: `resolveConflict(...)` calls `POST /workspaces/:id/conflicts/:id/resolve`.
 - Error path: functions propagate daemon errors as `ApiFail` results.
 
-**Verification:** `pnpm --filter @teambridge/mcp build && pnpm --filter @teambridge/mcp test` passes.
+**Verification:** `pnpm --filter @coord/mcp build && pnpm --filter @coord/mcp test` passes.
 
 ---
 
@@ -370,7 +370,7 @@ flowchart TB
 **Dependencies:** U6
 
 **Files:**
-- `packages/mcp/src/resources.ts` — update `resolveMcpResource` for `teambridge://inbox` and `teambridge://conflicts` to call the daemon.
+- `packages/mcp/src/resources.ts` — update `resolveMcpResource` for `coord://inbox` and `coord://conflicts` to call the daemon.
 - `packages/mcp/src/tools.ts` — replace stubs with real `resolveMcpTool` dispatch for `team_ask` and `team_reply`.
 - `packages/mcp/src/server.ts` — update tool descriptions and resource descriptions to remove "not yet implemented" notes.
 - `packages/mcp/test/resources.test.cjs` — add tests for real inbox/conflict resource resolution.
@@ -378,8 +378,8 @@ flowchart TB
 - `tests/integration/mcp-flow.test.mjs` — update stub assertions to verify real ask/reply behavior.
 
 **Approach:**
-- For `teambridge://inbox`, call `getInbox` and return `{ messages: result.data.messages }`.
-- For `teambridge://conflicts`, call `getConflicts` and return `{ conflicts: result.data.conflicts }`.
+- For `coord://inbox`, call `getInbox` and return `{ messages: result.data.messages }`.
+- For `coord://conflicts`, call `getConflicts` and return `{ conflicts: result.data.conflicts }`.
 - For `team_ask`, call `askInbox` and return the created message.
 - For `team_reply`, call `replyInbox` and return the updated message.
 - If the daemon returns an error, propagate it as a thrown error so the MCP server returns an error response.
@@ -387,13 +387,13 @@ flowchart TB
 **Patterns to follow:** Existing `resolveMcpResource` switch structure and `server.registerTool` pattern.
 
 **Test scenarios:**
-- Happy path: reading `teambridge://inbox` returns messages from a mocked daemon reader.
-- Happy path: reading `teambridge://conflicts` returns conflicts from a mocked daemon reader.
+- Happy path: reading `coord://inbox` returns messages from a mocked daemon reader.
+- Happy path: reading `coord://conflicts` returns conflicts from a mocked daemon reader.
 - Happy path: `team_ask` tool dispatches to `askInbox` and returns the created message.
 - Happy path: `team_reply` tool dispatches to `replyInbox` and returns the updated message.
 - Error path: daemon failure for any of the above returns an error response.
 
-**Verification:** `pnpm --filter @teambridge/mcp test` passes, including updated integration tests.
+**Verification:** `pnpm --filter @coord/mcp test` passes, including updated integration tests.
 
 ---
 
@@ -406,12 +406,12 @@ flowchart TB
 **Dependencies:** U3, U4, U5
 
 **Files:**
-- `apps/dashboard/src/api/teambridgeClient.ts` — add `getInbox`, `askInbox`, `replyInbox`, `getConflicts`, `resolveConflict`, `getContextPointer`, `setContextPointer`.
-- `apps/dashboard/src/api/teambridgeClient.test.ts` — add tests for the new functions.
+- `apps/dashboard/src/api/coordClient.ts` — add `getInbox`, `askInbox`, `replyInbox`, `getConflicts`, `resolveConflict`, `getContextPointer`, `setContextPointer`.
+- `apps/dashboard/src/api/coordClient.test.ts` — add tests for the new functions.
 
 **Approach:** Mirror the existing `getJson`/`fetch` POST patterns. `askInbox` and `replyInbox` POST JSON bodies. `resolveConflict` POSTs to the conflict resolve path. `setContextPointer` POSTs `{ lastSeenSeq }`.
 
-**Patterns to follow:** Existing `annotateVaultItem` and `getWorkspaceEvents` in `apps/dashboard/src/api/teambridgeClient.ts`.
+**Patterns to follow:** Existing `annotateVaultItem` and `getWorkspaceEvents` in `apps/dashboard/src/api/coordClient.ts`.
 
 **Test scenarios:**
 - Happy path: `getInbox` calls `GET /workspaces/:id/inbox` and returns messages.
@@ -419,7 +419,7 @@ flowchart TB
 - Happy path: `resolveConflict` calls `POST /workspaces/:id/conflicts/:id/resolve` with `{ resolutionText }`.
 - Error path: functions throw with the daemon error message on non-OK responses.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes.
+**Verification:** `pnpm --filter @coord/dashboard test` passes.
 
 ---
 
@@ -436,7 +436,7 @@ flowchart TB
 - `apps/dashboard/src/components/InboxPanel.test.tsx` (new) — component tests.
 - `apps/dashboard/src/test/factories.ts` — add `makeInboxMessage` factory.
 
-**Approach:** The component takes `messages: InboxMessage[]`, `localUser: LocalUserProfile | null`, `config: TeambridgeClientConfig`, `workspaceId: string`, and optional `error`. It renders messages grouped by status, with a reply input on pending messages addressed to the local user. On reply, it calls `replyInbox` and notifies the parent via `onReply` so `DashboardPage` can refresh the list.
+**Approach:** The component takes `messages: InboxMessage[]`, `localUser: LocalUserProfile | null`, `config: CoordClientConfig`, `workspaceId: string`, and optional `error`. It renders messages grouped by status, with a reply input on pending messages addressed to the local user. On reply, it calls `replyInbox` and notifies the parent via `onReply` so `DashboardPage` can refresh the list.
 
 **Patterns to follow:** `EventFeed.tsx` for row layout, motion transitions, and error handling. `TrackParticipantsPanel.tsx` for participant name display. Use the existing shadcn/ui form primitives for reply/resolve inputs and add clear focus rings and `aria-label`s for accessibility.
 
@@ -447,7 +447,7 @@ flowchart TB
 - Edge case: empty inbox renders a "No messages" placeholder.
 - Error state: renders the error message when `error` is set.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes.
+**Verification:** `pnpm --filter @coord/dashboard test` passes.
 
 ---
 
@@ -474,7 +474,7 @@ flowchart TB
 - Edge case: no open conflicts renders a "No conflicts" placeholder.
 - Error state: renders the error message when `error` is set.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes.
+**Verification:** `pnpm --filter @coord/dashboard test` passes.
 
 ---
 
@@ -503,7 +503,7 @@ flowchart TB
 - Edge case: no new events renders a "No new updates" placeholder.
 - Edge case: events with non-publish types are excluded from deltas.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes.
+**Verification:** `pnpm --filter @coord/dashboard test` passes.
 
 ---
 
@@ -531,7 +531,7 @@ flowchart TB
 - Error state: the panels show error messages when their respective endpoints fail.
 - Integration: switching tracks resets the inbox/conflicts data and polls the new track.
 
-**Verification:** `pnpm build` succeeds. `pnpm --filter @teambridge/dashboard test` and `pnpm test:integration` pass.
+**Verification:** `pnpm build` succeeds. `pnpm --filter @coord/dashboard test` and `pnpm test:integration` pass.
 
 ---
 
@@ -557,7 +557,7 @@ flowchart TB
 - MCP: `team_ask` and `team_reply` tools return real daemon responses in the integration test.
 - Dashboard: `InboxPanel` and `ConflictsPanel` render data and handle actions.
 
-**Verification:** `pnpm test`, `pnpm --filter @teambridge/mcp test`, `pnpm --filter @teambridge/dashboard test`, and `pnpm test:integration` all pass.
+**Verification:** `pnpm test`, `pnpm --filter @coord/mcp test`, `pnpm --filter @coord/dashboard test`, and `pnpm test:integration` all pass.
 
 ---
 
@@ -565,10 +565,10 @@ flowchart TB
 
 | What | Command | Applies to |
 |------|---------|------------|
-| Core contract tests | `pnpm --filter @teambridge/core test` | U1 |
-| Daemon tests | `pnpm --filter @teambridge/daemon test` | U2-U5, U13 |
-| MCP tests | `pnpm --filter @teambridge/mcp test` | U6-U7, U13 |
-| Dashboard tests | `pnpm --filter @teambridge/dashboard test` | U8-U12 |
+| Core contract tests | `pnpm --filter @coord/core test` | U1 |
+| Daemon tests | `pnpm --filter @coord/daemon test` | U2-U5, U13 |
+| MCP tests | `pnpm --filter @coord/mcp test` | U6-U7, U13 |
+| Dashboard tests | `pnpm --filter @coord/dashboard test` | U8-U12 |
 | Full build | `pnpm build` | All units |
 | Integration tests | `pnpm test:integration` | U7, U12-U13 |
 
@@ -589,17 +589,17 @@ flowchart TB
 - **MCP / dashboard / CLI parity:** the daemon endpoints are the single source of truth for inbox and conflict state. MCP tools, dashboard UI, and (eventually) CLI commands all read and write through the same routes, so a question asked via MCP appears in the dashboard and a reply sent from the dashboard is visible to the MCP tool.
 - **Vault materialization:** `conflict_detected` events append to `conflicts.md`, so `vault context` and the vault search index include conflict summaries automatically. This means conflict state is reachable both through the structured API and through the flat vault files.
 - **Event log shape:** the plan adds `team_ask`, `team_reply`, `conflict_detected`, and `conflict_resolved` events to `events.jsonl`. These events replay by `seq` and participate in the existing vault rebuild-from-events contract.
-- **Context pointer sharing:** the dashboard and CLI share the same `.context.{displayName}.json` read cursor. A "mark seen" action in the dashboard updates the same file that `teambridge context` reads, so the two surfaces stay aligned on what is "new."
+- **Context pointer sharing:** the dashboard and CLI share the same `.context.{displayName}.json` read cursor. A "mark seen" action in the dashboard updates the same file that `coord context` reads, so the two surfaces stay aligned on what is "new."
 - **Permission boundary:** the inbox reply endpoint checks that the local user is the recipient of the message. This is the first per-message authorization check in the daemon and should be reviewed carefully (see Risks & Dependencies).
 
 ## Risks & Dependencies
 
-- **Kushagra CLI dependency:** the plan deliberately does not implement `teambridge ask|inbox|reply` CLI commands. Until Kushagra adds them, the CLI cannot drive the new daemon endpoints, but the endpoints are shaped to be compatible.
+- **Kushagra CLI dependency:** the plan deliberately does not implement `coord ask|inbox|reply` CLI commands. Until Kushagra adds them, the CLI cannot drive the new daemon endpoints, but the endpoints are shaped to be compatible.
 - **Inbox authorization:** `POST /inbox/:id/reply` must verify that the caller is the message recipient (`to_user_id`). A bug here would let any participant answer questions meant for someone else. Mitigation: the handler looks up the local user profile and compares it to `to_user_id`; mismatch returns `FORBIDDEN`. Add a daemon test that asserts this check.
 - **Display-name collision risk:** if two participants share a display name, inbox `to` resolution is ambiguous. Mitigation: the existing `participants` table has a unique `(workspace_id, display_name)` constraint that prevents this at the data layer; the ask handler still validates that exactly one match exists and returns `INVALID_REQUEST` otherwise.
 - **Conflict detection false positives:** the simple same-targetFile rule may flag normal sequential publishes as conflicts. Mitigation: the rule is scoped to the same sync window and can be tuned or replaced later without changing the conflict resolution contract.
 - **Context-pointer file race:** CLI and dashboard both write the same pointer file. Mitigation: the daemon writes the pointer file atomically using a temp-file + `rename` pattern (or the existing atomic-write helper), so a crash mid-write cannot leave torn JSON. The worst case is a slightly stale `lastSeenSeq` — acceptable for a read cursor.
-- **Daemon client timeouts:** the MCP and dashboard HTTP clients need explicit request/response timeouts so a slow daemon cannot hang the agent or the UI. Mitigation: add a timeout to `fetch` calls in `packages/mcp/src/daemon-client.ts` and `apps/dashboard/src/api/teambridgeClient.ts`.
+- **Daemon client timeouts:** the MCP and dashboard HTTP clients need explicit request/response timeouts so a slow daemon cannot hang the agent or the UI. Mitigation: add a timeout to `fetch` calls in `packages/mcp/src/daemon-client.ts` and `apps/dashboard/src/api/coordClient.ts`.
 - **Conflict resolution race:** two concurrent resolve requests could both emit `conflict_resolved` events. Mitigation: the update uses `WHERE status = 'open'` (or an optimistic lock) and the handler verifies the row was updated before emitting the event.
 - **Polling backpressure:** inbox and conflicts polls at `TRACK_REFRESH_MS` can pile up if the daemon is slow. Mitigation: reuse the existing `AbortController` pattern in `DashboardPage` to cancel in-flight requests when the track changes or a new poll starts.
 - **Schema migration:** the new `inbox_messages` and `conflicts` tables are created by `initializeStateDb`, so existing repos pick them up automatically on the next daemon start. No manual migration is needed.

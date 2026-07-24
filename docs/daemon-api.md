@@ -1,13 +1,13 @@
 # Daemon HTTP API
 
-Local backend at `http://127.0.0.1:9473` (default). All JSON responses use `ApiResult<T>` from `@teambridge/core`.
+Local backend at `http://127.0.0.1:9473` (default). All JSON responses use `ApiResult<T>` from `@coord/core`.
 
 ## Common query parameters
 
 | Param | Used on | Description |
 |-------|---------|-------------|
 | `repoRoot` | Most routes | Git repo root; daemon resolves to toplevel via `git rev-parse` |
-| `maxBytes` | `GET .../vault/context` | Context size limit (default from `.teambridge/config.json`) |
+| `maxBytes` | `GET .../vault/context` | Context size limit (default from `.coord/config.json`) |
 | `path` | `GET .../vault/read` | Vault file name, e.g. `decisions.md` |
 
 POST bodies may include `repoRoot` when the route accepts a JSON body.
@@ -18,7 +18,7 @@ POST bodies may include `repoRoot` when the route accepts a JSON body.
 |--------|------|-------------|
 | GET | `/health` | Liveness |
 | GET | `/config?repoRoot=` | Read repo config |
-| POST | `/config/init` | Create `.teambridge/config.json` (body `{ repoRoot?, relayMode? }`; `relayMode` sets/updates `defaultRelayMode` — `local` or `supabase`) |
+| POST | `/config/init` | Create `.coord/config.json` (body `{ repoRoot?, relayMode? }`; `relayMode` sets/updates `defaultRelayMode` — `local` or `supabase`) |
 
 ## Repo context (dashboard sidebar)
 
@@ -29,7 +29,7 @@ POST bodies may include `repoRoot` when the route accepts a JSON body.
 
 ## Local user profile (CLI + dashboard)
 
-Written by `teambridge init`; stored at `.teambridge/user.json`.
+Written by `coord init`; stored at `.coord/user.json`.
 
 | Method | Path | Description |
 |--------|------|-------------|

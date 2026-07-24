@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { EventFeed } from './EventFeed';
 import { makeWorkspaceEvent } from '@/test/factories';
-import type { Participant } from '@teambridge/core';
+import type { Participant } from '@coord/core';
 
 const participants: Participant[] = [
   { id: 'user_ronish', displayName: 'ronish', workspaceId: 'ws_123', branch: 'main', agent: 'cursor', status: 'active', lastSeenAt: '2026-07-06T12:00:00.000Z' },

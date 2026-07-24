@@ -1,4 +1,4 @@
-# Condominium
+# Coord
 
 Shared workspace for teams building with AI agents — projects, tracks, a shared vault, and a dashboard to stay aligned.
 
@@ -17,9 +17,9 @@ pnpm dashboard       # UI on http://127.0.0.1:5173
 **Your own data (no seed):**
 
 ```bash
-pnpm teambridge init
-pnpm teambridge project create --name "My App"
-pnpm teambridge start my-track
+pnpm coord init
+pnpm coord project create --name "My App"
+pnpm coord start my-track
 ```
 
 Optional: add `PEXELS_API_KEY` to `.env` for flower profile photos.
@@ -33,9 +33,9 @@ Optional: add `PEXELS_API_KEY` to `.env` for flower profile photos.
 | `packages/vault` | Vault materialization |
 | `packages/mcp` | MCP server (in progress) |
 | `apps/dashboard` | Web UI (`pnpm dashboard`) |
-| `packages/cli` | CLI (`pnpm teambridge`) |
+| `packages/cli` | CLI (`pnpm coord`) |
 
-Local state lives in `.teambridge/` at the git root.
+Local state lives in `.coord/` at the git root.
 
 ## Docs
 

@@ -1,4 +1,4 @@
-import type { Conflict, ContextPointerResponse, InboxMessage, Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Conflict, ContextPointerResponse, InboxMessage, Participant, RelayStatusResponse, SyncStateEntry, VaultContext, Workspace, WorkspaceEvent, WorkspaceStatusResponse } from '@coord/core';
 
 export const createdAt = '2026-06-22T00:00:00.000Z';
 
@@ -25,7 +25,7 @@ export function makeParticipant(overrides: Partial<Participant> = {}): Participa
     id: 'user_ronish',
     displayName: 'ronish',
     workspaceId: 'ws_123',
-    branch: 'teambridge/billing-refactor/ronish',
+    branch: 'coord/billing-refactor/ronish',
     agent: 'cursor',
     status: 'active',
     lastSeenAt: createdAt,
@@ -41,8 +41,8 @@ export function makeWorkspaceStatus(overrides: Partial<WorkspaceStatusResponse> 
       {
         workspaceId: 'ws_123',
         userId: 'user_ronish',
-        path: '/tmp/teambridge/.teambridge/worktrees/billing-refactor/ronish',
-        branch: 'teambridge/billing-refactor/ronish',
+        path: '/tmp/coord/.coord/worktrees/billing-refactor/ronish',
+        branch: 'coord/billing-refactor/ronish',
         baseCommit: 'abc123',
         currentCommit: 'abc123',
         dirty: false

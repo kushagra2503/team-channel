@@ -1,8 +1,8 @@
-import { buildDisplayNameAvatarUrl, type TeambridgeClientConfig } from '@/api/teambridgeClient';
+import { buildDisplayNameAvatarUrl, type CoordClientConfig } from '@/api/coordClient';
 
 export function avatarUrlForDisplayName(
   displayName: string,
-  config: TeambridgeClientConfig,
+  config: CoordClientConfig,
   rev?: number | string
 ): string | undefined {
   if (!config.daemonBaseUrl) return undefined;

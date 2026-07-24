@@ -1,14 +1,14 @@
 import { execFileSync } from 'node:child_process';
-import type { Workspace } from '@teambridge/core';
+import type { Workspace } from '@coord/core';
 import type { ClientOptions } from '../daemon-client';
 import { listTracks } from '../daemon-client';
 
-const PARTICIPANT_BRANCH_PATTERN = /^teambridge\/([^/]+)\/[^/]+$/;
+const PARTICIPANT_BRANCH_PATTERN = /^coord\/([^/]+)\/[^/]+$/;
 
 /**
  * `publish` and `vault *` have no `<session_name>` argument — they operate on
  * "the current track", inferred from the branch `start`/`join` already
- * created (`teambridge/<session>/<safeName>`, see lib/naming.ts). Reads HEAD
+ * created (`coord/<session>/<safeName>`, see lib/naming.ts). Reads HEAD
  * from `cwd` (the literal invocation directory, which is the participant's
  * worktree — do not pass the U1-normalized repoRoot here).
  */
@@ -31,14 +31,14 @@ export function currentParticipantSlugFromBranch(cwd: string = process.cwd()): s
     return null;
   }
   const match = branch.match(PARTICIPANT_BRANCH_PATTERN);
-  return match ? branch.slice(`teambridge/${match[1]}/`.length) : null;
+  return match ? branch.slice(`coord/${match[1]}/`.length) : null;
 }
 
 export async function resolveCurrentTrack(options: ClientOptions, cwd: string = process.cwd()): Promise<Workspace> {
   const sessionName = currentSessionNameFromBranch(cwd);
   if (!sessionName) {
     throw new Error(
-      'Not inside a track worktree. Run `teambridge enter <session_name>` and `cd` into the result first.'
+      'Not inside a track worktree. Run `coord enter <session_name>` and `cd` into the result first.'
     );
   }
 

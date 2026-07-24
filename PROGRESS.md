@@ -1,4 +1,4 @@
-# Condominium — Progress
+# Coord — Progress
 
 Snapshot of what has been built so far and what remains. This is a status
 digest; the authoritative checklist stays in [`todo.md`](./todo.md), and the
@@ -32,7 +32,7 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   SQLite state, projects/tracks, participants, worktrees, publish events,
   vault materialization + rebuild, `vault context`, FTS5 vault search, avatars,
   repo context, and Supabase relay mirroring/sync.
-- **CLI** (`packages/cli`, `pnpm teambridge`) — `init` (with `--relay
+- **CLI** (`packages/cli`, `pnpm coord`) — `init` (with `--relay
   local|supabase`), `status`, `project create|list`, `start`, `join`, `enter`,
   `publish`, `vault read|context|search`, `context` (compact vault context +
   teammate deltas), `hook install|uninstall|status` (Claude Code
@@ -56,7 +56,7 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   (`team_publish`, `vault_search`, `vault_read`, `workspace_status`,
   `team_ask`, `team_reply`) — all calling the daemon. Workspace resolution
   from explicit params, local `state.sqlite` worktree mapping, or
-  `.teambridge/.active` fallback. Start with `teambridge mcp`. Integration tests
+  `.coord/.active` fallback. Start with `coord mcp`. Integration tests
   spawn the server over stdio and verify JSON-RPC handshake, resource/tool
   lists, live resource reads, and full ask/reply/conflict flows.
 
@@ -82,7 +82,7 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   `dedupeKey`.
 - Daemon relay identity/device registration; mirrors projects/sessions/
   participants after login; queues failed publishes in `pending_remote_events`.
-- Push/pull sync (autonomous polling + manual `teambridge sync`); remote
+- Push/pull sync (autonomous polling + manual `coord sync`); remote
   events rebuild the local vault.
 - CLI: `login`, `sessions`, `list`, `sync`, `status relay`; `join` can import a
   remote session before creating the worktree.
@@ -113,14 +113,14 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
 
 - MCP server over stdio transport using `@modelcontextprotocol/sdk` with
   `StdioServerTransport` (Claude Code compatible). Start with
-  `teambridge mcp`.
-- Five MCP resources registered: `teambridge://workspace` (with relay status),
-  `teambridge://participants`, `teambridge://vault/context`,
-  `teambridge://inbox`, `teambridge://conflicts` — all backed by daemon calls.
+  `coord mcp`.
+- Five MCP resources registered: `coord://workspace` (with relay status),
+  `coord://participants`, `coord://vault/context`,
+  `coord://inbox`, `coord://conflicts` — all backed by daemon calls.
 - Six MCP tools registered: `team_publish`, `vault_search`, `vault_read`,
   `workspace_status`, `team_ask`, `team_reply` — all calling the daemon.
 - Workspace resolution from explicit params, local `state.sqlite` worktree
-  mapping, or `.teambridge/.active` fallback.
+  mapping, or `.coord/.active` fallback.
 - Integration tests spawning the server over stdio, verifying initialize
   handshake, resources/list, tools/list, and workspace-resolution errors.
 - MCP resource contracts include relay-backed workspace state with graceful
@@ -139,9 +139,9 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
   conflict endpoints (`GET /workspaces/:id/conflicts`,
   `POST /workspaces/:id/conflicts/:id/resolve`) with participant-level actor
   validation.
-- `teambridge ask|inbox|reply` CLI commands, live MCP ask/reply, and end-to-end
+- `coord ask|inbox|reply` CLI commands, live MCP ask/reply, and end-to-end
   local verification in `tests/integration/inbox-conflicts-flow.test.mjs`.
-- Conflict-marker parser, `conflicts.md` materialization, and `teambridge
+- Conflict-marker parser, `conflicts.md` materialization, and `coord
   conflicts` CLI command.
 - Daemon hook/delta context endpoints (`/context/hook`, `/context/deltas`) for
   IDE hooks and dashboard callers, covered by
@@ -149,10 +149,10 @@ All Phase 1 steps and the pass example in `todo.md` are checked off:
 - Mock-relay end-to-end verification for offline/reconnect retry and late
   joiner checkpoint bootstrap in
   `tests/integration/relay-reconnect-bootstrap.test.mjs`.
-- Claude Code hook auto-injection: `teambridge hook install` writes a
-  SessionStart hook into `.claude/settings.json` that runs `teambridge
+- Claude Code hook auto-injection: `coord hook install` writes a
+  SessionStart hook into `.claude/settings.json` that runs `coord
   context`, so an agent opening a worktree gets shared context with no
-  per-session flags. `teambridge context` emits smarter compact vault context
+  per-session flags. `coord context` emits smarter compact vault context
   (empty files dropped, per-file titles stripped, bullets deduped) plus a
   delta of what changed since a per-participant last-seen `seq`
   (`--peek`/`--deltas-only`/`--json`). Covered by

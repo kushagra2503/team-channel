@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { VaultCheckpoint } from '@teambridge/core';
+import type { VaultCheckpoint } from '@coord/core';
 import { CheckpointState, truncateHash } from './CheckpointState';
 import { formatRelativeTime } from '@/lib/relative-time';
 
@@ -11,7 +11,7 @@ function makeCheckpoint(overrides: Partial<VaultCheckpoint> = {}): VaultCheckpoi
     id: 'ckpt_001',
     workspaceId: 'ws_123',
     seq: 42,
-    storagePath: '/tmp/teambridge/.teambridge/checkpoints/ckpt_001.tar',
+    storagePath: '/tmp/coord/.coord/checkpoints/ckpt_001.tar',
     hash: 'abcdef1234567890fedcba',
     createdByDeviceId: 'device_ronish',
     createdAt: '2026-07-06T11:00:00.000Z',

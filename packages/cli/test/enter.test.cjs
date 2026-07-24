@@ -35,14 +35,14 @@ function captureStdout() {
 
 test('runEnter prints only the resolved worktree path to stdout', async () => {
   const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'tb-enter-')));
-  const worktreePath = path.join(repoRoot, '.teambridge', 'worktrees', 'auth', 'kushagra');
+  const worktreePath = path.join(repoRoot, '.coord', 'worktrees', 'auth', 'kushagra');
   mkdirSync(worktreePath, { recursive: true });
   writeWorktreePointer(repoRoot, {
     workspaceId: 'ws_1',
     sessionName: 'auth',
     displayName: 'Kushagra',
     path: worktreePath,
-    branch: 'teambridge/auth/kushagra',
+    branch: 'coord/auth/kushagra',
     baseCommit: 'abc123',
     role: 'joiner'
   });
@@ -76,13 +76,13 @@ test('runEnter throws a clear error when no pointer was ever recorded', async ()
 
 test('runEnter throws a clear error when the recorded worktree no longer exists on disk', async () => {
   const repoRoot = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'tb-enter-stale-')));
-  const worktreePath = path.join(repoRoot, '.teambridge', 'worktrees', 'auth', 'kushagra');
+  const worktreePath = path.join(repoRoot, '.coord', 'worktrees', 'auth', 'kushagra');
   writeWorktreePointer(repoRoot, {
     workspaceId: 'ws_1',
     sessionName: 'auth',
     displayName: 'Kushagra',
     path: worktreePath,
-    branch: 'teambridge/auth/kushagra',
+    branch: 'coord/auth/kushagra',
     baseCommit: 'abc123',
     role: 'joiner'
   });

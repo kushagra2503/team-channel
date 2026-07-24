@@ -1,4 +1,4 @@
-import type { Project, ProjectMember, VaultContext, Workspace, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Project, ProjectMember, VaultContext, Workspace, WorkspaceStatusResponse } from '@coord/core';
 
 type CacheShape = {
   workspaces: Workspace[];

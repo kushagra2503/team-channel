@@ -13,7 +13,7 @@ function parseWorktreePath(output) {
 }
 
 function readConfig(repoRoot) {
-  return JSON.parse(readFileSync(join(repoRoot, '.teambridge', 'config.json'), 'utf8'));
+  return JSON.parse(readFileSync(join(repoRoot, '.coord', 'config.json'), 'utf8'));
 }
 
 test('init relay-mode config + context deltas + hook install/uninstall', async (t) => {
@@ -29,7 +29,7 @@ test('init relay-mode config + context deltas + hook install/uninstall', async (
 
   const ctx = { repoRoot, baseUrl: daemon.baseUrl };
 
-  // --- Relay-mode configuration in `teambridge init` (Phase 2 Step 2) ---
+  // --- Relay-mode configuration in `coord init` (Phase 2 Step 2) ---
   const init = runCli(['init', '--first-name', 'Ctx', '--last-name', 'User', '--relay', 'supabase'], ctx);
   assert.equal(init.exitCode, 0, init.stderr || init.stdout);
   assert.match(init.stdout, /Relay mode: supabase/);
@@ -51,7 +51,7 @@ test('init relay-mode config + context deltas + hook install/uninstall', async (
   const worktree = parseWorktreePath(start.stdout);
   const wt = { ...ctx, cwd: worktree };
 
-  // --- `teambridge context` — smart compact context + deltas (Phase 3) ---
+  // --- `coord context` — smart compact context + deltas (Phase 3) ---
   // No events yet: context reports an empty delta.
   const emptyContext = runCli(['context'], wt);
   assert.equal(emptyContext.exitCode, 0, emptyContext.stderr || emptyContext.stdout);
@@ -107,7 +107,7 @@ test('init relay-mode config + context deltas + hook install/uninstall', async (
   assert.equal(daemonDeltas.body.data.deltas.length, 1);
   assert.equal(daemonDeltas.body.data.deltas[0].seq, 2);
 
-  // --- Claude Code hook auto-injection (`teambridge hook`) ---
+  // --- Claude Code hook auto-injection (`coord hook`) ---
   const settingsFile = join(worktree, '.claude', 'settings.json');
 
   const statusBefore = runCli(['hook', 'status'], wt);
@@ -119,7 +119,7 @@ test('init relay-mode config + context deltas + hook install/uninstall', async (
   assert.ok(existsSync(settingsFile), 'settings.json should exist after install');
   const settings = JSON.parse(readFileSync(settingsFile, 'utf8'));
   const commands = settings.hooks.SessionStart.flatMap((entry) => entry.hooks.map((h) => h.command));
-  assert.ok(commands.some((c) => c.includes('teambridge context')), 'hook command should run `teambridge context`');
+  assert.ok(commands.some((c) => c.includes('coord context')), 'hook command should run `coord context`');
 
   // Install is idempotent — a second install does not add a duplicate entry.
   runCli(['hook', 'install'], wt);

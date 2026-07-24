@@ -8,7 +8,7 @@ export async function runProjectCreate(argv: string[], options: ClientOptions): 
     throw new Error(profile.error.message);
   }
   if (!profile.data.profile) {
-    throw new Error('Run `teambridge init` first to set your name and avatar.');
+    throw new Error('Run `coord init` first to set your name and avatar.');
   }
 
   let name = parseFlag(argv, '--name') ?? argv[0];
@@ -50,7 +50,7 @@ export async function runProjectList(_argv: string[], options: ClientOptions): P
   }
 
   if (projects.data.projects.length === 0) {
-    console.log('No projects yet. Run `teambridge project create`.');
+    console.log('No projects yet. Run `coord project create`.');
     return;
   }
 

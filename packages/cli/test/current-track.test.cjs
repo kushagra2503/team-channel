@@ -27,7 +27,7 @@ function makeRepoOnBranch(branch) {
 }
 
 test('currentSessionNameFromBranch parses the session out of a participant branch', () => {
-  const dir = makeRepoOnBranch('teambridge/auth-redesign/kushagra');
+  const dir = makeRepoOnBranch('coord/auth-redesign/kushagra');
   try {
     assert.equal(currentSessionNameFromBranch(dir), 'auth-redesign');
   } finally {
@@ -35,7 +35,7 @@ test('currentSessionNameFromBranch parses the session out of a participant branc
   }
 });
 
-test('currentSessionNameFromBranch returns null on a non-teambridge branch', () => {
+test('currentSessionNameFromBranch returns null on a non-coord branch', () => {
   const dir = makeRepoOnBranch(null);
   try {
     assert.equal(currentSessionNameFromBranch(dir), null);
@@ -63,7 +63,7 @@ test('resolveCurrentTrack throws when not inside a track worktree', async () => 
 });
 
 test('resolveCurrentTrack resolves the workspace matching the branch session name', async () => {
-  const dir = makeRepoOnBranch('teambridge/auth-redesign/kushagra');
+  const dir = makeRepoOnBranch('coord/auth-redesign/kushagra');
   const original = daemonClient.listTracks;
   daemonClient.listTracks = async () => ({
     ok: true,
@@ -79,7 +79,7 @@ test('resolveCurrentTrack resolves the workspace matching the branch session nam
 });
 
 test('resolveCurrentTrack throws when the daemon does not know the branch-derived session', async () => {
-  const dir = makeRepoOnBranch('teambridge/ghost-session/kushagra');
+  const dir = makeRepoOnBranch('coord/ghost-session/kushagra');
   const original = daemonClient.listTracks;
   daemonClient.listTracks = async () => ({ ok: true, data: { tracks: [] } });
   try {

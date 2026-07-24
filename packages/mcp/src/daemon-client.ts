@@ -15,11 +15,11 @@ import type {
   WorkspaceEvent,
   WorkspaceListResponse,
   WorkspaceStatusResponse
-} from '@teambridge/core';
-import { buildDaemonUrl } from '@teambridge/core';
+} from '@coord/core';
+import { buildDaemonUrl } from '@coord/core';
 
-export { DEFAULT_DAEMON_BASE_URL, buildDaemonUrl } from '@teambridge/core';
-export type { DaemonClientOptions, DaemonQueryParams } from '@teambridge/core';
+export { DEFAULT_DAEMON_BASE_URL, buildDaemonUrl } from '@coord/core';
+export type { DaemonClientOptions, DaemonQueryParams } from '@coord/core';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 

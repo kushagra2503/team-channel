@@ -4,7 +4,7 @@ import { safeDisplayName } from './naming';
 
 /**
  * Local "last context I saw" marker, written next to the track's vault under
- * `.teambridge/workspaces/<sessionName>/`. `teambridge context` uses it to show
+ * `.coord/workspaces/<sessionName>/`. `coord context` uses it to show
  * only what changed since a participant last pulled context — the delta the
  * Claude Code SessionStart hook injects. It is a local read cursor, not shared
  * state, so it is intentionally kept out of `events.jsonl` and the relay.
@@ -18,7 +18,7 @@ export type ContextPointer = {
 };
 
 function pointerDir(repoRoot: string, sessionName: string): string {
-  return join(repoRoot, '.teambridge', 'workspaces', sessionName);
+  return join(repoRoot, '.coord', 'workspaces', sessionName);
 }
 
 function pointerPath(repoRoot: string, sessionName: string, displayName: string): string {

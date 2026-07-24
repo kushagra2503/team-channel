@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import type { InboxMessage, LocalUserProfile, Participant } from '@teambridge/core';
+import type { InboxMessage, LocalUserProfile, Participant } from '@coord/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +10,13 @@ import { formatRelativeTime } from '@/lib/relative-time';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName } from './participantDisplay';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 
 export type InboxPanelProps = {
   messages?: InboxMessage[];
   localUser?: LocalUserProfile | null;
   participants?: Participant[];
-  config?: TeambridgeClientConfig;
+  config?: CoordClientConfig;
   error?: string;
   avatarRev?: number;
   onReply?: (messageId: string, text: string) => Promise<void>;

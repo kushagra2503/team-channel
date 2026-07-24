@@ -1,9 +1,9 @@
 {
-  "name": "@teambridge/cli",
+  "name": "@coord/cli",
   "version": "0.0.0",
   "private": true,
   "bin": {
-    "teambridge": "dist/index.js"
+    "coord": "dist/index.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,7 +13,7 @@
     "test": "pnpm build && node --test test/*.test.cjs"
   },
   "dependencies": {
-    "@teambridge/core": "workspace:*",
-    "@teambridge/mcp": "workspace:*"
+    "@coord/core": "workspace:*",
+    "@coord/mcp": "workspace:*"
   }
 }

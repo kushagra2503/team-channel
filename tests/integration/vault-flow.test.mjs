@@ -128,7 +128,7 @@ test('start + join + publish + vault read/context/search + ws who/branches, all 
 
   const branches = runCli(['ws', 'branches', 'auth-redesign'], { ...ctx, cwd: ronishWorktree });
   assert.equal(branches.exitCode, 0, branches.stderr || branches.stdout);
-  assert.match(branches.stdout, /teambridge\/auth-redesign\/kushagra-a/);
-  assert.match(branches.stdout, /teambridge\/auth-redesign\/ronish/);
-  assert.match(branches.stdout, /teambridge\/auth-redesign\/nihal/);
+  assert.match(branches.stdout, /coord\/auth-redesign\/kushagra-a/);
+  assert.match(branches.stdout, /coord\/auth-redesign\/ronish/);
+  assert.match(branches.stdout, /coord\/auth-redesign\/nihal/);
 });

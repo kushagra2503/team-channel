@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTempGitRepo, getFreePort, parseCreatedProjectId, removeTempDir, runCli, startTestDaemon } from './helpers.mjs';
 
-const TEST_REMOTE = 'https://example.com/teambridge/relay-bootstrap.git';
+const TEST_REMOTE = 'https://example.com/coord/relay-bootstrap.git';
 
 async function readBody(request) {
   const chunks = [];
@@ -24,7 +24,7 @@ function queryValue(url, key, prefix = 'eq.') {
 function seedRemoteIdentity(repoRoot, relayUrl, email) {
   const userId = `remote_${email.replace(/[^a-z0-9]/gi, '_')}`;
   execFileSync('sqlite3', [
-    join(repoRoot, '.teambridge', 'state.sqlite'),
+    join(repoRoot, '.coord', 'state.sqlite'),
     `
       insert into remote_identity (
         relay_url, user_id, email, access_token, refresh_token, expires_at, updated_at
@@ -282,16 +282,16 @@ test('relay reconnect pushes queued events and late join bootstraps from checkpo
     SUPABASE_REST_URL: process.env.SUPABASE_REST_URL,
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS: process.env.TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS,
-    TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS: process.env.TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS
+    COORD_RELAY_SYNC_INTERVAL_MS: process.env.COORD_RELAY_SYNC_INTERVAL_MS,
+    COORD_CHECKPOINT_INTERVAL_EVENTS: process.env.COORD_CHECKPOINT_INTERVAL_EVENTS
   };
   Object.assign(process.env, {
     SUPABASE_URL: mock.url,
     SUPABASE_REST_URL: `${mock.url}/rest/v1`,
     SUPABASE_ANON_KEY: 'anon-test-key',
     SUPABASE_SERVICE_ROLE_KEY: 'service-test-key',
-    TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS: '60000',
-    TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS: '1'
+    COORD_RELAY_SYNC_INTERVAL_MS: '60000',
+    COORD_CHECKPOINT_INTERVAL_EVENTS: '1'
   });
   t.after(async () => {
     for (const [key, value] of Object.entries(previousEnv)) {
@@ -302,7 +302,7 @@ test('relay reconnect pushes queued events and late join bootstraps from checkpo
   });
 
   const repoRoot = await createTempGitRepo();
-  const cloneRoot = await mkdtemp(join(tmpdir(), 'teambridge-it-clone-'));
+  const cloneRoot = await mkdtemp(join(tmpdir(), 'coord-it-clone-'));
   t.after(async () => {
     await removeTempDir(repoRoot);
     await rm(cloneRoot, { recursive: true, force: true });
@@ -311,8 +311,8 @@ test('relay reconnect pushes queued events and late join bootstraps from checkpo
   execFileSync('git', ['remote', 'add', 'origin', TEST_REMOTE], { cwd: repoRoot });
   execFileSync('git', ['clone', repoRoot, cloneRoot], { stdio: 'ignore' });
   execFileSync('git', ['remote', 'set-url', 'origin', TEST_REMOTE], { cwd: cloneRoot });
-  execFileSync('git', ['config', 'user.email', 'teambridge-test@local'], { cwd: cloneRoot });
-  execFileSync('git', ['config', 'user.name', 'Teambridge Test'], { cwd: cloneRoot });
+  execFileSync('git', ['config', 'user.email', 'coord-test@local'], { cwd: cloneRoot });
+  execFileSync('git', ['config', 'user.name', 'Coord Test'], { cwd: cloneRoot });
 
   const daemon = await startTestDaemon(repoRoot);
   const cloneDaemon = await startTestDaemon(cloneRoot);
@@ -362,7 +362,7 @@ test('relay reconnect pushes queued events and late join bootstraps from checkpo
   });
 
   const bootstrappedDecision = await readFile(
-    join(cloneRoot, '.teambridge', 'workspaces', 'relay-bootstrap', 'vault', 'decisions.md'),
+    join(cloneRoot, '.coord', 'workspaces', 'relay-bootstrap', 'vault', 'decisions.md'),
     'utf8'
   );
   assert.match(bootstrappedDecision, /Queued while relay is down/);

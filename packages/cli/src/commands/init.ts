@@ -1,4 +1,4 @@
-import type { RelayMode } from '@teambridge/core';
+import type { RelayMode } from '@coord/core';
 import type { ClientOptions } from '../daemon-client';
 import { getUserProfile, initConfig, saveUserProfile } from '../daemon-client';
 import { ask, parseFlag } from '../prompt';
@@ -46,7 +46,7 @@ export async function runInit(argv: string[], options: ClientOptions): Promise<v
 
   const existing = await getUserProfile(options);
   if (existing.ok && existing.data.profile) {
-    console.log(`Teambridge already initialized for ${existing.data.profile.displayName}`);
+    console.log(`Coord already initialized for ${existing.data.profile.displayName}`);
     console.log(`Profile: ${existing.data.profile.displayName}`);
     console.log(`Relay mode: ${effectiveRelayMode}`);
     return;
@@ -82,8 +82,8 @@ export async function runInit(argv: string[], options: ClientOptions): Promise<v
     throw new Error(saved.error.message);
   }
 
-  console.log(`Initialized Teambridge for ${saved.data.profile.displayName}`);
-  console.log(`Config: ${options.repoRoot}/.teambridge/config.json`);
+  console.log(`Initialized Coord for ${saved.data.profile.displayName}`);
+  console.log(`Config: ${options.repoRoot}/.coord/config.json`);
   console.log(`Profile: ${saved.data.path}`);
   console.log(`Relay mode: ${effectiveRelayMode}`);
   console.log('Flower avatar generated — open the dashboard to see your project roster.');

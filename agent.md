@@ -1,27 +1,27 @@
-# Condominium Agent Guide
+# Coord Agent Guide
 
-This repository is **Condominium** — a shared workspace for teams building with AI coding agents.
+This repository is **Coord** — a shared workspace for teams building with AI coding agents.
 
-Condominium lets multiple developers work on the same task with separate branches while sharing context through a vault, dashboard, and (eventually) agent tools.
+Coord lets multiple developers work on the same task with separate branches while sharing context through a vault, dashboard, and (eventually) agent tools.
 
 For team execution details, keep and use `report/team-implementation-plan.md`. This file is the product vision; the report file is the build plan for Nihal, Kushagra, and Ronish.
 
 ## Product Vision
 
-Condominium is for teams where each developer has their own AI agent, but everyone needs the same picture of what's going on.
+Coord is for teams where each developer has their own AI agent, but everyone needs the same picture of what's going on.
 
 Example (target CLI — **not shipped yet**; today use `pnpm daemon`, `pnpm seed`, and `pnpm dashboard`):
 
 ```bash
-teambridge start billing-v2 main
-teambridge join billing-v2
-cd "$(teambridge enter billing-v2)" && claude
+coord start billing-v2 main
+coord join billing-v2
+cd "$(coord enter billing-v2)" && claude
 ```
 
 Each teammate gets:
 
 - A separate git worktree and branch from the same recorded `base_commit`
-- A local materialized **track vault** at `.teambridge/workspaces/{session_name}/vault/`
+- A local materialized **track vault** at `.coord/workspaces/{session_name}/vault/`
 - Shared context updates from teammate events
 - MCP tools for agents to read, publish, ask, and inspect workspace state (planned)
 - Daemon HTTP API + **dashboard** for humans; CLI visibility (planned)
@@ -71,22 +71,22 @@ Events notify everyone, then materialize locally, then all agents can use the up
 Primary user-facing commands (north-star UX):
 
 ```bash
-teambridge init
-teambridge start <session_name> [base_ref]
-teambridge join <session_name>
-teambridge enter <session_name>
-teambridge status
-teambridge ws show <session_name>
-teambridge ws who <session_name>
-teambridge ws branches <session_name>
-teambridge publish <target_file> <text>
-teambridge ask <person> "question"
-teambridge inbox
-teambridge reply <message_id> "answer"
-teambridge vault search <query>
-teambridge vault read <path>
-teambridge vault debug-snapshot
-teambridge dashboard
+coord init
+coord start <session_name> [base_ref]
+coord join <session_name>
+coord enter <session_name>
+coord status
+coord ws show <session_name>
+coord ws who <session_name>
+coord ws branches <session_name>
+coord publish <target_file> <text>
+coord ask <person> "question"
+coord inbox
+coord reply <message_id> "answer"
+coord vault search <query>
+coord vault read <path>
+coord vault debug-snapshot
+coord dashboard
 ```
 
 ### Available today (local dogfood)
@@ -107,12 +107,12 @@ For local simulation and dogfooding, `start` and `join` may accept a display-nam
 
 ```text
 Developer machine
-  -> teambridge daemon (:9473)
+  -> coord daemon (:9473)
      -> local HTTP API (projects, tracks/workspaces, vault, avatars)
      -> HTTP MCP server :9474  (planned)
      -> workspace vault materializer
      -> checkpoint builder / relay client  (Phase 2)
-     -> local SQLite state (.teambridge/state.sqlite)
+     -> local SQLite state (.coord/state.sqlite)
   -> CLI  (planned)
   -> dashboard (React + Vite — shipped)
   -> agent hooks  (planned)
@@ -132,12 +132,12 @@ Supabase
 
 ## Track vault
 
-There is only one Teambridge vault type in the first product: the **track vault** (still stored under `workspaces/` on disk).
+There is only one Coord vault type in the first product: the **track vault** (still stored under `workspaces/` on disk).
 
 Phase 1 keeps the vault flat and easy to change:
 
 ```text
-.teambridge/workspaces/{session_name}/vault/
+.coord/workspaces/{session_name}/vault/
 ├── README.md
 ├── decisions.md
 ├── observations.md
@@ -163,7 +163,7 @@ Persisted via `POST /workspaces/:trackId/vault/annotate`. Not stored in `events.
 ## Event Flow
 
 ```text
-agent/team_publish or teambridge publish
+agent/team_publish or coord publish
   -> local daemon
   -> local events.jsonl
   -> local vault materialization
@@ -177,10 +177,10 @@ agent/team_publish or teambridge publish
 User-published context uses one event type, `publish`. The vault-relative `targetFile` decides where the markdown projection goes. Examples:
 
 ```bash
-teambridge publish decisions.md "Backend is the source of truth for invoice state."
-teambridge publish observations.md "Frontend reads derived totals from the invoice API."
-teambridge publish blockers.md "Need refresh-token behavior decided before UI retry logic."
-teambridge publish test-results.md "pnpm test passed for billing package."
+coord publish decisions.md "Backend is the source of truth for invoice state."
+coord publish observations.md "Frontend reads derived totals from the invoice API."
+coord publish blockers.md "Need refresh-token behavior decided before UI retry logic."
+coord publish test-results.md "pnpm test passed for billing package."
 ```
 
 Phase 1 uses these simple target files:
@@ -213,7 +213,7 @@ Supabase stores latest vault checkpoints for fast bootstrap.
 New joiner flow:
 
 ```text
-teambridge join billing-v2
+coord join billing-v2
   -> fetch workspace manifest
   -> fetch latest checkpoint
   -> fetch events after checkpoint `seq`

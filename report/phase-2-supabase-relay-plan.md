@@ -12,15 +12,15 @@ Implemented:
 - `tc_` tables, indexes, RLS helpers/policies, checkpoint storage bucket, and Realtime publication.
 - `tc_append_event` RPC for canonical per-workspace `seq` assignment and `dedupeKey` dedupe.
 - Daemon Supabase relay client using REST/RPC.
-- Minimal `teambridge login` auth flow with local daemon identity storage.
+- Minimal `coord login` auth flow with local daemon identity storage.
 - Device registration in `tc_devices`.
 - Project/session/participant mirroring to Supabase when logged in.
-- Remote publish path from `teambridge publish` through daemon to Supabase.
+- Remote publish path from `coord publish` through daemon to Supabase.
 - Local `pending_remote_events` queue for failed remote appends.
-- Manual `teambridge sync` and autonomous polling via `TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS`.
+- Manual `coord sync` and autonomous polling via `COORD_RELAY_SYNC_INTERVAL_MS`.
 - Pull-after-last-remote-seq and local vault rematerialization from canonical remote events.
-- Remote session discovery through `teambridge sessions` / `teambridge list`.
-- `teambridge join <session>` can import a remote workspace and then create the local Git worktree.
+- Remote session discovery through `coord sessions` / `coord list`.
+- `coord join <session>` can import a remote workspace and then create the local Git worktree.
 - Dashboard calls daemon `/relay/sessions` and merges remote relay sessions with local sessions.
 - Supabase Realtime websocket subscription in the daemon, with polling/manual sync kept as fallback.
 - Checkpoint upload/download using `tc_workspace_vault_checkpoints` and `teambridge-checkpoints`.
@@ -34,7 +34,7 @@ Verified:
 - `teambridge-checkpoints` storage bucket is reachable.
 - `tc_append_event` assigns `seq = 1, 2...` and dedupes duplicate `dedupeKey` values.
 - Live CLI/daemon relay smoke passed: login, start, sessions/list, sync, status relay.
-- Live `teambridge publish` reached Supabase with canonical `seq = 1` and the expected payload.
+- Live `coord publish` reached Supabase with canonical `seq = 1` and the expected payload.
 - Live two-user verification with `nihal@test.com` and `kush@test.com` passed: sessions, join, checkpoint bootstrap, realtime receive, presence, and remote events.
 - Local verification still passes: `pnpm build`, `pnpm test`, `pnpm test:integration`, dashboard test/build.
 
@@ -50,14 +50,14 @@ This plan started as the Phase 2 backend blueprint. The migration has now been a
 Current Phase 1 command surface is:
 
 ```bash
-teambridge start <session_name> [base_ref]
-teambridge join <session_name> --as <display_name>
-teambridge enter <session_name>
-teambridge publish <target_file> <text>
-teambridge vault read|search|context
+coord start <session_name> [base_ref]
+coord join <session_name> --as <display_name>
+coord enter <session_name>
+coord publish <target_file> <text>
+coord vault read|search|context
 ```
 
-Do not bring back `teambridge track start` / `teambridge track join` as user-facing commands. Internally the dashboard and database may still use the word "track", but CLI users should think in sessions.
+Do not bring back `coord track start` / `coord track join` as user-facing commands. Internally the dashboard and database may still use the word "track", but CLI users should think in sessions.
 
 For auth: Phase 2 needs minimal Supabase Auth so RLS can protect relay data. It does **not** need polished auth UX yet. Defer invites, orgs, GitHub OAuth polish, dashboard login UI, keychain storage, and role management until after cross-device sync works.
 
@@ -119,12 +119,12 @@ Use Supabase Auth for real users, but keep it minimal in Phase 2.
 Recommended Phase 2 dev flow:
 
 ```bash
-teambridge login --email <email> --password <password>
-teambridge init
-teambridge start billing-refactor main
-teambridge sessions
-teambridge join billing-refactor
-teambridge sync
+coord login --email <email> --password <password>
+coord init
+coord start billing-refactor main
+coord sessions
+coord join billing-refactor
+coord sync
 ```
 
 Daemon auth rules:
@@ -146,10 +146,10 @@ SUPABASE_REST_URL=
 SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 SUPABASE_JWT_SECRET=
-TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS=5000
-TEAMBRIDGE_RELAY_PRESENCE_INTERVAL_MS=15000
-TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS=50
-TEAMBRIDGE_CHECKPOINT_LEASE_MS=60000
+COORD_RELAY_SYNC_INTERVAL_MS=5000
+COORD_RELAY_PRESENCE_INTERVAL_MS=15000
+COORD_CHECKPOINT_INTERVAL_EVENTS=50
+COORD_CHECKPOINT_LEASE_MS=60000
 ```
 
 For the final app, prefer publishable/anon key for user auth and keep `SUPABASE_SERVICE_ROLE_KEY` restricted to trusted local daemon or server-side relay operations only.
@@ -158,7 +158,7 @@ For the final app, prefer publishable/anon key for user auth and keep `SUPABASE_
 
 Use `public` for exposed tables and enable RLS on every table. Put helper functions that need elevated privileges in a private schema.
 
-All Teambridge-owned Supabase tables use the `tc_` prefix. This is the SQL-safe version of the "TC_" naming convention: Postgres folds unquoted identifiers to lowercase, so writing literal uppercase `"TC_"` would force every query to quote table names forever.
+All Coord-owned Supabase tables use the `tc_` prefix. This is the SQL-safe version of the "TC_" naming convention: Postgres folds unquoted identifiers to lowercase, so writing literal uppercase `"TC_"` would force every query to quote table names forever.
 
 ```sql
 create schema if not exists teambridge_private;
@@ -402,7 +402,7 @@ create index tc_checkpoint_leases_expires_idx
 
 ### Inbox Messages
 
-Used later by `teambridge ask`, `teambridge inbox`, `teambridge reply`, and MCP tools.
+Used later by `coord ask`, `coord inbox`, `coord reply`, and MCP tools.
 
 ```sql
 create table public.tc_inbox_messages (
@@ -812,7 +812,7 @@ For production, move tokens to OS keychain later. For Phase 2 dev, local file/SQ
 Online happy path:
 
 ```text
-teambridge publish decisions.md "..."
+coord publish decisions.md "..."
   -> CLI calls local daemon
   -> daemon validates targetFile/payload
   -> daemon creates dedupeKey
@@ -826,7 +826,7 @@ teambridge publish decisions.md "..."
 Offline path:
 
 ```text
-teambridge publish blockers.md "..."
+coord publish blockers.md "..."
   -> daemon cannot reach relay
   -> daemon writes pending_remote_events row
   -> daemon may optimistically materialize pending publish locally
@@ -902,7 +902,7 @@ Storage object must be private. Members get signed URLs through daemon/relay, or
 When Ronish joins an existing relay workspace:
 
 ```text
-teambridge join billing-refactor
+coord join billing-refactor
   -> daemon authenticates user
   -> fetch workspace manifest + participants
   -> create participant row if needed

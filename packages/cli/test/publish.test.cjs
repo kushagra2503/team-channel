@@ -20,7 +20,7 @@ function makeTrackWorktree() {
   writeFileSync(path.join(dir, 'README.md'), 'hi\n');
   git(['add', 'README.md'], dir);
   git(['commit', '-m', 'init'], dir);
-  git(['checkout', '-b', 'teambridge/auth-redesign/kushagra'], dir);
+  git(['checkout', '-b', 'coord/auth-redesign/kushagra'], dir);
   return dir;
 }
 

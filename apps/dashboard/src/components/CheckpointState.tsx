@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import type { VaultCheckpoint } from '@teambridge/core';
+import type { VaultCheckpoint } from '@coord/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/relative-time';
