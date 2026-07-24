@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Project, RelayStatusResponse, Workspace } from '@teambridge/core';
+import type { Project, RelayStatusResponse, Workspace } from '@coord/core';
 
 export type HeaderVariant = 'projects' | 'dashboard';
 

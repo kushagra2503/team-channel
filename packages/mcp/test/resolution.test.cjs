@@ -33,11 +33,11 @@ test('explicit sessionName returns with that session name', async () => {
   assert.equal(result.workspaceId, undefined);
 });
 
-test('.teambridge/.active containing "billing-refactor\\n" resolves to that session name', async () => {
+test('.coord/.active containing "billing-refactor\\n" resolves to that session name', async () => {
   const dir = makeTempRepo();
   try {
-    mkdirSync(join(dir, '.teambridge'), { recursive: true });
-    writeFileSync(join(dir, '.teambridge', '.active'), 'billing-refactor\n');
+    mkdirSync(join(dir, '.coord'), { recursive: true });
+    writeFileSync(join(dir, '.coord', '.active'), 'billing-refactor\n');
     const result = await resolveWorkspaceContext({ repoRoot: dir });
     assert.equal(result.sessionName, 'billing-refactor');
     assert.equal(result.workspaceId, undefined);
@@ -47,11 +47,11 @@ test('.teambridge/.active containing "billing-refactor\\n" resolves to that sess
   }
 });
 
-test('.teambridge/.active that is empty/whitespace falls through to error', async () => {
+test('.coord/.active that is empty/whitespace falls through to error', async () => {
   const dir = makeTempRepo();
   try {
-    mkdirSync(join(dir, '.teambridge'), { recursive: true });
-    writeFileSync(join(dir, '.teambridge', '.active'), '   \n\t\n');
+    mkdirSync(join(dir, '.coord'), { recursive: true });
+    writeFileSync(join(dir, '.coord', '.active'), '   \n\t\n');
     await assert.rejects(
       () => resolveWorkspaceContext({ repoRoot: dir }),
       /Unable to resolve workspace/
@@ -61,7 +61,7 @@ test('.teambridge/.active that is empty/whitespace falls through to error', asyn
   }
 });
 
-test('no params and no .teambridge/.active file throws an error', async () => {
+test('no params and no .coord/.active file throws an error', async () => {
   const dir = makeTempRepo();
   try {
     await assert.rejects(
@@ -73,11 +73,11 @@ test('no params and no .teambridge/.active file throws an error', async () => {
   }
 });
 
-test('.teambridge/.active with trailing newline is trimmed correctly', async () => {
+test('.coord/.active with trailing newline is trimmed correctly', async () => {
   const dir = makeTempRepo();
   try {
-    mkdirSync(join(dir, '.teambridge'), { recursive: true });
-    writeFileSync(join(dir, '.teambridge', '.active'), 'feature-x\n\n');
+    mkdirSync(join(dir, '.coord'), { recursive: true });
+    writeFileSync(join(dir, '.coord', '.active'), 'feature-x\n\n');
     const result = await resolveWorkspaceContext({ repoRoot: dir });
     assert.equal(result.sessionName, 'feature-x');
   } finally {

@@ -1,12 +1,12 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Conflict, PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@teambridge/core';
+import type { Conflict, PhaseOneVaultFile, PublishEventPayload, VaultContext, VaultFile, VaultItemAnnotation, VaultItemMeta, WorkspaceEvent } from '@coord/core';
 import {
   extractVaultAnnotations,
   parseVaultListLine,
   reapplyVaultAnnotations,
   updateVaultFileItemMeta
-} from '@teambridge/core';
+} from '@coord/core';
 
 export const PHASE_ONE_VAULT_FILES: PhaseOneVaultFile[] = [
   'README.md',
@@ -19,7 +19,7 @@ export const PHASE_ONE_VAULT_FILES: PhaseOneVaultFile[] = [
 ];
 
 const INITIAL_CONTENT: Record<PhaseOneVaultFile, string> = {
-  'README.md': '# Teambridge Vault\n\nThis flat vault is generated from `events.jsonl`.\n',
+  'README.md': '# Coord Vault\n\nThis flat vault is generated from `events.jsonl`.\n',
   'decisions.md': '# Decisions\n',
   'observations.md': '# Observations\n',
   'blockers.md': '# Blockers\n',
@@ -75,7 +75,7 @@ export async function materializePublishEvent(vaultDir: string, event: Workspace
     throw new Error('README.md is not a publish target');
   }
   if (targetFile === 'conflicts.md') {
-    throw new Error('conflicts.md is managed by Teambridge and is not a publish target');
+    throw new Error('conflicts.md is managed by Coord and is not a publish target');
   }
 
   await initializePhaseOneVault(vaultDir);

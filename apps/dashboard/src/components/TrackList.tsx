@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { motion } from 'motion/react';
-import type { Workspace } from '@teambridge/core';
+import type { Workspace } from '@coord/core';
 import { IconDeviceDesktop } from '@tabler/icons-react';
 import {
   SidebarGroup,

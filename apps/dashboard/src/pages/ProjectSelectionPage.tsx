@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Project } from '@teambridge/core';
-import { listKnownRepos, listProjects, getDefaultClientConfig, DEFAULT_DAEMON_BASE_URL } from '@/api/teambridgeClient';
+import type { Project } from '@coord/core';
+import { listKnownRepos, listProjects, getDefaultClientConfig, DEFAULT_DAEMON_BASE_URL } from '@/api/coordClient';
 import { useAppShell } from '@/components/app-shell-context';
 import { createCache } from '@/lib/cache';
 
@@ -64,7 +64,7 @@ export function ProjectSelectionPage() {
         setError(undefined);
       } catch (err) {
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Unable to reach local Teambridge daemon.');
+          setError(err instanceof Error ? err.message : 'Unable to reach local Coord daemon.');
         }
       }
     };
@@ -108,7 +108,7 @@ export function ProjectSelectionPage() {
           <div className="rounded-lg border border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
             No projects found for the current repo yet.
             <br />
-            <code className="mt-2 block text-xs text-muted-foreground/60">Run teambridge init and project create in a repo.</code>
+            <code className="mt-2 block text-xs text-muted-foreground/60">Run coord init and project create in a repo.</code>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">

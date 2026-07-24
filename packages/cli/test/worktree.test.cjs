@@ -16,7 +16,7 @@ test('safeDisplayName matches the daemon rules byte-for-byte', () => {
 });
 
 test('branchForParticipant uses the raw session name + safe display name', () => {
-  assert.equal(naming.branchForParticipant('billing-refactor', 'Kushagra'), 'teambridge/billing-refactor/kushagra');
+  assert.equal(naming.branchForParticipant('billing-refactor', 'Kushagra'), 'coord/billing-refactor/kushagra');
 });
 
 test('assertValidSessionName rejects unsafe names and accepts good ones', () => {
@@ -48,7 +48,7 @@ const FAIL = { stdout: '', stderr: '', status: 1 };
 test('prepareParticipantWorktree creates a new branch worktree on the happy path', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-happy-does-not-exist');
   const git = fakeGit([
-    { match: (a) => a[0] === 'check-ignore', result: OK }, // .teambridge ignored
+    { match: (a) => a[0] === 'check-ignore', result: OK }, // .coord ignored
     { match: (a) => a[0] === 'worktree' && a[1] === 'list', result: OK }, // none registered
     { match: (a) => a[0] === 'rev-parse', result: OK }, // base commit present
     { match: (a) => a[0] === 'show-ref', result: FAIL }, // branch does not exist
@@ -62,7 +62,7 @@ test('prepareParticipantWorktree creates a new branch worktree on the happy path
 
   assert.equal(result.created, true);
   assert.equal(result.reused, false);
-  assert.equal(result.branch, 'teambridge/auth/kushagra');
+  assert.equal(result.branch, 'coord/auth/kushagra');
   const addCall = git.calls.find((a) => a[0] === 'worktree' && a[1] === 'add');
   assert.ok(addCall, 'expected git worktree add to be called');
   assert.ok(addCall.includes('-b'), 'expected a new branch to be created');
@@ -87,7 +87,7 @@ test('prepareParticipantWorktree fails clearly when the base commit is missing l
 test('prepareParticipantWorktree is idempotent: reuses an already-registered worktree', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-reuse');
   const expectedPath = naming.worktreePathFor(repoRoot, 'auth', 'Kushagra');
-  const porcelain = `worktree ${expectedPath}\nHEAD abc123\nbranch refs/heads/teambridge/auth/kushagra\n`;
+  const porcelain = `worktree ${expectedPath}\nHEAD abc123\nbranch refs/heads/coord/auth/kushagra\n`;
   const git = fakeGit([
     { match: (a) => a[0] === 'check-ignore', result: OK },
     { match: (a) => a[0] === 'worktree' && a[1] === 'list', result: { stdout: porcelain, stderr: '', status: 0 } }
@@ -105,7 +105,7 @@ test('prepareParticipantWorktree is idempotent: reuses an already-registered wor
 
 test('prepareParticipantWorktree refuses when the branch is checked out elsewhere', () => {
   const repoRoot = path.join(os.tmpdir(), 'tb-wt-branch-elsewhere');
-  const porcelain = `worktree /some/other/path\nHEAD abc123\nbranch refs/heads/teambridge/auth/kushagra\n`;
+  const porcelain = `worktree /some/other/path\nHEAD abc123\nbranch refs/heads/coord/auth/kushagra\n`;
   const git = fakeGit([
     { match: (a) => a[0] === 'check-ignore', result: OK },
     { match: (a) => a[0] === 'worktree' && a[1] === 'list', result: { stdout: porcelain, stderr: '', status: 0 } }

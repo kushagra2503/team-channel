@@ -1,4 +1,4 @@
-import type { Workspace } from '@teambridge/core';
+import type { Workspace } from '@coord/core';
 
 type WorkspaceName = Pick<Workspace, 'sessionName'>;
 

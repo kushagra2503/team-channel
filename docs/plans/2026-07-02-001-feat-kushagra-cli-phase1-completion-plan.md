@@ -11,24 +11,24 @@ deepened: null
 
 ## Summary
 
-`todo.md` Steps 4/6/8 still list unchecked Kushagra CLI commands: `start`, `enter`, `publish`, `vault read/context/search`, and `ws show/who/branches`. Research into `packages/daemon` and `packages/core/src/contracts` shows the daemon already exposes working endpoints for publish, vault read, vault context, and workspace status (including `participant.branch`) — most of this is thin CLI plumbing. The one exception is `vault search`, which has no backing endpoint anywhere and needs a real indexed-search subsystem. Along the way, research surfaced a load-bearing gap: the CLI's repo-root resolution breaks when run from inside a Teambridge-managed worktree, which every command in this plan except `start` is designed to run from.
+`todo.md` Steps 4/6/8 still list unchecked Kushagra CLI commands: `start`, `enter`, `publish`, `vault read/context/search`, and `ws show/who/branches`. Research into `packages/daemon` and `packages/core/src/contracts` shows the daemon already exposes working endpoints for publish, vault read, vault context, and workspace status (including `participant.branch`) — most of this is thin CLI plumbing. The one exception is `vault search`, which has no backing endpoint anywhere and needs a real indexed-search subsystem. Along the way, research surfaced a load-bearing gap: the CLI's repo-root resolution breaks when run from inside a Coord-managed worktree, which every command in this plan except `start` is designed to run from.
 
 ## Problem Frame
 
 Kushagra's Phase 1 CLI scope is otherwise complete (`init`, `status`, `project create/list`, `track start`, `track join --as`). The remaining commands are needed to prove the Phase 1 pass example end-to-end: a participant starts or joins a track, publishes into the flat vault, and reads/searches it back — all from inside their own git worktree. Two structural gaps block that flow today:
 
-1. `packages/cli/src/repo.ts#resolveRepoRoot` shells out to `git rev-parse --show-toplevel`, which returns a **linked worktree's own path** when invoked from inside one — not the main repo root where `.teambridge/state.sqlite` and the vault actually live. Every command meant to run post-`enter` (`publish`, `vault read/context/search`) would silently target the wrong (nonexistent) workspace scope.
+1. `packages/cli/src/repo.ts#resolveRepoRoot` shells out to `git rev-parse --show-toplevel`, which returns a **linked worktree's own path** when invoked from inside one — not the main repo root where `.coord/state.sqlite` and the vault actually live. Every command meant to run post-`enter` (`publish`, `vault read/context/search`) would silently target the wrong (nonexistent) workspace scope.
 2. `vault search` has no daemon route, no query schema, and no storage. `PhaseOneVaultFile` content is flat markdown files with no full-text index today.
 
 ## Requirements
 
-- R1. `teambridge start <session_name> [base_ref]` performs the same daemon registration as `track start` and additionally creates a real, isolated git worktree + branch for the starter — symmetric with `track join`.
-- R2. `teambridge enter <session_name>` prints the absolute worktree path for the current user's participation in that track, suitable for `cd "$(teambridge enter NAME)"`.
-- R3. `teambridge publish <target_file> <text>` appends a publish event to the track the current working directory belongs to.
-- R4. `teambridge vault read <path>` and `teambridge vault context` return the corresponding vault content for the current track.
-- R5. `teambridge vault search <query>` returns ranked matches from a real index, not a full-file scan, and the index stays consistent through `vault rebuild`.
-- R6. `teambridge ws show|who|branches <session_name>` print workspace summary, participant list, and participant branches respectively.
-- R7. CLI commands invoked from inside a Teambridge-managed worktree resolve to the correct (main) repo root, not the worktree's own toplevel.
+- R1. `coord start <session_name> [base_ref]` performs the same daemon registration as `track start` and additionally creates a real, isolated git worktree + branch for the starter — symmetric with `track join`.
+- R2. `coord enter <session_name>` prints the absolute worktree path for the current user's participation in that track, suitable for `cd "$(coord enter NAME)"`.
+- R3. `coord publish <target_file> <text>` appends a publish event to the track the current working directory belongs to.
+- R4. `coord vault read <path>` and `coord vault context` return the corresponding vault content for the current track.
+- R5. `coord vault search <query>` returns ranked matches from a real index, not a full-file scan, and the index stays consistent through `vault rebuild`.
+- R6. `coord ws show|who|branches <session_name>` print workspace summary, participant list, and participant branches respectively.
+- R7. CLI commands invoked from inside a Coord-managed worktree resolve to the correct (main) repo root, not the worktree's own toplevel.
 - R8. `todo.md` reflects every checkbox this plan closes.
 
 ## Key Technical Decisions
@@ -36,14 +36,14 @@ Kushagra's Phase 1 CLI scope is otherwise complete (`init`, `status`, `project c
 - **KTD1 — Vault search index storage: SQLite FTS5, not a hand-rolled inverted index.** The daemon already shells out to the `sqlite3` CLI for all state (`runSql`/`querySql`/`sqlValue` in `packages/daemon/src/index.ts`). FTS5 gives tokenizing, indexing, and `bm25`-style ranking for the cost of one virtual-table `CREATE VIRTUAL TABLE ... USING fts5(...)` and standard `INSERT`/`DELETE`/`MATCH` statements through those same helpers — no new SQLite driver, no hand-rolled tokenizer or TF scorer to maintain and rebuild-test. (Confirmed with user.)
 - **KTD2 — `start` creates a real worktree for the starter, matching `join`'s symmetry.** Today `track start` only registers the track with the daemon; the starter has no worktree of their own (only `join` calls `prepareJoinerWorktree`). `start` is the todo.md north-star alias described as the "full worktree+branch flow" — it should not be a behavior-identical rename. (Confirmed with user.)
 - **KTD3 — Repo-root resolution must detect linked worktrees.** `git rev-parse --show-toplevel` returns the immediate worktree's path, not the main repo's. `enter`, `publish`, and `vault *` are only meaningful when run from inside a participant's worktree (per the Phase 1 pass example), so `resolveRepoRoot` needs to detect a linked worktree and resolve back to the main repo root before sending `repoRoot` to the daemon. This is a prerequisite for R2-R6, not an optional hardening pass.
-- **KTD4 — Current-track resolution comes from the git branch name, not a new flag.** `publish` and `vault *` have no `<session_name>` argument in their todo.md signatures — they operate on "the current track." Branches created by `start`/`join` already encode the session (`teambridge/<session>/<safeName>`, per `lib/naming.ts#branchForParticipant`). Reading `git rev-parse --abbrev-ref HEAD` from the literal invocation cwd (before KTD3's repo-root normalization) and parsing that pattern avoids inventing a second workspace-identity mechanism.
+- **KTD4 — Current-track resolution comes from the git branch name, not a new flag.** `publish` and `vault *` have no `<session_name>` argument in their todo.md signatures — they operate on "the current track." Branches created by `start`/`join` already encode the session (`coord/<session>/<safeName>`, per `lib/naming.ts#branchForParticipant`). Reading `git rev-parse --abbrev-ref HEAD` from the literal invocation cwd (before KTD3's repo-root normalization) and parsing that pattern avoids inventing a second workspace-identity mechanism.
 
 ## Scope Boundaries
 
 **In scope:** `start`, `enter`, `publish`, `vault read/context/search`, `ws show/who/branches`, the repo-root worktree-detection fix, and the FTS5 search index (daemon + vault package).
 
 **Deferred to Follow-Up Work:**
-- `teambridge ask`/`inbox`/`reply`, MCP HTTP server, Claude Code hook auto-injection (Phase 3 scope).
+- `coord ask`/`inbox`/`reply`, MCP HTTP server, Claude Code hook auto-injection (Phase 3 scope).
 - Supabase relay, cross-device sync, checkpoint upload/download (Phase 2 scope).
 - Daemon background-service / auto-start packaging (noted in todo.md Step 4 as separate infra work).
 - Ranking beyond FTS5's built-in `bm25`-style ordering (e.g., recency weighting, per-file boosting) — out of scope unless FTS5's default ordering proves inadequate during implementation.
@@ -58,7 +58,7 @@ Kushagra's Phase 1 CLI scope is otherwise complete (`init`, `status`, `project c
 
 ```mermaid
 sequenceDiagram
-    participant CLI as teambridge publish/vault search
+    participant CLI as coord publish/vault search
     participant Daemon
     participant Vault as packages/vault
     participant DB as state.sqlite (FTS5)
@@ -100,7 +100,7 @@ flowchart LR
 
 ### U1. Fix repoRoot resolution for in-worktree CLI invocations
 
-**Goal:** `resolveRepoRoot()` returns the main repo root even when invoked from inside a Teambridge-managed linked worktree, since `enter`, `publish`, and `vault *` are designed to run from there.
+**Goal:** `resolveRepoRoot()` returns the main repo root even when invoked from inside a Coord-managed linked worktree, since `enter`, `publish`, and `vault *` are designed to run from there.
 
 **Requirements:** R7 (see KTD3)
 
@@ -110,7 +110,7 @@ flowchart LR
 - `packages/cli/src/repo.ts` (modify)
 - `packages/cli/test/repo.test.cjs` (new)
 
-**Approach:** Detect a linked worktree via `git rev-parse --path-format=absolute --git-common-dir` vs `git rev-parse --show-toplevel`. When the common-dir's parent differs from the toplevel, cwd is inside a linked worktree — use `git worktree list --porcelain` (mirrors the parsing already in `packages/cli/src/lib/git.ts#listWorktrees`) to find the main worktree entry and return its path. Otherwise return `show-toplevel` unchanged (today's behavior for the main repo root and any non-Teambridge worktree use).
+**Approach:** Detect a linked worktree via `git rev-parse --path-format=absolute --git-common-dir` vs `git rev-parse --show-toplevel`. When the common-dir's parent differs from the toplevel, cwd is inside a linked worktree — use `git worktree list --porcelain` (mirrors the parsing already in `packages/cli/src/lib/git.ts#listWorktrees`) to find the main worktree entry and return its path. Otherwise return `show-toplevel` unchanged (today's behavior for the main repo root and any non-Coord worktree use).
 
 **Patterns to follow:** `packages/cli/src/lib/git.ts#listWorktrees` porcelain-output parsing.
 
@@ -120,11 +120,11 @@ flowchart LR
 - Edge case: cwd is a subdirectory nested inside a linked worktree → still resolves to the main repo root.
 - Error path: cwd not inside any git repository → throws the existing "Not inside a git repository" error unchanged.
 
-**Verification:** Running `teambridge status` from inside a freshly created worktree lists the same projects/tracks as running it from the main repo root.
+**Verification:** Running `coord status` from inside a freshly created worktree lists the same projects/tracks as running it from the main repo root.
 
 ---
 
-### U2. `teambridge start <session_name> [base_ref]`
+### U2. `coord start <session_name> [base_ref]`
 
 **Goal:** North-star alias over `track start` that also creates a real worktree/branch for the starter (KTD2).
 
@@ -145,18 +145,18 @@ flowchart LR
 **Patterns to follow:** `packages/cli/src/commands/track.ts#runTrackJoin` (git-first creation, scoped rollback, pointer write, idempotent-reuse messaging).
 
 **Test scenarios:**
-- Happy path: `start` registers the track via the daemon and creates a real worktree/branch under `.teambridge/worktrees/<session>/<safeName>`, writing a pointer with `role: 'creator'`.
+- Happy path: `start` registers the track via the daemon and creates a real worktree/branch under `.coord/worktrees/<session>/<safeName>`, writing a pointer with `role: 'creator'`.
 - Edge case: re-running `start` for a session/display name that already has a registered worktree → reused, not recreated (mirrors join's `reused` case).
 - Error path: worktree creation fails after the daemon track already exists → local worktree/branch rolled back, the daemon-registered track is left in place, and a clear error is surfaced (not a silent partial state).
-- Integration: after `start`, `teambridge status` and `ws who` (U8) both show the starter as a participant with the created branch.
+- Integration: after `start`, `coord status` and `ws who` (U8) both show the starter as a participant with the created branch.
 
-**Verification:** `teambridge start` produces the same worktree/branch shape as `teambridge track join`, and status/ws commands reflect the new participant immediately.
+**Verification:** `coord start` produces the same worktree/branch shape as `coord track join`, and status/ws commands reflect the new participant immediately.
 
 ---
 
-### U3. `teambridge enter <session_name>`
+### U3. `coord enter <session_name>`
 
-**Goal:** Resolve and print the current user's worktree path for a track, composing with `cd "$(teambridge enter NAME)"`.
+**Goal:** Resolve and print the current user's worktree path for a track, composing with `cd "$(coord enter NAME)"`.
 
 **Requirements:** R2
 
@@ -173,14 +173,14 @@ flowchart LR
 
 **Test scenarios:**
 - Happy path: a pointer exists for this session + display name → prints exactly the worktree path to stdout, nothing else.
-- Error path: no pointer found (never started/joined this track) → non-zero exit, stderr message naming `teambridge start`/`teambridge track join` as the next step.
+- Error path: no pointer found (never started/joined this track) → non-zero exit, stderr message naming `coord start`/`coord track join` as the next step.
 - Error path: the pointer exists but the worktree directory no longer exists on disk (manually removed) → clear error rather than silently returning a dead path.
 
-**Verification:** `cd "$(teambridge enter <name>)"` lands in the correct worktree directory for both a `start`-created and a `join`-created participant.
+**Verification:** `cd "$(coord enter <name>)"` lands in the correct worktree directory for both a `start`-created and a `join`-created participant.
 
 ---
 
-### U4. `teambridge publish <target_file> <text>`
+### U4. `coord publish <target_file> <text>`
 
 **Goal:** Thin wrapper appending a publish event to whichever track the current working directory belongs to (KTD4).
 
@@ -196,7 +196,7 @@ flowchart LR
 - `packages/cli/test/publish.test.cjs` (new)
 - `packages/cli/test/current-track.test.cjs` (new)
 
-**Approach:** Read `git rev-parse --abbrev-ref HEAD` from the literal invocation cwd (before U1's repo-root normalization changes cwd handling), match it against `teambridge/<session>/<safeName>` (the same shape `lib/naming.ts#branchForParticipant` produces), extract `sessionName`, then resolve the workspace via `listTracks` + session-name match (same lookup pattern `track join` already uses). POST the publish event through the existing `/workspaces/:id/events` route.
+**Approach:** Read `git rev-parse --abbrev-ref HEAD` from the literal invocation cwd (before U1's repo-root normalization changes cwd handling), match it against `coord/<session>/<safeName>` (the same shape `lib/naming.ts#branchForParticipant` produces), extract `sessionName`, then resolve the workspace via `listTracks` + session-name match (same lookup pattern `track join` already uses). POST the publish event through the existing `/workspaces/:id/events` route.
 
 **Patterns to follow:** `packages/cli/src/commands/track.ts#runTrackJoin`'s track-lookup-by-sessionName block; `packages/vault/src/index.ts#formatPublishText`'s trim/empty validation (mirror client-side to fail fast).
 
@@ -204,13 +204,13 @@ flowchart LR
 - Happy path: run from inside a track worktree, `publish decisions.md "text"` appends successfully; CLI prints confirmation including the resulting `seq`.
 - Edge case: text is empty or whitespace-only → rejected client-side with a clear error before any daemon call (mirrors the server-side trim requirement in `formatPublishText`).
 - Error path: `target_file` is not one of the Phase 1 flat vault files → the daemon's existing validation error message is passed through unchanged.
-- Error path: current branch does not match the `teambridge/<session>/<name>` convention (not inside a track worktree) → clear error telling the user to `cd` into a track worktree via `teambridge enter` first.
+- Error path: current branch does not match the `coord/<session>/<name>` convention (not inside a track worktree) → clear error telling the user to `cd` into a track worktree via `coord enter` first.
 
-**Verification:** After `publish`, `teambridge vault read <target_file>` (U5) shows the appended line.
+**Verification:** After `publish`, `coord vault read <target_file>` (U5) shows the appended line.
 
 ---
 
-### U5. `teambridge vault read <path>` and `teambridge vault context`
+### U5. `coord vault read <path>` and `coord vault context`
 
 **Goal:** Thin wrappers over the existing vault read/context daemon endpoints, using U4's current-track resolution.
 
@@ -276,7 +276,7 @@ on rebuild(workspaceId):
 
 ---
 
-### U7. `teambridge vault search <query>` CLI wrapper
+### U7. `coord vault search <query>` CLI wrapper
 
 **Goal:** Thin CLI wrapper over U6's search endpoint, reusing U4/U5's current-track resolution.
 
@@ -295,11 +295,11 @@ on rebuild(workspaceId):
 - Happy path: `vault search "invoice state"` after publishing that phrase returns the matching line formatted as `path:line: text`.
 - Edge case: no results → a clear "no matches" message on stdout, exit code 0 (not treated as an error).
 
-**Verification:** `teambridge publish decisions.md "invoice state"` followed by `teambridge vault search "invoice state"` returns that line.
+**Verification:** `coord publish decisions.md "invoice state"` followed by `coord vault search "invoice state"` returns that line.
 
 ---
 
-### U8. `teambridge ws show|who|branches <session_name>`
+### U8. `coord ws show|who|branches <session_name>`
 
 **Goal:** Thin CLI formatting over the existing track-lookup + workspace-status endpoints, which already return `participant.branch`.
 

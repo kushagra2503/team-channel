@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { getDefaultClientConfig } from '@/api/teambridgeClient';
+import { getDefaultClientConfig } from '@/api/coordClient';
 import { AppShellProvider, useAppShell } from '@/components/app-shell-context';
 import { SiteHeader } from '@/components/site-header';
 import { SettingsDialog } from '@/components/settings-dialog';

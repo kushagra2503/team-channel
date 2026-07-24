@@ -4,7 +4,7 @@ import { safeDisplayName } from './naming';
 
 /**
  * Local record of where a participant's worktree lives, written next to the
- * track's vault under `.teambridge/workspaces/<sessionName>/`. Lets `enter`
+ * track's vault under `.coord/workspaces/<sessionName>/`. Lets `enter`
  * resolve the path without reading the daemon's SQLite (the daemon does not
  * expose worktree rows yet — ask #2).
  */
@@ -19,7 +19,7 @@ export type WorktreePointer = {
 };
 
 function pointerDir(repoRoot: string, sessionName: string): string {
-  return join(repoRoot, '.teambridge', 'workspaces', sessionName);
+  return join(repoRoot, '.coord', 'workspaces', sessionName);
 }
 
 function pointerPath(repoRoot: string, sessionName: string, displayName: string): string {

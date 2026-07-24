@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   askInbox,
-  buildTeambridgeUrl,
+  buildCoordUrl,
   getContextPointer,
   getDefaultClientConfig,
   listConflicts,
@@ -14,7 +14,7 @@ import {
   searchVault,
   setContextPointer,
   unwrapApiResult
-} from './teambridgeClient';
+} from './coordClient';
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -24,7 +24,7 @@ function jsonResponse(body: unknown): Response {
   });
 }
 
-describe('teambridgeClient', () => {
+describe('coordClient', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
@@ -33,7 +33,7 @@ describe('teambridgeClient', () => {
 
   it('builds daemon URLs with repoRoot and encoded query params', () => {
     expect(
-      buildTeambridgeUrl('/workspaces/ws_123/vault/read', { repoRoot: '/tmp/team channel' }, { path: 'decisions.md' })
+      buildCoordUrl('/workspaces/ws_123/vault/read', { repoRoot: '/tmp/team channel' }, { path: 'decisions.md' })
     ).toBe(
       'http://127.0.0.1:9473/workspaces/ws_123/vault/read?repoRoot=%2Ftmp%2Fteam+channel&path=decisions.md'
     );
@@ -81,8 +81,8 @@ describe('teambridgeClient', () => {
   });
 
   it('uses query params before env values for daemon config', () => {
-    vi.stubEnv('VITE_TEAMBRIDGE_DAEMON_URL', 'http://env-host:9473');
-    vi.stubEnv('VITE_TEAMBRIDGE_REPO_ROOT', '/env/repo');
+    vi.stubEnv('VITE_COORD_DAEMON_URL', 'http://env-host:9473');
+    vi.stubEnv('VITE_COORD_REPO_ROOT', '/env/repo');
     window.history.pushState({}, '', '/?daemonBaseUrl=http%3A%2F%2Fquery-host%3A9473&repoRoot=%2Fquery%2Frepo');
 
     expect(getDefaultClientConfig()).toEqual({
@@ -98,7 +98,7 @@ describe('teambridgeClient', () => {
   });
 
   it('falls back to env and default daemon URL', () => {
-    vi.stubEnv('VITE_TEAMBRIDGE_REPO_ROOT', '');
+    vi.stubEnv('VITE_COORD_REPO_ROOT', '');
     window.history.pushState({}, '', '/');
 
     expect(getDefaultClientConfig()).toEqual({
@@ -106,7 +106,7 @@ describe('teambridgeClient', () => {
       repoRoot: ''
     });
 
-    vi.stubEnv('VITE_TEAMBRIDGE_REPO_ROOT', '/env/repo');
+    vi.stubEnv('VITE_COORD_REPO_ROOT', '/env/repo');
 
     expect(getDefaultClientConfig()).toEqual({
       daemonBaseUrl: 'http://127.0.0.1:9473',

@@ -1,4 +1,4 @@
-import type { ContextDelta } from '@teambridge/core';
+import type { ContextDelta } from '@coord/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { formatRelativeTime } from '@/lib/relative-time';
 

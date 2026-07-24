@@ -1,4 +1,4 @@
-import type { LocalUserProfile } from '@teambridge/core';
+import type { LocalUserProfile } from '@coord/core';
 
 type CachedLocalIdentity = {
   profile: LocalUserProfile;

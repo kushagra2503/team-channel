@@ -1,18 +1,18 @@
 import { useMemo } from 'react';
 import { motion } from 'motion/react';
-import type { ContextPointerResponse, Participant, WorkspaceEvent } from '@teambridge/core';
+import type { ContextPointerResponse, Participant, WorkspaceEvent } from '@coord/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName } from './participantDisplay';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 
 export type TeammateDeltaPanelProps = {
   events?: WorkspaceEvent[];
   participants?: Participant[];
   pointer?: ContextPointerResponse | null;
-  config?: TeambridgeClientConfig;
+  config?: CoordClientConfig;
   error?: string;
   avatarRev?: number;
   onMarkSeen?: () => void;

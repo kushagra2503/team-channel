@@ -91,7 +91,7 @@ test('ask/reply inbox and conflict marker parsing resolve through CLI and daemon
   assert.match(conflicts.stdout, /open\s+content\s+Conflict in blockers\.md/);
   const conflictId = parseConflictId(conflicts.stdout);
 
-  const conflictsFile = await readFile(join(repoRoot, '.teambridge', 'workspaces', 'handoff-flow', 'vault', 'conflicts.md'), 'utf8');
+  const conflictsFile = await readFile(join(repoRoot, '.coord', 'workspaces', 'handoff-flow', 'vault', 'conflicts.md'), 'utf8');
   assert.match(conflictsFile, new RegExp(conflictId));
   assert.match(conflictsFile, /retry forever/);
   assert.match(conflictsFile, /stop after three failed refresh attempts/);
@@ -106,6 +106,6 @@ test('ask/reply inbox and conflict marker parsing resolve through CLI and daemon
   assert.equal(resolved.exitCode, 0, resolved.stderr || resolved.stdout);
   assert.match(resolved.stdout, new RegExp(`${conflictId}\\s+resolved`));
 
-  const resolvedFile = await readFile(join(repoRoot, '.teambridge', 'workspaces', 'handoff-flow', 'vault', 'conflicts.md'), 'utf8');
+  const resolvedFile = await readFile(join(repoRoot, '.coord', 'workspaces', 'handoff-flow', 'vault', 'conflicts.md'), 'utf8');
   assert.match(resolvedFile, /Use the three-attempt cap\./);
 });

@@ -92,9 +92,9 @@ Why:
 Example CLI:
 
 ```bash
-teambridge publish decisions.md "Backend is the source of truth for invoice state."
-teambridge publish observations.md "Frontend reads derived totals from the invoice API."
-teambridge publish blockers.md "Need refresh-token behavior decided before UI retry logic."
+coord publish decisions.md "Backend is the source of truth for invoice state."
+coord publish observations.md "Frontend reads derived totals from the invoice API."
+coord publish blockers.md "Need refresh-token behavior decided before UI retry logic."
 ```
 
 Example MCP tool input:
@@ -162,9 +162,9 @@ vault/*.md
 The materializer should be able to delete and rebuild the vault from ordered events:
 
 ```bash
-rm -rf .teambridge/workspaces/billing-refactor/vault
-teambridge vault rebuild billing-refactor
-teambridge vault read decisions.md
+rm -rf .coord/workspaces/billing-refactor/vault
+coord vault rebuild billing-refactor
+coord vault read decisions.md
 ```
 
 If rebuild does not work, the architecture is drifting in the wrong direction.
@@ -236,24 +236,24 @@ Why:
 
 - `core` is not the CLI. It is the shared contract layer that daemon, CLI, dashboard, hooks, and MCP can all import.
 - `vault` is not the CLI. It owns reusable vault behavior so the daemon does not become the only place where vault rules exist.
-- Splitting early lets Kushagra and Ronish build CLI/dashboard later against `@teambridge/core` without pulling daemon internals.
+- Splitting early lets Kushagra and Ronish build CLI/dashboard later against `@coord/core` without pulling daemon internals.
 - Each package can have its own dependencies and build output while the root workspace still runs one `pnpm build`.
 
-Do not make CLI code import directly from `packages/daemon`. Public shapes should come from `@teambridge/core`, and reusable vault behavior should come from `@teambridge/vault`.
+Do not make CLI code import directly from `packages/daemon`. Public shapes should come from `@coord/core`, and reusable vault behavior should come from `@coord/vault`.
 
 ## 9. Phase 1 Success Criteria
 
 The first version passes when this local flow works (via **CLI when shipped**, or equivalent daemon HTTP + dashboard today):
 
 ```bash
-teambridge init
-teambridge start billing-refactor main
-teambridge join billing-refactor --as kushagra
-teambridge join billing-refactor --as ronish
-teambridge publish decisions.md "Backend is the source of truth for invoice state."
-teambridge vault read decisions.md
-teambridge vault context
-teambridge vault search "invoice state"
+coord init
+coord start billing-refactor main
+coord join billing-refactor --as kushagra
+coord join billing-refactor --as ronish
+coord publish decisions.md "Backend is the source of truth for invoice state."
+coord vault read decisions.md
+coord vault context
+coord vault search "invoice state"
 ```
 
 **Alternate local proof (shipped):** `pnpm seed` + `pnpm dashboard` — pick a project, select a track, view vault highlights from `GET .../vault/context`.

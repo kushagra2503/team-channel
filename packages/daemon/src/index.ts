@@ -10,8 +10,8 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 dotenv.config({ path: join(__dirname, '../../../.env') });
-if (process.env.TEAMBRIDGE_REPO_ROOT) {
-  dotenv.config({ path: join(resolve(process.env.TEAMBRIDGE_REPO_ROOT), '.env') });
+if (process.env.COORD_REPO_ROOT) {
+  dotenv.config({ path: join(resolve(process.env.COORD_REPO_ROOT), '.env') });
 }
 import { z } from 'zod';
 import type {
@@ -48,8 +48,8 @@ import type {
   StartWorkspaceRequest,
   StartWorkspaceResponse,
   SyncStateEntry,
-  TeambridgeConfig,
-  TeambridgeErrorCode,
+  CoordConfig,
+  CoordErrorCode,
   TrackListResponse,
   VaultCheckpoint,
   VaultAnnotateResponseBody,
@@ -62,13 +62,13 @@ import type {
   WorkspaceEvent,
   WorkspaceListResponse,
   WorkspaceManifest
-} from '@teambridge/core';
+} from '@coord/core';
 import {
   JoinWorkspaceRequestSchema,
   PublishEventRequestSchema,
   RelayModeSchema,
   StartWorkspaceRequestSchema,
-  TeambridgeConfigSchema,
+  CoordConfigSchema,
   CreateProjectRequestSchema,
   SaveLocalUserProfileRequestSchema,
   UpsertProjectMemberRequestSchema,
@@ -76,7 +76,7 @@ import {
   avatarStorageId,
   avatarNameSlug,
   formatDisplayName
-} from '@teambridge/core';
+} from '@coord/core';
 import {
   annotateVaultItem,
   createVaultContext,
@@ -86,7 +86,7 @@ import {
   readEventsJsonl,
   readVaultFile,
   rebuildPhaseOneVault
-} from '@teambridge/vault';
+} from '@coord/vault';
 import {
   DEFAULT_PFP_QUERY,
   generatePfp,
@@ -98,10 +98,10 @@ import {
 } from './pfp';
 
 const DEFAULT_PORT = 9473;
-const RELAY_SYNC_INTERVAL_MS = Number(process.env.TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS ?? 5000);
-const RELAY_PRESENCE_INTERVAL_MS = Number(process.env.TEAMBRIDGE_RELAY_PRESENCE_INTERVAL_MS ?? 15000);
-const CHECKPOINT_INTERVAL_EVENTS = Number(process.env.TEAMBRIDGE_CHECKPOINT_INTERVAL_EVENTS ?? 50);
-const CHECKPOINT_LEASE_MS = Number(process.env.TEAMBRIDGE_CHECKPOINT_LEASE_MS ?? 60000);
+const RELAY_SYNC_INTERVAL_MS = Number(process.env.COORD_RELAY_SYNC_INTERVAL_MS ?? 5000);
+const RELAY_PRESENCE_INTERVAL_MS = Number(process.env.COORD_RELAY_PRESENCE_INTERVAL_MS ?? 15000);
+const CHECKPOINT_INTERVAL_EVENTS = Number(process.env.COORD_CHECKPOINT_INTERVAL_EVENTS ?? 50);
+const CHECKPOINT_LEASE_MS = Number(process.env.COORD_CHECKPOINT_LEASE_MS ?? 60000);
 const CHECKPOINT_BUCKET = 'teambridge-checkpoints';
 
 const StartRequestBodySchema = StartWorkspaceRequestSchema.extend({
@@ -226,7 +226,7 @@ const RelayRequestBodySchema = z.object({
   repoRoot: z.string().min(1).optional()
 });
 
-const DEFAULT_CONFIG: TeambridgeConfig = {
+const DEFAULT_CONFIG: CoordConfig = {
   schemaVersion: 1,
   defaultRelayMode: 'local',
   daemonPort: DEFAULT_PORT,
@@ -268,7 +268,7 @@ function ok<T>(data: T): ApiResult<T> {
   return { ok: true, data };
 }
 
-function fail(code: TeambridgeErrorCode, message: string, details?: unknown): ApiResult<never> {
+function fail(code: CoordErrorCode, message: string, details?: unknown): ApiResult<never> {
   return {
     ok: false,
     error: { code, message, details }
@@ -290,8 +290,8 @@ function findGitRepoRoot(startDir: string): string {
 }
 
 function parseArgs(argv: string[]): { port: number; repoRoot: string } {
-  let port = Number(process.env.TEAMBRIDGE_DAEMON_PORT ?? DEFAULT_PORT);
-  let repoRoot = process.env.TEAMBRIDGE_REPO_ROOT ?? findGitRepoRoot(process.cwd());
+  let port = Number(process.env.COORD_DAEMON_PORT ?? DEFAULT_PORT);
+  let repoRoot = process.env.COORD_REPO_ROOT ?? findGitRepoRoot(process.cwd());
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -525,7 +525,7 @@ function safeDisplayName(value: string): string {
 }
 
 function getWorkspaceDir(repoRoot: string, sessionName: string): string {
-  return join(repoRoot, '.teambridge', 'workspaces', sessionName);
+  return join(repoRoot, '.coord', 'workspaces', sessionName);
 }
 
 function sqlValue(value: string | number | null): string {
@@ -557,10 +557,10 @@ function querySql<T>(dbPath: string, sql: string): T[] {
 }
 
 function initializeStateDb(repoRoot: string): string {
-  const teambridgeDir = join(repoRoot, '.teambridge');
-  mkdirSync(teambridgeDir, { recursive: true });
+  const coordDir = join(repoRoot, '.coord');
+  mkdirSync(coordDir, { recursive: true });
 
-  const dbPath = join(teambridgeDir, 'state.sqlite');
+  const dbPath = join(coordDir, 'state.sqlite');
 
   // Migration: rename legacy workspaces table → tracks
   const existingTables = querySql<{ name: string }>(
@@ -699,7 +699,7 @@ function initializeStateDb(repoRoot: string): string {
     `);
   } catch (error) {
     console.error(
-      `[teambridge] vault search index unavailable — this sqlite3 build lacks FTS5:\n  ${
+      `[coord] vault search index unavailable — this sqlite3 build lacks FTS5:\n  ${
         error instanceof Error ? error.message : String(error)
       }`
     );
@@ -1098,15 +1098,15 @@ function sendBinary(
   response.end(buffer);
 }
 
-async function ensureTeambridgeDirs(repoRoot: string): Promise<void> {
-  await mkdir(join(repoRoot, '.teambridge', 'workspaces'), { recursive: true });
+async function ensureCoordDirs(repoRoot: string): Promise<void> {
+  await mkdir(join(repoRoot, '.coord', 'workspaces'), { recursive: true });
 }
 
 function getConfigPath(repoRoot: string): string {
-  return join(repoRoot, '.teambridge', 'config.json');
+  return join(repoRoot, '.coord', 'config.json');
 }
 
-async function readRepoConfig(repoRoot: string): Promise<TeambridgeConfig> {
+async function readRepoConfig(repoRoot: string): Promise<CoordConfig> {
   const configPath = getConfigPath(repoRoot);
   const content = await readFile(configPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
     if (error.code === 'ENOENT') {
@@ -1120,11 +1120,11 @@ async function readRepoConfig(repoRoot: string): Promise<TeambridgeConfig> {
     return DEFAULT_CONFIG;
   }
 
-  return TeambridgeConfigSchema.parse(JSON.parse(content));
+  return CoordConfigSchema.parse(JSON.parse(content));
 }
 
 function getUserProfilePath(repoRoot: string): string {
-  return join(repoRoot, '.teambridge', 'user.json');
+  return join(repoRoot, '.coord', 'user.json');
 }
 
 async function readLocalUserProfile(repoRoot: string): Promise<LocalUserProfile | null> {
@@ -1142,7 +1142,7 @@ async function readLocalUserProfile(repoRoot: string): Promise<LocalUserProfile 
 }
 
 async function writeLocalUserProfile(repoRoot: string, profile: LocalUserProfile): Promise<string> {
-  await ensureTeambridgeDirs(repoRoot);
+  await ensureCoordDirs(repoRoot);
   const profilePath = getUserProfilePath(repoRoot);
   await writeFile(profilePath, `${JSON.stringify(profile, null, 2)}\n`);
   return profilePath;
@@ -1188,7 +1188,7 @@ function resolveParticipantDisplayName(repoRoot: string, bodyDisplayName: string
 }
 
 function branchForParticipant(sessionName: string, displayName: string): string {
-  return `teambridge/${sessionName}/${safeDisplayName(displayName)}`;
+  return `coord/${sessionName}/${safeDisplayName(displayName)}`;
 }
 
 function upsertProjectMember(
@@ -1279,14 +1279,14 @@ async function createProject(
 }
 
 type ConfigOverrides = {
-  relayMode?: TeambridgeConfig['defaultRelayMode'];
+  relayMode?: CoordConfig['defaultRelayMode'];
 };
 
 async function initRepoConfig(
   repoRoot: string,
   overrides: ConfigOverrides = {}
-): Promise<{ config: TeambridgeConfig; path: string; created: boolean; updated: boolean }> {
-  await ensureTeambridgeDirs(repoRoot);
+): Promise<{ config: CoordConfig; path: string; created: boolean; updated: boolean }> {
+  await ensureCoordDirs(repoRoot);
 
   const configPath = getConfigPath(repoRoot);
   const existing = await readFile(configPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
@@ -1298,19 +1298,19 @@ async function initRepoConfig(
   });
 
   if (existing) {
-    const current = TeambridgeConfigSchema.parse(JSON.parse(existing));
+    const current = CoordConfigSchema.parse(JSON.parse(existing));
     // `init` is safe to re-run: leave an existing config alone unless the caller
     // explicitly asked for a different relay mode, in which case update just
     // that field and persist.
     if (overrides.relayMode && overrides.relayMode !== current.defaultRelayMode) {
-      const next: TeambridgeConfig = { ...current, defaultRelayMode: overrides.relayMode };
+      const next: CoordConfig = { ...current, defaultRelayMode: overrides.relayMode };
       await writeFile(configPath, `${JSON.stringify(next, null, 2)}\n`);
       return { config: next, path: configPath, created: false, updated: true };
     }
     return { config: current, path: configPath, created: false, updated: false };
   }
 
-  const config: TeambridgeConfig = {
+  const config: CoordConfig = {
     ...DEFAULT_CONFIG,
     ...(overrides.relayMode ? { defaultRelayMode: overrides.relayMode } : {})
   };
@@ -1329,7 +1329,7 @@ async function startWorkspace(state: AppState, body: StartRequestBody): Promise<
   }
 
   const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
-  await ensureTeambridgeDirs(repoRoot);
+  await ensureCoordDirs(repoRoot);
 
   const dbPath = initializeStateDb(repoRoot);
   const sessionName = body.sessionName.trim();
@@ -1788,7 +1788,7 @@ function getRemoteIdentity(repoRoot: string): RemoteIdentity | null {
 function requireRemoteIdentity(repoRoot: string): RemoteIdentity {
   const identity = getRemoteIdentity(repoRoot);
   if (!identity) {
-    throw new Error('Not logged in to Teambridge relay. Run `teambridge login` first.');
+    throw new Error('Not logged in to Coord relay. Run `coord login` first.');
   }
   return identity;
 }
@@ -1865,7 +1865,7 @@ async function resolveActorParticipant(repoRoot: string, workspace: Workspace, a
 }
 
 function contextPointerPath(repoRoot: string, sessionName: string, displayName: string): string {
-  return join(repoRoot, '.teambridge', 'workspaces', sessionName, `.context.${safeDisplayName(displayName)}.json`);
+  return join(repoRoot, '.coord', 'workspaces', sessionName, `.context.${safeDisplayName(displayName)}.json`);
 }
 
 async function readContextPointer(
@@ -1889,7 +1889,7 @@ async function writeContextPointer(
   repoRoot: string,
   pointer: ContextPointerResponse
 ): Promise<string> {
-  const dir = join(repoRoot, '.teambridge', 'workspaces', pointer.sessionName);
+  const dir = join(repoRoot, '.coord', 'workspaces', pointer.sessionName);
   mkdirSync(dir, { recursive: true });
   const path = contextPointerPath(repoRoot, pointer.sessionName, pointer.displayName);
   const tempPath = `${path}.tmp`;
@@ -2080,7 +2080,7 @@ async function maybeMirrorWorkspaceToRelay(repoRoot: string, workspace: Workspac
   try {
     await mirrorWorkspaceToRelay(repoRoot, workspace, participant, profile);
   } catch (error) {
-    console.error(`[teambridge] relay mirror failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`[coord] relay mirror failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -2339,7 +2339,7 @@ async function mirrorDerivedEventToRelay(repoRoot: string, event: WorkspaceEvent
     await mirrorInboxEventToRelay(repoRoot, event);
     await mirrorConflictEventToRelay(repoRoot, event);
   } catch (error) {
-    console.error(`[teambridge] relay side-table mirror failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`[coord] relay side-table mirror failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -2465,7 +2465,7 @@ function startRealtimeEventSubscriber(state: AppState): void {
   let heartbeat: NodeJS.Timeout | undefined;
   let reconnect: NodeJS.Timeout | undefined;
   let ref = 1;
-  const topic = 'realtime:teambridge-events';
+  const topic = 'realtime:coord-events';
 
   const nextRef = () => String(ref++);
   const send = (event: string, payload: unknown, joinRef?: string, messageTopic = topic) => {
@@ -2505,12 +2505,12 @@ function startRealtimeEventSubscriber(state: AppState): void {
             await applyRealtimeEventToKnownRepos(state, record);
           }
         } else if (parsed.event === 'system' && parsed.payload?.status === 'error') {
-          console.error(`[teambridge] realtime system error: ${JSON.stringify(parsed.payload)}`);
+          console.error(`[coord] realtime system error: ${JSON.stringify(parsed.payload)}`);
         } else if (parsed.event === 'phx_reply' && parsed.payload?.status === 'error') {
-          console.error(`[teambridge] realtime join error: ${JSON.stringify(parsed.payload)}`);
+          console.error(`[coord] realtime join error: ${JSON.stringify(parsed.payload)}`);
         }
       })().catch((error) => {
-        console.error(`[teambridge] realtime event apply failed: ${error instanceof Error ? error.message : String(error)}`);
+        console.error(`[coord] realtime event apply failed: ${error instanceof Error ? error.message : String(error)}`);
       });
     });
 
@@ -2545,7 +2545,7 @@ function startRelayPolling(state: AppState): void {
         }
       }
     } catch (error) {
-      console.error(`[teambridge] relay poll failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[coord] relay poll failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       running = false;
     }
@@ -2850,7 +2850,7 @@ async function joinWorkspace(state: AppState, body: JoinRequestBody): Promise<Jo
   }
 
   const repoRoot = getRepoRoot(resolve(body.repoRoot ?? state.defaultRepoRoot));
-  await ensureTeambridgeDirs(repoRoot);
+  await ensureCoordDirs(repoRoot);
 
   let workspace = getWorkspaceByIdentifier(repoRoot, body.sessionName.trim());
   if (!workspace) {
@@ -4190,7 +4190,7 @@ function main(): void {
   });
 
   server.listen(port, () => {
-    console.log(`teambridge daemon listening on http://127.0.0.1:${port}`);
+    console.log(`coord daemon listening on http://127.0.0.1:${port}`);
     console.log(`default repo: ${repoRoot}`);
   });
   startRelayPolling({ defaultRepoRoot: repoRoot });

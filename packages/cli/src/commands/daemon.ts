@@ -13,7 +13,7 @@ type DaemonState = {
 };
 
 function stateDir(repoRoot: string): string {
-  return join(repoRoot, '.teambridge', 'daemon');
+  return join(repoRoot, '.coord', 'daemon');
 }
 
 function statePath(repoRoot: string): string {
@@ -55,13 +55,13 @@ function parsePort(argv: string[], fallback: string | undefined): number {
 async function runDaemonStart(argv: string[], options: ClientOptions): Promise<void> {
   const existing = readState(options.repoRoot);
   if (existing && isProcessAlive(existing.pid)) {
-    console.log(`Teambridge daemon already running on ${existing.baseUrl}`);
+    console.log(`Coord daemon already running on ${existing.baseUrl}`);
     console.log(`PID: ${existing.pid}`);
     console.log(`Log: ${existing.logPath}`);
     return;
   }
 
-  const port = parsePort(argv, process.env.TEAMBRIDGE_DAEMON_PORT);
+  const port = parsePort(argv, process.env.COORD_DAEMON_PORT);
   const baseUrl = `http://127.0.0.1:${port}`;
   const dir = stateDir(options.repoRoot);
   mkdirSync(dir, { recursive: true });
@@ -76,8 +76,8 @@ async function runDaemonStart(argv: string[], options: ClientOptions): Promise<v
     stdio: ['ignore', stdout, stderr],
     env: {
       ...process.env,
-      TEAMBRIDGE_DAEMON_PORT: String(port),
-      TEAMBRIDGE_REPO_ROOT: options.repoRoot
+      COORD_DAEMON_PORT: String(port),
+      COORD_REPO_ROOT: options.repoRoot
     }
   });
 
@@ -95,7 +95,7 @@ async function runDaemonStart(argv: string[], options: ClientOptions): Promise<v
   };
   writeFileSync(statePath(options.repoRoot), `${JSON.stringify(state, null, 2)}\n`);
 
-  console.log(`Started Teambridge daemon on ${baseUrl}`);
+  console.log(`Started Coord daemon on ${baseUrl}`);
   console.log(`PID: ${state.pid}`);
   console.log(`Log: ${logPath}`);
 }
@@ -103,19 +103,19 @@ async function runDaemonStart(argv: string[], options: ClientOptions): Promise<v
 async function runDaemonStatus(options: ClientOptions): Promise<void> {
   const state = readState(options.repoRoot);
   if (!state) {
-    console.log('Teambridge daemon is not managed for this repo yet.');
+    console.log('Coord daemon is not managed for this repo yet.');
     process.exitCode = 1;
     return;
   }
 
   if (!isProcessAlive(state.pid)) {
-    console.log(`Teambridge daemon is stopped. Last PID: ${state.pid}`);
+    console.log(`Coord daemon is stopped. Last PID: ${state.pid}`);
     console.log(`Log: ${state.logPath}`);
     process.exitCode = 1;
     return;
   }
 
-  console.log(`Teambridge daemon is running on ${state.baseUrl}`);
+  console.log(`Coord daemon is running on ${state.baseUrl}`);
   console.log(`PID: ${state.pid}`);
   console.log(`Log: ${state.logPath}`);
 }
@@ -123,15 +123,15 @@ async function runDaemonStatus(options: ClientOptions): Promise<void> {
 async function runDaemonStop(options: ClientOptions): Promise<void> {
   const state = readState(options.repoRoot);
   if (!state) {
-    console.log('Teambridge daemon is not managed for this repo yet.');
+    console.log('Coord daemon is not managed for this repo yet.');
     return;
   }
 
   if (isProcessAlive(state.pid)) {
     process.kill(state.pid, 'SIGTERM');
-    console.log(`Stopped Teambridge daemon on ${state.baseUrl}`);
+    console.log(`Stopped Coord daemon on ${state.baseUrl}`);
   } else {
-    console.log(`Teambridge daemon was already stopped. Last PID: ${state.pid}`);
+    console.log(`Coord daemon was already stopped. Last PID: ${state.pid}`);
   }
 
   rmSync(statePath(options.repoRoot), { force: true });
@@ -155,5 +155,5 @@ export async function runDaemon(argv: string[], options: ClientOptions): Promise
     return;
   }
 
-  throw new Error('Usage: teambridge daemon start|status|stop [--port PORT]');
+  throw new Error('Usage: coord daemon start|status|stop [--port PORT]');
 }

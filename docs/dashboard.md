@@ -18,9 +18,9 @@ pnpm dashboard       # Vite dev server (default host 127.0.0.1)
 **Your own data (CLI, same backend the dashboard reads):**
 
 ```bash
-pnpm teambridge init
-pnpm teambridge project create --name "My App" --description "Optional"
-pnpm teambridge start my-track
+pnpm coord init
+pnpm coord project create --name "My App" --description "Optional"
+pnpm coord start my-track
 ```
 
 `project create` sets your default project so `start` links the session to the correct project sidebar without passing `--project`.
@@ -33,8 +33,8 @@ Open the URL Vite prints (typically `http://127.0.0.1:5173`).
 
 | Variable / param | Purpose |
 |------------------|---------|
-| `VITE_TEAMBRIDGE_DAEMON_URL` | Daemon base URL (default `http://127.0.0.1:9473`) |
-| `VITE_TEAMBRIDGE_REPO_ROOT` | Git repo root sent as `repoRoot` on API calls |
+| `VITE_COORD_DAEMON_URL` | Daemon base URL (default `http://127.0.0.1:9473`) |
+| `VITE_COORD_REPO_ROOT` | Git repo root sent as `repoRoot` on API calls |
 | `?daemonBaseUrl=` query | Override daemon URL |
 | `?repoRoot=` query | Override repo root |
 
@@ -79,6 +79,6 @@ Browser cache key: `tb_cache_v2_${daemonUrl}` (tracks, status, vault context). H
 ## Tests
 
 ```bash
-pnpm --filter @teambridge/dashboard test
+pnpm --filter @coord/dashboard test
 pnpm test:integration   # repo root — CLI init → project → session against live daemon
 ```

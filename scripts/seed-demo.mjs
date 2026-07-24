@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Populate the local Teambridge daemon with 3 realistic demo projects.
+// Populate the local Coord daemon with 3 realistic demo projects.
 // Talks to the daemon's HTTP API + sqlite3 CLI for project/member tables.
 //
 // Usage:
 //   node scripts/seed-demo.mjs              # seed against http://127.0.0.1:9473
 //   node scripts/seed-demo.mjs --reset      # wipe + reseed
-//   TEAMBRIDGE_DAEMON_URL=http://127.0.0.1:9473 node scripts/seed-demo.mjs
+//   COORD_DAEMON_URL=http://127.0.0.1:9473 node scripts/seed-demo.mjs
 
 const { execFileSync } = await import('node:child_process');
 const { rm, mkdir, writeFile } = await import('node:fs/promises');
 const { join } = await import('node:path');
 
-const DAEMON_URL = process.env.TEAMBRIDGE_DAEMON_URL ?? 'http://127.0.0.1:9473';
+const DAEMON_URL = process.env.COORD_DAEMON_URL ?? 'http://127.0.0.1:9473';
 const RESET = process.argv.includes('--reset');
 
 // ---------------------------------------------------------------------------
@@ -473,7 +473,7 @@ async function wipeAllDemoData(dbPath, repoRoot) {
     runSql(dbPath, `delete from local_sequences where workspace_id = ${sq(id)};`);
     runSql(dbPath, `delete from participants where workspace_id = ${sq(id)};`);
     runSql(dbPath, `delete from tracks where id = ${sq(id)};`);
-    await rm(join(repoRoot, '.teambridge', 'workspaces', sessionName), { recursive: true, force: true });
+    await rm(join(repoRoot, '.coord', 'workspaces', sessionName), { recursive: true, force: true });
   }
 
   console.log(`wiped ${tracks.length} tracks and ${allProjectIds.length} projects`);
@@ -483,10 +483,10 @@ async function wipeAllDemoData(dbPath, repoRoot) {
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log(`\nseeding Teambridge daemon at ${DAEMON_URL}\n`);
+  console.log(`\nseeding Coord daemon at ${DAEMON_URL}\n`);
 
   const repoRoot = repoRootPath();
-  const dbPath = join(repoRoot, '.teambridge', 'state.sqlite');
+  const dbPath = join(repoRoot, '.coord', 'state.sqlite');
 
   // Ensure daemon initialized the DB first
   await api('/workspaces');

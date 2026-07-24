@@ -33,10 +33,10 @@ Members live at the **Project** level. A member's status, PFP, and activity are 
 
 ## Requirements
 
-- R1: `Project` type exists in `@teambridge/core` with id, name, description, createdAt, status.
+- R1: `Project` type exists in `@coord/core` with id, name, description, createdAt, status.
 - R2: `Workspace` type is renamed to `Track` throughout core contracts, daemon, vault, and dashboard.
 - R3: Each Track has a `projectId` foreign key.
-- R4: `ProjectMember` type exists in `@teambridge/core` — participant with project-level status (active/idle/offline), PFP, displayName.
+- R4: `ProjectMember` type exists in `@coord/core` — participant with project-level status (active/idle/offline), PFP, displayName.
 - R5: Daemon exposes project CRUD endpoints and project-member endpoints.
 - R6: Dashboard has a project-selection page at `/` that navigates to `/projects/:projectId`.
 - R7: Dashboard's topbar shows the project name, not the track name.
@@ -168,7 +168,7 @@ flowchart LR
 
 ## Implementation Units
 
-### U1. Update `@teambridge/core` — add Project and ProjectMember types, rename Workspace → Track
+### U1. Update `@coord/core` — add Project and ProjectMember types, rename Workspace → Track
 
 **Goal:** Establish the canonical type layer. All downstream work derives from these contracts.
 
@@ -194,12 +194,12 @@ flowchart LR
 **Patterns to follow:** Existing contract style in `packages/core/src/contracts/workspace.ts`
 
 **Test scenarios:**
-- TypeScript compilation passes with zero errors after rename: `pnpm -F @teambridge/core build`
+- TypeScript compilation passes with zero errors after rename: `pnpm -F @coord/core build`
 - `Track` has required `projectId` field; a Track without it fails type-check
 - `ProjectMember` has `projectId`, `displayName`, `status`; compiles cleanly
 - `StartTrackRequest` and `JoinTrackRequest` satisfy existing schema validators (Zod)
 
-**Verification:** `pnpm -F @teambridge/core build` exits 0; no type errors in any package consuming core.
+**Verification:** `pnpm -F @coord/core build` exits 0; no type errors in any package consuming core.
 
 ---
 
@@ -248,7 +248,7 @@ Update all `querySql` strings: `from workspaces` → `from tracks`, `workspace_i
 - Daemon starts against a repo with old `workspaces` table; migration runs without error, data is preserved in `tracks`
 - `tracks.project_id` accepts null for legacy rows (migration adds column nullable)
 
-**Verification:** Daemon process starts, `sqlite3 .teambridge/state.sqlite ".tables"` shows `projects`, `tracks`, `participants`, `project_members`, `checkpoints`, `local_sequences`.
+**Verification:** Daemon process starts, `sqlite3 .coord/state.sqlite ".tables"` shows `projects`, `tracks`, `participants`, `project_members`, `checkpoints`, `local_sequences`.
 
 ---
 
@@ -319,8 +319,8 @@ GET  /tracks/:id/participants/:pid/avatar ...
 **Approach:** Mechanical find-and-replace of `workspaceId` → `trackId`, `workspace_id` → `track_id`, `Workspace` → `Track` where used as type imports. The vault files themselves (decisions.md, etc.) are untouched — only the TypeScript code referencing workspace IDs changes.
 
 **Test scenarios:**
-- `pnpm -F @teambridge/vault build` exits 0
-- `pnpm -F @teambridge/mcp build` exits 0
+- `pnpm -F @coord/vault build` exits 0
+- `pnpm -F @coord/mcp build` exits 0
 - Vault context creation with a `trackId` produces valid `VaultContext` object
 
 **Verification:** All packages build without errors: `pnpm build`.
@@ -360,7 +360,7 @@ createBrowserRouter([
 - Browser back/forward works between `/` and `/projects/:id`
 - `Test expectation: none` for visual appearance at this unit
 
-**Verification:** `pnpm -F @teambridge/dashboard dev` starts; visiting `/` shows project selection stub; visiting `/projects/anything` shows dashboard stub.
+**Verification:** `pnpm -F @coord/dashboard dev` starts; visiting `/` shows project selection stub; visiting `/projects/anything` shows dashboard stub.
 
 ---
 
@@ -374,7 +374,7 @@ createBrowserRouter([
 
 **Files:**
 - `apps/dashboard/src/pages/ProjectSelectionPage.tsx` (new)
-- `apps/dashboard/src/api/teambridgeClient.ts` — add `listProjects()` function
+- `apps/dashboard/src/api/coordClient.ts` — add `listProjects()` function
 - `apps/dashboard/src/pages/ProjectSelectionPage.test.tsx` (new)
 
 **Approach:**
@@ -418,7 +418,7 @@ createBrowserRouter([
 - `apps/dashboard/src/components/site-header.tsx` — replace workspace/track name chip with project name
 - `apps/dashboard/src/components/WorkspaceList.tsx` → `TrackList.tsx` — rename file and component; filter by projectId
 - `apps/dashboard/src/components/WorkspaceDetails.tsx` → `ProjectMemberSidebar.tsx` — rename; now lists `ProjectMember[]` from project endpoint instead of workspace participants
-- `apps/dashboard/src/api/teambridgeClient.ts` — rename workspace API calls; add project-member API calls
+- `apps/dashboard/src/api/coordClient.ts` — rename workspace API calls; add project-member API calls
 - `apps/dashboard/src/lib/cache.ts` — add `projectId` to cache key; add `projectMembers` shape
 
 **Approach:**
@@ -493,7 +493,7 @@ createBrowserRouter([
 
 **Seed approach:**
 - Script calls daemon HTTP API to create projects, members, and tracks via the new endpoints
-- Vault content is written directly to filesystem at `.teambridge/tracks/<sessionName>/vault/` via `initializePhaseOneVault` + `writeFile`
+- Vault content is written directly to filesystem at `.coord/tracks/<sessionName>/vault/` via `initializePhaseOneVault` + `writeFile`
 - Script first deletes all rows from `projects`, `project_members`, `tracks`, `participants` tables via `sqlite3` CLI (same pattern as previous seed scripts in the repo)
 - Idempotent: always wipes before re-seeding
 
@@ -534,7 +534,7 @@ createBrowserRouter([
 - `TrackList.test.tsx`: renders tracks for a given projectId; stagger animation not tested
 - `ProjectMemberSidebar.test.tsx`: renders project members with correct names; presence dots on non-offline members
 - `VaultHighlights.test.tsx`: vault fixture updated to match seed data shape
-- All tests pass: `pnpm -F @teambridge/dashboard test`
+- All tests pass: `pnpm -F @coord/dashboard test`
 
 **Verification:** `pnpm test` across all packages exits 0 with no failures.
 
@@ -591,8 +591,8 @@ Summary: Project → Track hierarchy, dashboard routing, seed data, and avatars 
 
 | Unit | Status | Notes |
 |------|--------|-------|
-| **U1** Core types | **Done** | `Project`, `ProjectMember`, `Track` contracts in `@teambridge/core`. `Workspace` aliases retained for API compat. |
-| **U2** SQLite schema | **Done** | `tracks`, `projects`, `project_members` tables. DB file is `.teambridge/state.sqlite` (not `teambridge.db`). |
+| **U1** Core types | **Done** | `Project`, `ProjectMember`, `Track` contracts in `@coord/core`. `Workspace` aliases retained for API compat. |
+| **U2** SQLite schema | **Done** | `tracks`, `projects`, `project_members` tables. DB file is `.coord/state.sqlite` (not `coord.db`). |
 | **U3** Daemon API | **Partial** | Added `/projects`, `/tracks`, avatar routes. **Deviation:** mutations/events/vault stay on `/workspaces/*`, not renamed to `/tracks/*`. |
 | **U4** Vault + MCP rename | **Partial** | Vault uses track terminology internally. MCP package still largely stub; mechanical rename incomplete. |
 | **U5** React Router | **Done** | `createBrowserRouter`; `/` → `ProjectSelectionPage`, `/projects/:projectId` → `DashboardPage`. |

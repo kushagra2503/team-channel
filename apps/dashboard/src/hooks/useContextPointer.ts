@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ContextPointerResponse } from '@teambridge/core';
-import { getContextPointer, setContextPointer, type TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { ContextPointerResponse } from '@coord/core';
+import { getContextPointer, setContextPointer, type CoordClientConfig } from '@/api/coordClient';
 
 const REFRESH_MS = 5000;
 
@@ -13,7 +13,7 @@ export type UseContextPointerResult = {
 
 export function useContextPointer(
   workspaceId: string | undefined,
-  config: TeambridgeClientConfig
+  config: CoordClientConfig
 ): UseContextPointerResult {
   const [pointer, setPointer] = useState<ContextPointerResponse | null>(null);
   const [error, setError] = useState<string>();

@@ -59,13 +59,13 @@ test('runStart registers the track and creates a real worktree + pointer for the
   try {
     await runStart(['auth-redesign'], { repoRoot: repo, baseUrl: 'http://unused' });
 
-    const worktreePath = path.join(repo, '.teambridge', 'worktrees', 'auth-redesign', 'kushagra');
+    const worktreePath = path.join(repo, '.coord', 'worktrees', 'auth-redesign', 'kushagra');
     assert.ok(existsSync(worktreePath), 'expected a real worktree directory to be created');
 
     const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: worktreePath, encoding: 'utf8' }).trim();
-    assert.equal(branch, 'teambridge/auth-redesign/kushagra');
+    assert.equal(branch, 'coord/auth-redesign/kushagra');
 
-    const pointerPath = path.join(repo, '.teambridge', 'workspaces', 'auth-redesign', '.worktree.kushagra.json');
+    const pointerPath = path.join(repo, '.coord', 'workspaces', 'auth-redesign', '.worktree.kushagra.json');
     assert.ok(existsSync(pointerPath), 'expected a worktree pointer to be written');
     const pointer = JSON.parse(readFileSync(pointerPath, 'utf8'));
     assert.equal(pointer.role, 'creator');
@@ -85,7 +85,7 @@ test('runStart surfaces a clear error and leaves the daemon track registered whe
       () => runStart(['auth-redesign'], { repoRoot: repo, baseUrl: 'http://unused' }),
       /was started \(workspace id: ws_1\), but creating your worktree failed/
     );
-    const worktreePath = path.join(repo, '.teambridge', 'worktrees', 'auth-redesign', 'kushagra');
+    const worktreePath = path.join(repo, '.coord', 'worktrees', 'auth-redesign', 'kushagra');
     assert.ok(!existsSync(worktreePath), 'must not leave a partial worktree behind');
   } finally {
     restore();

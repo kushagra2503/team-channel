@@ -16,7 +16,7 @@ describe('TrackParticipantsPanel', () => {
     expect(screen.getByText('Ronish')).toBeTruthy();
     expect(screen.getByText('Active')).toBeTruthy();
     expect(screen.getByText(/cursor/)).toBeTruthy();
-    expect(screen.getByText(/teambridge\/billing-refactor\/ronish/)).toBeTruthy();
+    expect(screen.getByText(/coord\/billing-refactor\/ronish/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Enter' })).toBeTruthy();
   });
 

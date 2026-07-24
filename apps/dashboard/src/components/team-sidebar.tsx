@@ -9,8 +9,8 @@ import type {
   VaultCheckpoint,
   WorkspaceEvent,
   WorkspaceStatusResponse
-} from '@teambridge/core';
-import type { ProjectMember } from '@teambridge/core';
+} from '@coord/core';
+import type { ProjectMember } from '@coord/core';
 import { motion } from 'motion/react';
 import { SidebarContent } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
@@ -24,7 +24,7 @@ import { ConflictsPanel } from './ConflictsPanel';
 import { TeammateDeltaPanel } from './TeammateDeltaPanel';
 import { RecentDeltasPanel } from './RecentDeltasPanel';
 import { displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 
 export type TeamSidebarTab = 'team' | 'inbox' | 'conflicts' | 'updates';
 export type MembersView = 'all' | 'track' | 'relay';
@@ -210,7 +210,7 @@ export function TeamSidebar({
   }, [localUser, membersView, members, trackStatus?.participants]);
 
   const config = useMemo(
-    () => ({ daemonBaseUrl, repoRoot }) as TeambridgeClientConfig,
+    () => ({ daemonBaseUrl, repoRoot }) as CoordClientConfig,
     [daemonBaseUrl, repoRoot]
   );
 

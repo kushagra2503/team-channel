@@ -27,7 +27,7 @@ test('CLI init → project create → start → status against a live daemon', a
     baseUrl: daemon.baseUrl
   });
   assert.equal(init.exitCode, 0, init.stderr || init.stdout);
-  assert.match(init.stdout, /Initialized Teambridge for Ada Lovelace/);
+  assert.match(init.stdout, /Initialized Coord for Ada Lovelace/);
 
   const profileAfterInit = await apiGet('/user/profile', { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(profileAfterInit.response.status, 200);
@@ -103,7 +103,7 @@ test('CLI init → project create → start → status against a live daemon', a
   });
   assert.equal(scopedContext.response.status, 200);
   assert.equal(scopedContext.body.ok, true);
-  assert.equal(scopedContext.body.data.context.branch, 'teambridge/billing-refactor/ada-lovelace');
+  assert.equal(scopedContext.body.data.context.branch, 'coord/billing-refactor/ada-lovelace');
 });
 
 test('CLI start picks the only project when --project is omitted', async (t) => {
@@ -146,5 +146,5 @@ test('CLI fails fast when daemon is unreachable', async (t) => {
     baseUrl: 'http://127.0.0.1:1'
   });
   assert.notEqual(status.exitCode, 0);
-  assert.match(status.stderr + status.stdout, /fetch failed|ECONNREFUSED|teambridge:/i);
+  assert.match(status.stderr + status.stdout, /fetch failed|ECONNREFUSED|coord:/i);
 });

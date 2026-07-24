@@ -87,7 +87,7 @@ flowchart TB
   end
 
   subgraph Dashboard["apps/dashboard/src"]
-    D[teambridgeClient.ts\n+ getRelayStatus\n+ getWorkspaceEvents]
+    D[coordClient.ts\n+ getRelayStatus\n+ getWorkspaceEvents]
     E[RelaySyncHealth.tsx]
     F[EventFeed.tsx]
     G[CheckpointState.tsx]
@@ -147,7 +147,7 @@ flowchart TB
 - Validation: `RelayModeSchema` accepts both `'local'` and `'supabase'`; rejects `'remote'` or other strings.
 - Validation: `WorkspaceSchema` accepts a workspace with `relayMode: 'supabase'` (previously would fail).
 
-**Verification:** `pnpm --filter @teambridge/core build && pnpm --filter @teambridge/core test` passes. New types are importable from `@teambridge/core`.
+**Verification:** `pnpm --filter @coord/core build && pnpm --filter @coord/core test` passes. New types are importable from `@coord/core`.
 
 ### U2. Daemon: camelCase transform for relay status sync rows
 
@@ -181,12 +181,12 @@ flowchart TB
 **Dependencies:** U1
 
 **Files:**
-- `apps/dashboard/src/api/teambridgeClient.ts` — add `getRelayStatus(config, signal)` calling `GET /relay/status`, add `getWorkspaceEvents(workspaceId, config, signal)` calling `GET /workspaces/:id/events`
-- `apps/dashboard/src/api/teambridgeClient.test.ts` — add tests for both new functions
+- `apps/dashboard/src/api/coordClient.ts` — add `getRelayStatus(config, signal)` calling `GET /relay/status`, add `getWorkspaceEvents(workspaceId, config, signal)` calling `GET /workspaces/:id/events`
+- `apps/dashboard/src/api/coordClient.test.ts` — add tests for both new functions
 
 **Approach:** Both functions follow the existing `getJson<T>` pattern. `getRelayStatus` returns `RelayStatusResponse`. `getWorkspaceEvents` returns `EventListResponse` (already defined in core contracts).
 
-**Patterns to follow:** Existing `getWorkspaceStatus` and `getVaultContext` in `teambridgeClient.ts` — same `getJson` + `AbortSignal` pattern.
+**Patterns to follow:** Existing `getWorkspaceStatus` and `getVaultContext` in `coordClient.ts` — same `getJson` + `AbortSignal` pattern.
 
 **Test scenarios:**
 - Happy path: `getRelayStatus` calls `GET /relay/status` with the correct URL and returns the parsed `RelayStatusResponse`.
@@ -194,7 +194,7 @@ flowchart TB
 - Edge case: `getRelayStatus` propagates the error message when the daemon returns a non-OK response.
 - Integration: both functions pass `repoRoot` from `config` as a query parameter when set.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes. Both functions are exported and callable.
+**Verification:** `pnpm --filter @coord/dashboard test` passes. Both functions are exported and callable.
 
 ### U4. Relay sync health panel
 
@@ -223,7 +223,7 @@ flowchart TB
 - Loading state: renders "Loading relay status…" placeholder when data is undefined and no error.
 - Error state: renders error message in destructive color when `error` prop is set.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes. Component renders correctly for all relay states including error.
+**Verification:** `pnpm --filter @coord/dashboard test` passes. Component renders correctly for all relay states including error.
 
 ### U5. Event feed panel
 
@@ -251,7 +251,7 @@ flowchart TB
 - Event type rendering: renders `conflict_detected` and `checkpoint_created` type badges with distinct colors and text labels.
 - Error state: renders error message in destructive color when `error` prop is set.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes. Component renders events correctly including error state.
+**Verification:** `pnpm --filter @coord/dashboard test` passes. Component renders events correctly including error state.
 
 ### U6. Checkpoint state placeholder panel
 
@@ -274,7 +274,7 @@ flowchart TB
 - Happy path: renders checkpoint seq, relative created at, truncated hash, and device ID when `latestCheckpoint` is present.
 - Edge case: renders gracefully when `latestCheckpoint` exists but `createdByDeviceId` is empty.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes. Component renders both states correctly.
+**Verification:** `pnpm --filter @coord/dashboard test` passes. Component renders both states correctly.
 
 ### U7. Presence enhancement: lastSeenAt in TrackParticipantsPanel
 
@@ -297,7 +297,7 @@ flowchart TB
 - Edge case: does not render relative time when `lastSeenAt` is absent or empty.
 - Existing behavior: status dots, branch, agent, and worktree "Enter" button still render correctly.
 
-**Verification:** `pnpm --filter @teambridge/dashboard test` passes. Existing `TrackParticipantsPanel` tests still pass.
+**Verification:** `pnpm --filter @coord/dashboard test` passes. Existing `TrackParticipantsPanel` tests still pass.
 
 ### U8. Dashboard integration: relay tab + header sync badge
 
@@ -333,7 +333,7 @@ flowchart TB
 - Tab switching: switching away from "Relay" tab and back preserves the relay data.
 - Accessibility: relay tab has `role="tab"` and `aria-controls`; header badge has `role="status"` and `aria-live="polite"`.
 
-**Verification:** `pnpm build` succeeds. `pnpm --filter @teambridge/dashboard test` passes. `pnpm test:integration` passes. Dashboard renders relay tab with live data when daemon is running.
+**Verification:** `pnpm build` succeeds. `pnpm --filter @coord/dashboard test` passes. `pnpm test:integration` passes. Dashboard renders relay tab with live data when daemon is running.
 
 ---
 
@@ -341,9 +341,9 @@ flowchart TB
 
 | What | Command | Applies to |
 |------|---------|------------|
-| Core contract tests | `pnpm --filter @teambridge/core test` | U1 |
+| Core contract tests | `pnpm --filter @coord/core test` | U1 |
 | Daemon transform | `pnpm test:integration` | U2 |
-| Dashboard unit tests | `pnpm --filter @teambridge/dashboard test` | U3, U4, U5, U6, U7, U8 |
+| Dashboard unit tests | `pnpm --filter @coord/dashboard test` | U3, U4, U5, U6, U7, U8 |
 | Full build | `pnpm build` | All units |
 | Integration tests | `pnpm test:integration` | U2, U8 (no regressions) |
 
@@ -351,7 +351,7 @@ flowchart TB
 
 - All 8 implementation units are complete with their test scenarios passing.
 - `pnpm build` succeeds with no TypeScript errors.
-- `pnpm --filter @teambridge/core test`, `pnpm --filter @teambridge/dashboard test`, and `pnpm test:integration` all pass.
+- `pnpm --filter @coord/core test`, `pnpm --filter @coord/dashboard test`, and `pnpm test:integration` all pass.
 - The dashboard "Relay" tab renders sync health, event feed, checkpoint state, and enhanced presence when the daemon is running.
 - The site header shows a relay sync badge with all states handled (Local, Not logged in, Error, Offline, Pending, Synced).
 - All relay panels define error states for API call failures.

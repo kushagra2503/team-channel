@@ -1,9 +1,9 @@
 import * as React from 'react';
-import type { Workspace } from '@teambridge/core';
+import type { Workspace } from '@coord/core';
 
 import { TrackList } from '@/components/TrackList';
 import { RepoContextPanel } from '@/components/repo-context-panel';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 import {
   Sidebar,
   SidebarContent
@@ -12,7 +12,7 @@ import {
 export type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   tracks: Workspace[];
   selectedTrackId?: string;
-  clientConfig: TeambridgeClientConfig;
+  clientConfig: CoordClientConfig;
   error?: string;
   onSelectTrack: (trackId: string) => void;
   columnIndex?: number;

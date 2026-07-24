@@ -1,4 +1,4 @@
-/** Mirror of @teambridge/core/avatar — kept local for Vite ESM (core ships CJS). */
+/** Mirror of @coord/core/avatar — kept local for Vite ESM (core ships CJS). */
 
 export function normalizeDisplayName(name: string): string {
   return name

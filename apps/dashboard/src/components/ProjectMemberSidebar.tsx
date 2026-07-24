@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { motion } from 'motion/react';
-import type { ProjectMember } from '@teambridge/core';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { ProjectMember } from '@coord/core';
+import type { CoordClientConfig } from '@/api/coordClient';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
@@ -51,7 +51,7 @@ const MemberRow = memo(function MemberRow({
   columnIndex
 }: {
   row: MemberRowData;
-  config: TeambridgeClientConfig;
+  config: CoordClientConfig;
   avatarRev?: number | string;
   index: number;
   columnIndex: number;
@@ -151,7 +151,7 @@ export function ProjectMemberSidebar({
   }
 
   const { online, offline } = buildMemberRows(members, localUser, localAvatarVersion);
-  const config: TeambridgeClientConfig = { daemonBaseUrl, repoRoot };
+  const config: CoordClientConfig = { daemonBaseUrl, repoRoot };
   const offlineStartIndex = online.length + 1;
 
   return (

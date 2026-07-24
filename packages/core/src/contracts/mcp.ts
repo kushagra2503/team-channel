@@ -32,11 +32,11 @@ export type VaultReadToolInput = {
 };
 
 export const MCP_RESOURCE_NAMES = [
-  'teambridge://workspace',
-  'teambridge://participants',
-  'teambridge://vault/context',
-  'teambridge://inbox',
-  'teambridge://conflicts'
+  'coord://workspace',
+  'coord://participants',
+  'coord://vault/context',
+  'coord://inbox',
+  'coord://conflicts'
 ] as const;
 
 export type McpResourceName = (typeof MCP_RESOURCE_NAMES)[number];
@@ -59,7 +59,7 @@ export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
  * When relay is not configured, the field is absent and the resource
  * degrades to plain `WorkspaceStatusResponse`.
  *
- * On the `teambridge://participants` resource, participant `status` and
+ * On the `coord://participants` resource, participant `status` and
  * `lastSeenAt` fields are relay-backed when the workspace's `relayMode`
  * is `'supabase'`; in local mode they reflect local heartbeat state only.
  */

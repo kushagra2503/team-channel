@@ -8,7 +8,7 @@ const monorepoRoot = fileURLToPath(new URL('../..', import.meta.url));
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   define: {
-    'import.meta.env.VITE_TEAMBRIDGE_REPO_ROOT': JSON.stringify(monorepoRoot)
+    'import.meta.env.VITE_COORD_REPO_ROOT': JSON.stringify(monorepoRoot)
   },
   resolve: {
     alias: {

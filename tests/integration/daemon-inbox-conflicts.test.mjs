@@ -55,7 +55,7 @@ test('daemon inbox and conflict endpoints work end-to-end', async (t) => {
 
   // Switch local profile to Bob so he can reply.
   await writeFile(
-    path.join(repoRoot, '.teambridge', 'user.json'),
+    path.join(repoRoot, '.coord', 'user.json'),
     JSON.stringify({ schemaVersion: 1, firstName: 'Bob', lastName: 'B', displayName: 'Bob' }, null, 2)
   );
 

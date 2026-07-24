@@ -39,8 +39,8 @@ const TWO_PARTICIPANTS = {
   data: {
     workspace: { id: 'ws_1', sessionName: 'auth-redesign', status: 'active', baseCommit: 'abc123' },
     participants: [
-      { displayName: 'Kushagra', status: 'active', agent: 'claude-code', branch: 'teambridge/auth-redesign/kushagra' },
-      { displayName: 'Ronish', status: 'idle', agent: 'cursor', branch: 'teambridge/auth-redesign/ronish' }
+      { displayName: 'Kushagra', status: 'active', agent: 'claude-code', branch: 'coord/auth-redesign/kushagra' },
+      { displayName: 'Ronish', status: 'idle', agent: 'cursor', branch: 'coord/auth-redesign/ronish' }
     ],
     lastSeq: 5
   }
@@ -79,7 +79,7 @@ test('ws branches lists each participant branch', async () => {
     await runWs(['branches', 'auth-redesign'], OPTIONS);
     assert.equal(
       capture.output,
-      'teambridge/auth-redesign/kushagra\tKushagra\nteambridge/auth-redesign/ronish\tRonish\n'
+      'coord/auth-redesign/kushagra\tKushagra\ncoord/auth-redesign/ronish\tRonish\n'
     );
   } finally {
     capture.restore();

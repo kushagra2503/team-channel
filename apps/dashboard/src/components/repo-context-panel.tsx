@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import type { RepoContext } from '@teambridge/core';
+import type { RepoContext } from '@coord/core';
 import {
   IconBrandGithub,
   IconCloudUpload,
@@ -8,13 +8,13 @@ import {
   IconGitFork
 } from '@tabler/icons-react';
 import { motion } from 'motion/react';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
-import { getRepoContext, openRepoPath } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
+import { getRepoContext, openRepoPath } from '@/api/coordClient';
 import { cn } from '@/lib/utils';
 
 export type RepoContextPanelProps = {
   workspaceId?: string;
-  clientConfig: TeambridgeClientConfig;
+  clientConfig: CoordClientConfig;
 };
 
 const panelSpring = { type: 'spring' as const, duration: 0.32, bounce: 0 };

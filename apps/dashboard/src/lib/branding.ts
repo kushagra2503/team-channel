@@ -1,1 +1,1 @@
-export const APP_NAME = 'Condominium';
+export const APP_NAME = 'Coord';

@@ -14,11 +14,11 @@ function valueAfter(argv: string[], flag: string): string | undefined {
 }
 
 export async function runLogin(argv: string[], options: ClientOptions): Promise<void> {
-  const email = valueAfter(argv, '--email') ?? process.env.TEAMBRIDGE_EMAIL;
-  const password = valueAfter(argv, '--password') ?? process.env.TEAMBRIDGE_PASSWORD;
+  const email = valueAfter(argv, '--email') ?? process.env.COORD_EMAIL;
+  const password = valueAfter(argv, '--password') ?? process.env.COORD_PASSWORD;
 
   if (!email || !password) {
-    throw new Error('Usage: teambridge login --email EMAIL --password PASSWORD');
+    throw new Error('Usage: coord login --email EMAIL --password PASSWORD');
   }
 
   const result = await loginRelay(options, { email, password });
@@ -26,7 +26,7 @@ export async function runLogin(argv: string[], options: ClientOptions): Promise<
     throw new Error(result.error.message);
   }
 
-  console.log(`Logged in to Teambridge relay as ${result.data.email ?? result.data.userId}`);
+  console.log(`Logged in to Coord relay as ${result.data.email ?? result.data.userId}`);
   console.log(`Relay: ${result.data.relayUrl}`);
 }
 

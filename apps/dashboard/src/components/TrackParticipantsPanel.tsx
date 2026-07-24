@@ -1,9 +1,9 @@
 import { motion } from 'motion/react';
-import type { Participant, WorktreeInfo, WorkspaceStatusResponse } from '@teambridge/core';
+import type { Participant, WorktreeInfo, WorkspaceStatusResponse } from '@coord/core';
 import { SidebarGroup, SidebarGroupLabel } from '@/components/ui/sidebar';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
-import { openRepoPath, type TeambridgeClientConfig } from '@/api/teambridgeClient';
+import { openRepoPath, type CoordClientConfig } from '@/api/coordClient';
 import { prettyParticipantName, displayNamesMatch, type PinnedLocalUser } from './participantDisplay';
 import { columnEnterTransition, COLUMN_ENTER, COLUMN_HIDE } from '@/lib/motion';
 import { formatRelativeTime } from '@/lib/relative-time';
@@ -57,7 +57,7 @@ function MemberRow({
   avatarUrl?: string;
   index: number;
   columnIndex: number;
-  config: TeambridgeClientConfig;
+  config: CoordClientConfig;
 }) {
   const showDot = row.status !== 'offline';
   const meta = [row.agent, row.branch].filter(Boolean).join(' · ');

@@ -1,4 +1,4 @@
-import type { Participant, PublishEventPayload, WorkspaceEvent } from '@teambridge/core';
+import type { Participant, PublishEventPayload, WorkspaceEvent } from '@coord/core';
 import type { ClientOptions } from '../daemon-client';
 import { getUserProfile, getVaultContext, getWorkspaceStatus, listEvents } from '../daemon-client';
 import { currentSessionNameFromBranch, resolveCurrentTrack } from '../lib/current-track';
@@ -127,7 +127,7 @@ export async function runContext(argv: string[], options: ClientOptions): Promis
       )}\n`
     );
   } else {
-    const out: string[] = [`# Teambridge context — ${sessionName}`];
+    const out: string[] = [`# Coord context — ${sessionName}`];
 
     if (!deltasOnly) {
       out.push('', '## Shared vault context');

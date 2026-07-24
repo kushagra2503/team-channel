@@ -1,4 +1,4 @@
-/** Mirror of @teambridge/core/vault-annotations for Vite ESM. */
+/** Mirror of @coord/core/vault-annotations for Vite ESM. */
 
 export type VaultItemMeta = {
   color?: string;

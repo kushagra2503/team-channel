@@ -8,7 +8,7 @@ async function resolveWorkspaceBySessionName(sessionName: string, options: Clien
   }
   const track = tracks.data.tracks.find((candidate) => candidate.sessionName === sessionName);
   if (!track) {
-    throw new Error(`Session "${sessionName}" not found. Start it first: \`teambridge start ${sessionName}\`.`);
+    throw new Error(`Session "${sessionName}" not found. Start it first: \`coord start ${sessionName}\`.`);
   }
   return track;
 }
@@ -16,7 +16,7 @@ async function resolveWorkspaceBySessionName(sessionName: string, options: Clien
 function parseSessionName(argv: string[]): string {
   const sessionName = argv.find((arg) => !arg.startsWith('-'));
   if (!sessionName?.trim()) {
-    throw new Error('Usage: teambridge ws show|who|branches <session_name>');
+    throw new Error('Usage: coord ws show|who|branches <session_name>');
   }
   return sessionName.trim();
 }
@@ -86,5 +86,5 @@ export async function runWs(argv: string[], options: ClientOptions): Promise<voi
     await runWsBranches(argv.slice(1), options);
     return;
   }
-  throw new Error('Usage: teambridge ws show|who|branches <session_name>');
+  throw new Error('Usage: coord ws show|who|branches <session_name>');
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@teambridge/mcp",
+  "name": "@coord/mcp",
   "version": "0.0.0",
   "private": true,
   "main": "dist/index.js",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@teambridge/core": "workspace:*",
+    "@coord/core": "workspace:*",
     "zod": "^4.4.3"
   }
 }

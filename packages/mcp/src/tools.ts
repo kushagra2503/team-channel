@@ -1,4 +1,4 @@
-import { MCP_TOOL_NAMES as CORE_MCP_TOOL_NAMES } from '@teambridge/core';
+import { MCP_TOOL_NAMES as CORE_MCP_TOOL_NAMES } from '@coord/core';
 
 /** Stub registry — HTTP MCP server wiring is Phase 3; names match contracts. */
 export const MCP_TOOL_NAMES = CORE_MCP_TOOL_NAMES;

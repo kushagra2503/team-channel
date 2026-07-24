@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Participant, VaultContext, VaultItemAnnotation } from '@teambridge/core';
+import type { Participant, VaultContext, VaultItemAnnotation } from '@coord/core';
 import { Badge } from '@/components/ui/badge';
 import { IconSearch } from '@tabler/icons-react';
-import type { TeambridgeClientConfig } from '@/api/teambridgeClient';
+import type { CoordClientConfig } from '@/api/coordClient';
 import { ParticipantAvatar } from '@/components/participant-avatar';
 import { avatarUrlForDisplayName } from '@/components/member-avatar';
 import { participantFirstName, prettyParticipantName } from './participantDisplay';
@@ -114,7 +114,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 }
 
 function VaultParticipantAvatar({ participant, config, avatarRev, size = 20 }: {
-  participant: Participant; config: TeambridgeClientConfig; avatarRev?: number; size?: number;
+  participant: Participant; config: CoordClientConfig; avatarRev?: number; size?: number;
 }) {
   const avatarUrl = avatarUrlForDisplayName(participant.displayName, config, avatarRev);
   return (
@@ -127,7 +127,7 @@ function VaultParticipantAvatar({ participant, config, avatarRev, size = 20 }: {
 }
 
 function AuthorChip({ participant, config, avatarRev }: {
-  participant: Participant; config: TeambridgeClientConfig; avatarRev?: number;
+  participant: Participant; config: CoordClientConfig; avatarRev?: number;
 }) {
   const firstName = participantFirstName(participant.displayName);
   return (
@@ -139,7 +139,7 @@ function AuthorChip({ participant, config, avatarRev }: {
 }
 
 function AssignedChip({ participant, config, avatarRev }: {
-  participant: Participant; config: TeambridgeClientConfig; avatarRev?: number;
+  participant: Participant; config: CoordClientConfig; avatarRev?: number;
 }) {
   const firstName = participantFirstName(participant.displayName);
   return (
@@ -167,7 +167,7 @@ const ICON_CHECK = (
 function EntryRow({ item, participant, rowState, onColor, onAssign, onCopy, participants, config, avatarRev, openMenus, onToggleMenu, highlightQuery }: {
   item: VaultEntry; participant?: Participant; rowState: RowState;
   onColor: (c: string | undefined) => void; onAssign: (slug: string | undefined) => void; onCopy: () => void;
-  participants: Participant[]; config: TeambridgeClientConfig; avatarRev?: number;
+  participants: Participant[]; config: CoordClientConfig; avatarRev?: number;
   openMenus: OpenMenus | null; onToggleMenu: (t: 'color' | 'assign') => void; onCloseAll: () => void;
   highlightQuery: string;
 }) {
@@ -360,7 +360,7 @@ export function VaultHighlights({
 }: VaultHighlightsProps) {
   const sections = useMemo(() => (context ? parseVaultSections(context.content) : []), [context?.content]);
   const persistedStates = useMemo(() => buildRowStates(sections), [sections]);
-  const config = useMemo<TeambridgeClientConfig>(() => ({ daemonBaseUrl, repoRoot }), [daemonBaseUrl, repoRoot]);
+  const config = useMemo<CoordClientConfig>(() => ({ daemonBaseUrl, repoRoot }), [daemonBaseUrl, repoRoot]);
 
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [openMenus, setOpenMenus] = useState<OpenMenus | null>(null);

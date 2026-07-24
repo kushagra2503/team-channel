@@ -28,8 +28,8 @@ function createMcpClient({ daemonUrl, repoRoot }) {
     cwd: repoRoot,
     env: {
       ...process.env,
-      TEAMBRIDGE_DAEMON_URL: daemonUrl,
-      TEAMBRIDGE_REPO_ROOT: repoRoot
+      COORD_DAEMON_URL: daemonUrl,
+      COORD_REPO_ROOT: repoRoot
     },
     stdio: ['pipe', 'pipe', 'pipe']
   });
@@ -129,7 +129,7 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
 
   // .active file lets the MCP server resolve workspace without explicit params.
   const { writeFile } = await import('node:fs/promises');
-  await writeFile(pathJoin(repoRoot, '.teambridge', '.active'), 'smoke-track');
+  await writeFile(pathJoin(repoRoot, '.coord', '.active'), 'smoke-track');
 
   // --- Spawn the MCP server ---
   const mcp = createMcpClient({ daemonUrl: daemon.baseUrl, repoRoot });
@@ -141,7 +141,7 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
     capabilities: {},
     clientInfo: { name: 'smoke-test', version: '0.0.1' }
   });
-  assert.equal(init.result.serverInfo.name, 'teambridge');
+  assert.equal(init.result.serverInfo.name, 'coord');
   mcp.notify('notifications/initialized');
 
   // --- workspace_status: returns real workspace + participants ---
@@ -197,7 +197,7 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
   });
   assert.ok(!conflictPublishRes.result.isError, `team_publish conflict failed: ${conflictPublishRes.result.content?.[0]?.text}`);
 
-  const conflictsRes = await mcp.request('resources/read', { uri: 'teambridge://conflicts' });
+  const conflictsRes = await mcp.request('resources/read', { uri: 'coord://conflicts' });
   assert.ok(conflictsRes.result, 'resources/read should return a result');
   assert.ok(conflictsRes.result.contents?.[0], 'resources/read should return contents');
   assert.ok(!conflictsRes.result.contents[0].text?.includes('not yet'), 'conflicts resource should be live');
@@ -222,7 +222,7 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
   // The CLI init short-circuits if a profile already exists, so write the local
   // user.json directly to match Bob's participant displayName.
   await writeFile(
-    pathJoin(repoRoot, '.teambridge', 'user.json'),
+    pathJoin(repoRoot, '.coord', 'user.json'),
     JSON.stringify({ schemaVersion: 1, firstName: 'Bob', lastName: 'B', displayName: 'Bob' }, null, 2)
   );
 
@@ -236,7 +236,7 @@ test('MCP tools work end-to-end against a real daemon', async (t) => {
   assert.equal(repliedMessage.replyText, 'Yes, FTS5 is included in the sqlite3 build.');
 
   // --- Inbox resource: the answered message appears ---
-  const inboxRes = await mcp.request('resources/read', { uri: 'teambridge://inbox' });
+  const inboxRes = await mcp.request('resources/read', { uri: 'coord://inbox' });
   const inboxData = JSON.parse(inboxRes.result.contents[0].text);
   assert.ok(Array.isArray(inboxData.messages), 'Expected messages array');
   assert.ok(inboxData.messages.length >= 1, 'Expected at least one inbox message');

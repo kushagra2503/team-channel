@@ -16,7 +16,7 @@ export const ParticipantSchema = z.object({
 export const WorkspaceStatusSchema = z.enum(['active', 'archived']);
 export const RelayModeSchema = z.enum(['local', 'supabase']);
 
-export const TeambridgeConfigSchema = z.object({
+export const CoordConfigSchema = z.object({
   schemaVersion: z.literal(1),
   defaultRelayMode: RelayModeSchema,
   daemonPort: z.number().int().positive(),
@@ -274,7 +274,7 @@ export const VaultContextSchema = z.object({
   lastSeq: z.number().int().nonnegative().optional()
 });
 
-export const TeambridgeErrorCodeSchema = z.enum([
+export const CoordErrorCodeSchema = z.enum([
   'WORKSPACE_NOT_FOUND',
   'WORKTREE_NOT_FOUND',
   'PROJECT_NOT_FOUND',
@@ -287,8 +287,8 @@ export const TeambridgeErrorCodeSchema = z.enum([
   'INTERNAL_ERROR'
 ]);
 
-export const TeambridgeErrorSchema = z.object({
-  code: TeambridgeErrorCodeSchema,
+export const CoordErrorSchema = z.object({
+  code: CoordErrorCodeSchema,
   message: z.string().min(1),
   details: z.unknown().optional()
 });
@@ -302,7 +302,7 @@ export function ApiOkSchema<T extends z.ZodType>(data: T) {
 
 export const ApiFailSchema = z.object({
   ok: z.literal(false),
-  error: TeambridgeErrorSchema
+  error: CoordErrorSchema
 });
 
 export function ApiResultSchema<T extends z.ZodType>(data: T) {

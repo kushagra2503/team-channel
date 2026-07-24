@@ -17,39 +17,39 @@ import { runMcp } from './commands/mcp';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
 function usage(): void {
-  console.log(`Teambridge CLI
+  console.log(`Coord CLI
 
 Usage:
-  teambridge init [--first-name NAME] [--last-name NAME] [--agent cursor|claude-code|codex] [--relay local|supabase]
-  teambridge project create [--name NAME] [--description TEXT]
-  teambridge project list
-  teambridge start [NAME] [BASE_REF] [--project PROJECT_ID]
-  teambridge join [NAME] [--as DISPLAY_NAME]
-  teambridge login --email EMAIL --password PASSWORD
-  teambridge sessions
-  teambridge list
-  teambridge sync
-  teambridge enter <NAME>
-  teambridge publish <TARGET_FILE> <TEXT>
-  teambridge ask <PARTICIPANT> <QUESTION>
-  teambridge inbox [--all]
-  teambridge reply <MESSAGE_ID> <ANSWER>
-  teambridge conflicts [--open]
-  teambridge conflicts detect
-  teambridge conflicts resolve <CONFLICT_ID> <RESOLUTION>
-  teambridge vault read <PATH>
-  teambridge vault context
-  teambridge vault search <QUERY>
-  teambridge context [--json] [--peek] [--deltas-only] [--full]
-  teambridge hook install|uninstall|status
-  teambridge ws show|who|branches <NAME>
-  teambridge daemon start|status|stop [--port PORT]
-  teambridge status
-  teambridge mcp
+  coord init [--first-name NAME] [--last-name NAME] [--agent cursor|claude-code|codex] [--relay local|supabase]
+  coord project create [--name NAME] [--description TEXT]
+  coord project list
+  coord start [NAME] [BASE_REF] [--project PROJECT_ID]
+  coord join [NAME] [--as DISPLAY_NAME]
+  coord login --email EMAIL --password PASSWORD
+  coord sessions
+  coord list
+  coord sync
+  coord enter <NAME>
+  coord publish <TARGET_FILE> <TEXT>
+  coord ask <PARTICIPANT> <QUESTION>
+  coord inbox [--all]
+  coord reply <MESSAGE_ID> <ANSWER>
+  coord conflicts [--open]
+  coord conflicts detect
+  coord conflicts resolve <CONFLICT_ID> <RESOLUTION>
+  coord vault read <PATH>
+  coord vault context
+  coord vault search <QUERY>
+  coord context [--json] [--peek] [--deltas-only] [--full]
+  coord hook install|uninstall|status
+  coord ws show|who|branches <NAME>
+  coord daemon start|status|stop [--port PORT]
+  coord status
+  coord mcp
 
 Environment:
-  TEAMBRIDGE_DAEMON_URL   default http://127.0.0.1:9473
-  TEAMBRIDGE_DAEMON_PORT  used when URL unset
+  COORD_DAEMON_URL   default http://127.0.0.1:9473
+  COORD_DAEMON_PORT  used when URL unset
 
 Run \`pnpm daemon\` in another terminal before CLI commands.`);
 }
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
         await runProjectList(argv.slice(2), options);
         return;
       }
-      throw new Error('Usage: teambridge project create|list');
+      throw new Error('Usage: coord project create|list');
     }
 
     if (command === 'start') {
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
     process.exit(1);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`teambridge: ${message}`);
+    console.error(`coord: ${message}`);
     process.exit(1);
   }
 }

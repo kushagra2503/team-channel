@@ -1,6 +1,6 @@
-# Condominium TODO
+# Coord TODO
 
-Working checklist for building Condominium. Anything not checked is still pending.
+Working checklist for building Coord. Anything not checked is still pending.
 
 ## Done
 
@@ -46,25 +46,25 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Implement local SQLite state using a Phase 1 SQLite adapter.
   - [x] Implement local workspace store.
 - [x] Step 4, Kushagra after daemon health/config exist:
-  - [x] Implement `teambridge init` (profile + avatar via daemon).
-  - [x] Implement `teambridge status`.
-  - [x] Implement `teambridge project create` and `teambridge project list`.
+  - [x] Implement `coord init` (profile + avatar via daemon).
+  - [x] Implement `coord status`.
+  - [x] Implement `coord project create` and `coord project list`.
   - [x] Wire CLI calls to the local daemon.
   - [x] Make CLI requests repo-aware: resolve the current working directory to the current git repo root and send that `repoRoot` to the daemon.
   - [x] Daemon discovers git repo root from cwd when started via `pnpm daemon` (walk up to `.git`).
-  - [x] Implement `teambridge ws show <session_name>`.
-  - [x] Implement `teambridge ws who <session_name>`.
-  - [x] Implement `teambridge ws branches <session_name>`.
-  - [x] Keep daemon startup generic; normal users should not have to start the daemon with `--repo` (`teambridge daemon start|status|stop` manages a background daemon for Phase 1; IDE/OS launch can come later).
+  - [x] Implement `coord ws show <session_name>`.
+  - [x] Implement `coord ws who <session_name>`.
+  - [x] Implement `coord ws branches <session_name>`.
+  - [x] Keep daemon startup generic; normal users should not have to start the daemon with `--repo` (`coord daemon start|status|stop` manages a background daemon for Phase 1; IDE/OS launch can come later).
 - [x] Step 5, Nihal backend workspace APIs:
   - [x] Nihal: implement daemon workspace create/join APIs and persist workspace manifests.
   - [x] Local user profile APIs (`GET/POST /user/profile`, flower avatar on init). (moved from Step 9 — backend API work, not dashboard UI)
   - [x] `POST /projects` + roster member upsert; start/join link tracks to projects. (moved from Step 9 — backend API work, not dashboard UI)
   - [x] Stub MCP resource names from contracts (`packages/mcp/src/resources.ts`, `tools.ts`). (moved from Step 9 — done early; real MCP server work is Phase 3 Step 2)
 - [x] Step 6, Kushagra workspace CLI after backend workspace APIs exist:
-  - [x] Kushagra: implement `teambridge start <session_name> [base_ref]` — creates the session, links `projectId`, and creates a real worktree/branch for the starter.
-  - [x] Kushagra: implement `teambridge join <session_name> --as <display_name>` — uses recorded `base_commit`, creates an isolated git worktree + branch `teambridge/<session>/<safeName>` under `.teambridge/worktrees/`, idempotent re-join. See `docs/cli-worktrees.md`.
-  - [x] Kushagra: implement `teambridge enter <session_name>` — prints the resolved worktree path for `cd "$(teambridge enter NAME)"`.
+  - [x] Kushagra: implement `coord start <session_name> [base_ref]` — creates the session, links `projectId`, and creates a real worktree/branch for the starter.
+  - [x] Kushagra: implement `coord join <session_name> --as <display_name>` — uses recorded `base_commit`, creates an isolated git worktree + branch `coord/<session>/<safeName>` under `.coord/worktrees/`, idempotent re-join. See `docs/cli-worktrees.md`.
+  - [x] Kushagra: implement `coord enter <session_name>` — prints the resolved worktree path for `cd "$(coord enter NAME)"`.
 - [x] Step 7, Nihal backend event and vault APIs:
   - [x] Nihal: implement local event append to `events.jsonl`.
   - [x] Nihal: implement the single local user event type: `publish`.
@@ -73,19 +73,19 @@ Goal: one machine can simulate Nihal, Kushagra, and Ronish as separate participa
   - [x] Nihal: implement local vault materialization and vault rebuild from events.
   - [x] Nihal: implement basic `vault context` by concatenating flat vault files up to a byte/character limit and returning `truncated`.
 - [x] Step 8, Kushagra vault CLI after backend event and vault APIs exist:
-  - [x] Kushagra: implement `teambridge publish <target_file> <text>` — resolves the current track from the participant branch (`teambridge/<session>/<name>`), no `<session_name>` argument needed.
-  - [x] Kushagra: implement `teambridge vault read <path>`.
-  - [x] Kushagra: implement `teambridge vault search <query>` — backed by a real SQLite FTS5 index (`vault_search_index` in `state.sqlite`), kept consistent through `vault rebuild`. See `packages/daemon/src/index.ts` (`reindexVaultFile`) and the `GET /workspaces/:id/vault/search` route.
-  - [x] Kushagra: implement `teambridge vault context`.
+  - [x] Kushagra: implement `coord publish <target_file> <text>` — resolves the current track from the participant branch (`coord/<session>/<name>`), no `<session_name>` argument needed.
+  - [x] Kushagra: implement `coord vault read <path>`.
+  - [x] Kushagra: implement `coord vault search <query>` — backed by a real SQLite FTS5 index (`vault_search_index` in `state.sqlite`), kept consistent through `vault rebuild`. See `packages/daemon/src/index.ts` (`reindexVaultFile`) and the `GET /workspaces/:id/vault/search` route.
+  - [x] Kushagra: implement `coord vault context`.
 - [x] Step 9, Ronish after daemon read endpoints exist:
   - [x] Stub dashboard API client against daemon response contracts.
   - [x] Show local workspace list (project picker + track sidebar).
   - [x] Show local participants (project members sidebar) — display name/status only; branch/agent are fetched but not rendered (see Dashboard milestone follow-ups below).
   - [x] Show vault file highlights (with color/assign annotations).
-  - [x] CLI scaffold aligned with dashboard (`teambridge init`, `project create`, `start` → same daemon data).
+  - [x] CLI scaffold aligned with dashboard (`coord init`, `project create`, `start` → same daemon data).
   - [x] Sidebar repo context panel (`GET /repo/context`, `POST /repo/open-path` — remote, branch, local path, last push + commit link).
   - [x] Vault chip first-name display (`participantFirstName`).
-  - [x] Root ergonomics: `pnpm teambridge`, `pnpm dashboard:preview`, `VITE_TEAMBRIDGE_REPO_ROOT` baked at dashboard build.
+  - [x] Root ergonomics: `pnpm coord`, `pnpm dashboard:preview`, `VITE_COORD_REPO_ROOT` baked at dashboard build.
   - [x] CLI integration tests in `tests/integration/` (`pnpm test:integration`).
 - [x] Step 10, everyone: prove the local pass example below.
 
@@ -103,21 +103,21 @@ Shipped on `feat/ronish-mcp-dashboard`:
 - [x] Integration tests for CLI + daemon (`tests/integration/`, `pnpm test:integration`)
 - [x] Topbar cleanup (removed teammate count + note # chips)
 
-Now complete: MCP HTTP server, inbox UI, conflicts UI, presence polish, `teambridge ask`/`inbox`/`reply`, and CLI/dashboard parity for the local workflow. Remaining later polish: packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces plus inbox, conflicts, and teammate-delta panels:
+Now complete: MCP HTTP server, inbox UI, conflicts UI, presence polish, `coord ask`/`inbox`/`reply`, and CLI/dashboard parity for the local workflow. Remaining later polish: packaged installer / IDE auto-launch daemon. `start`/`enter`/`publish`/`vault read|context|search`/`ws show|who|branches` are done on the CLI — see `docs/cli-worktrees.md` and `tests/integration/vault-flow.test.mjs` — and the dashboard now exposes the matching Phase 1 read/search/worktree surfaces plus inbox, conflicts, and teammate-delta panels:
 
 - [x] Ronish: render participant `branch` and `agent` in `TrackParticipantsPanel.tsx` — the daemon's `/workspaces/:id/status` response includes both per participant.
 - [x] Ronish: add a vault search UI (search box + ranked results list) calling the new `GET /workspaces/:id/vault/search` route.
 - [x] Ronish: add a single-file vault viewer calling `GET /workspaces/:id/vault/read`.
-- [x] Ronish: surface each participant's worktree path (or an "Enter" affordance) in the dashboard, mirroring `teambridge enter <session_name>`.
+- [x] Ronish: surface each participant's worktree path (or an "Enter" affordance) in the dashboard, mirroring `coord enter <session_name>`.
 
 CLI + dashboard dogfood (no seed):
 
 ```bash
 pnpm build
 pnpm daemon
-pnpm teambridge init
-pnpm teambridge project create --name "My App" --description "Local dogfood"
-pnpm teambridge start auth-redesign --project <project-id>
+pnpm coord init
+pnpm coord project create --name "My App" --description "Local dogfood"
+pnpm coord start auth-redesign --project <project-id>
 pnpm dashboard          # dev
 # or: pnpm dashboard:preview   # production build
 pnpm test:integration   # verify CLI + daemon end-to-end
@@ -129,20 +129,20 @@ pnpm test:integration   # verify CLI + daemon end-to-end
 
 ```bash
 # Nihal starts the workspace from main.
-teambridge init
-teambridge start billing-refactor main
+coord init
+coord start billing-refactor main
 
 # Kushagra and Ronish are simulated locally as separate participants/worktrees.
-teambridge join billing-refactor --as kushagra
-teambridge join billing-refactor --as ronish
+coord join billing-refactor --as kushagra
+coord join billing-refactor --as ronish
 
-# Nihal publishes into a flat vault file (run from inside Nihal's worktree — see `teambridge enter`).
-teambridge publish decisions.md "Backend is the source of truth for invoice state."
+# Nihal publishes into a flat vault file (run from inside Nihal's worktree — see `coord enter`).
+coord publish decisions.md "Backend is the source of truth for invoice state."
 
 # Any participant can read/search the materialized vault (run from inside their own worktree).
-teambridge vault read decisions.md
-teambridge vault search "invoice state"
-teambridge vault context
+coord vault read decisions.md
+coord vault search "invoice state"
+coord vault context
 ```
 
 Pass when:
@@ -175,10 +175,10 @@ Implemented and live-verified:
 - [x] Daemon relay identity/device registration is implemented.
 - [x] Daemon mirrors local projects, sessions, and participants to Supabase after login.
 - [x] Daemon queues failed remote publishes in `pending_remote_events`.
-- [x] Daemon push/pull sync exists, with autonomous polling via `TEAMBRIDGE_RELAY_SYNC_INTERVAL_MS` and manual `teambridge sync`.
+- [x] Daemon push/pull sync exists, with autonomous polling via `COORD_RELAY_SYNC_INTERVAL_MS` and manual `coord sync`.
 - [x] Remote canonical events rebuild/materialize the local vault.
-- [x] CLI commands exist: `teambridge login`, `teambridge sessions`, `teambridge list`, `teambridge sync`, and `teambridge status relay`.
-- [x] `teambridge join <session>` can discover/import a remote relay session before creating the local worktree.
+- [x] CLI commands exist: `coord login`, `coord sessions`, `coord list`, `coord sync`, and `coord status relay`.
+- [x] `coord join <session>` can discover/import a remote relay session before creating the local worktree.
 - [x] Dashboard calls `/relay/sessions` and merges relay sessions with local sessions.
 - [x] Live verification passed against Supabase for schema reachability, storage bucket, append RPC, CLI login/start/sessions/sync/status, and CLI publish reaching Supabase.
 
@@ -208,9 +208,9 @@ Implemented after inbox/conflict pass:
   - [x] Implement canonical event insert with per-workspace monotonic `seq` via `tc_append_event`.
 - [x] Step 2, Kushagra + Ronish in parallel while Nihal finishes relay internals:
   - [x] Kushagra: implement CLI auth/login flow against relay responses.
-  - [x] Kushagra: add relay mode configuration to `teambridge init` (`--relay local|supabase`, interactive prompt; `/config/init` accepts `relayMode` and updates `defaultRelayMode`).
-  - [x] Kushagra: add `teambridge status relay` output for relay configured/logged-in/pending state.
-  - [x] Kushagra: add `teambridge sessions` / `teambridge list` for remote session discovery.
+  - [x] Kushagra: add relay mode configuration to `coord init` (`--relay local|supabase`, interactive prompt; `/config/init` accepts `relayMode` and updates `defaultRelayMode`).
+  - [x] Kushagra: add `coord status relay` output for relay configured/logged-in/pending state.
+  - [x] Kushagra: add `coord sessions` / `coord list` for remote session discovery.
   - [x] Ronish: build dashboard screens for realtime event feed, participant presence, checkpoint state, and sync health using mocked/live events. (PR #3)
   - [x] Ronish: merge remote relay sessions into the dashboard session list.
   - [x] Ronish: update MCP resource contracts to include relay-backed workspace state. (PR #4)
@@ -220,9 +220,9 @@ Implemented after inbox/conflict pass:
   - [x] Implement event dedupe via `dedupeKey`.
   - [x] Implement polling pull-after-last-remote-seq and vault rematerialization.
 - [ ] Step 4, Kushagra after relay event APIs exist:
-  - [x] Update `teambridge start` to register workspace remotely when logged into relay.
-  - [x] Update `teambridge join` to fetch/import remote workspace/events before creating the local worktree.
-  - [x] Update `teambridge status relay` to show real sync state.
+  - [x] Update `coord start` to register workspace remotely when logged into relay.
+  - [x] Update `coord join` to fetch/import remote workspace/events before creating the local worktree.
+  - [x] Update `coord status relay` to show real sync state.
   - Add clearer CLI messages for reconnect/retry behavior.
 - [x] Step 5, Nihal + Ronish in parallel:
   - [x] Nihal: implement checkpoint upload/download.
@@ -239,20 +239,20 @@ Implemented after inbox/conflict pass:
 
 ```bash
 # Device A, Nihal
-teambridge start billing-refactor main
-teambridge publish observations.md "Refresh endpoint retries forever when token refresh fails."
+coord start billing-refactor main
+coord publish observations.md "Refresh endpoint retries forever when token refresh fails."
 
 # Device B, Kushagra
-teambridge join billing-refactor
-teambridge vault search "Refresh endpoint"
+coord join billing-refactor
+coord vault search "Refresh endpoint"
 
 # Device A goes offline, publishes locally, then reconnects.
-teambridge publish blockers.md "Need backend decision before changing retry UI."
-teambridge status
+coord publish blockers.md "Need backend decision before changing retry UI."
+coord status
 
 # Device C, Ronish, joins late.
-teambridge join billing-refactor
-teambridge vault read observations.md
+coord join billing-refactor
+coord vault read observations.md
 ```
 
 Pass when:
@@ -265,7 +265,7 @@ Pass when:
 
 ## Phase 3: Agent UX, MCP, Inbox, and Dashboard
 
-Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, and dashboard without per-session flags.
+Goal: agents and humans can use Coord naturally through hooks, MCP, inbox, and dashboard without per-session flags.
 
 ### Phase 3 Execution Order
 
@@ -277,17 +277,17 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - [x] Add participant-level actor validation for MCP/dashboard mutating calls.
 - [x] Step 2, Ronish + Kushagra in parallel:
   - [x] Ronish: implement MCP server over stdio transport (Claude Code compatible). (PR #5)
-  - [x] Ronish: implement MCP workspace/worktree resolution using explicit query params, local `state.sqlite` worktree path mapping, and `.teambridge/.active` fallback. (PR #5)
-  - [x] Ronish: implement MCP resources: `teambridge://workspace`, `teambridge://participants`, `teambridge://vault/context`, `teambridge://inbox` (live), `teambridge://conflicts` (live). (PR #5 + inbox/conflicts cross-surface branch)
-  - [x] Kushagra: implement Claude Code hook auto-injection (`teambridge hook install|uninstall|status` writes a SessionStart hook into `.claude/settings.json` that runs `teambridge context`).
-  - [x] Kushagra: ensure normal use needs no per-session CLI flags (the installed hook runs `teambridge context` with no flags; `context`/`publish`/`vault *` resolve the current track from the branch).
-  - [x] Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX (`teambridge context` drops empty files, strips per-file titles, and dedupes bullets).
-  - [x] Kushagra: implement delta injection for teammate updates (`teambridge context` shows what changed since a per-participant last-seen `seq`; `--peek`/`--deltas-only`/`--json` supported).
+  - [x] Ronish: implement MCP workspace/worktree resolution using explicit query params, local `state.sqlite` worktree path mapping, and `.coord/.active` fallback. (PR #5)
+  - [x] Ronish: implement MCP resources: `coord://workspace`, `coord://participants`, `coord://vault/context`, `coord://inbox` (live), `coord://conflicts` (live). (PR #5 + inbox/conflicts cross-surface branch)
+  - [x] Kushagra: implement Claude Code hook auto-injection (`coord hook install|uninstall|status` writes a SessionStart hook into `.claude/settings.json` that runs `coord context`).
+  - [x] Kushagra: ensure normal use needs no per-session CLI flags (the installed hook runs `coord context` with no flags; `context`/`publish`/`vault *` resolve the current track from the branch).
+  - [x] Kushagra: upgrade Phase 1 `vault context` into smarter compact vault context generation UX (`coord context` drops empty files, strips per-file titles, and dedupes bullets).
+  - [x] Kushagra: implement delta injection for teammate updates (`coord context` shows what changed since a per-participant last-seen `seq`; `--peek`/`--deltas-only`/`--json` supported).
 - [x] Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
   - [x] Ronish: implement MCP tools: `team_publish`, `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`.
-  - [x] Kushagra: implement `teambridge ask`.
-  - [x] Kushagra: implement `teambridge inbox`.
-  - [x] Kushagra: implement `teambridge reply`.
+  - [x] Kushagra: implement `coord ask`.
+  - [x] Kushagra: implement `coord inbox`.
+  - [x] Kushagra: implement `coord reply`.
   - [x] Kushagra: add CLI affordances for pending questions.
 - [x] Step 4, Ronish after dashboard APIs are stable:
   - [x] Implement dashboard shell (React Router, project picker, track sidebar).
@@ -304,13 +304,13 @@ Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, 
   - [x] Add end-to-end tests for new joiner bootstrap (`tests/integration/relay-reconnect-bootstrap.test.mjs`).
 - [ ] Step 6, Kushagra + everyone:
   - Kushagra: document the first real dogfood workflow for Nihal, Kushagra, and Ronish.
-  - Everyone: dogfood one real Teambridge session and fix gaps.
+  - Everyone: dogfood one real Coord session and fix gaps.
 
 ### Phase 3 Pass Example
 
 ```bash
-# Kushagra enters his Teambridge worktree and starts Claude Code.
-cd "$(teambridge enter billing-refactor)"
+# Kushagra enters his Coord worktree and starts Claude Code.
+cd "$(coord enter billing-refactor)"
 claude
 ```
 
@@ -331,12 +331,12 @@ team_ask({
 ```
 
 ```bash
-teambridge dashboard
+coord dashboard
 ```
 
 Pass when:
 
-- [x] Claude Code receives compact context automatically inside a Teambridge worktree.
+- [x] Claude Code receives compact context automatically inside a Coord worktree.
 - [x] Agent can publish, read, search, and ask through MCP.
 - [x] CLI inbox and dashboard show the same questions/replies.
 - [x] Dashboard shows participants, branches, presence, conflicts, and vault highlights.

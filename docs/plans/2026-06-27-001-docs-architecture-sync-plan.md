@@ -67,7 +67,7 @@ This section is the explicit preview of edits. Implementation should follow it c
 
 | Today | Will become |
 |-------|-------------|
-| Single line `# team-channel` | Product intro (Teambridge), prerequisites, quick start: `pnpm install`, `pnpm build`, `pnpm daemon`, `pnpm seed`, `pnpm dashboard` |
+| Single line `# team-channel` | Product intro (Coord), prerequisites, quick start: `pnpm install`, `pnpm build`, `pnpm daemon`, `pnpm seed`, `pnpm dashboard` |
 | No links | Documentation index linking to `agent.md`, `docs/CONCEPTS.md`, `docs/daemon-api.md`, `docs/dashboard.md`, `docs/phase-1-design-choices.md` |
 | No monorepo map | Short package table: `core`, `daemon`, `vault`, `mcp`, `apps/dashboard` |
 
@@ -80,7 +80,7 @@ This section is the explicit preview of edits. Implementation should follow it c
 | **Product Vision / example commands** | Add note: CLI examples are **target UX**; today use daemon + dashboard + seed. Keep commands as north-star. |
 | **Core Mental Model** | Add hierarchy diagram: `Project → Track (workspace session) → Vault`. Clarify Supabase/relay is Phase 2 optional. |
 | **Commands** | Split into “Planned CLI” vs “Available today” (daemon HTTP, dashboard). |
-| **Workspace Vault** | Rename heading to **Track vault** with footnote: on-disk path remains `.teambridge/workspaces/{session_name}/vault/`. Add vault annotation syntax and annotate endpoint. |
+| **Workspace Vault** | Rename heading to **Track vault** with footnote: on-disk path remains `.coord/workspaces/{session_name}/vault/`. Add vault annotation syntax and annotate endpoint. |
 | **Architecture** | Add dashboard (React Router), avatar generation, vault annotate flow. |
 | **Team Responsibilities — Ronish** | Mark dashboard shell, project picker, track sidebar, team sidebar, vault highlights + annotations as **shipped**. Keep inbox/MCP/conflicts as pending. |
 | **Contracts** | Mention `project.ts`, `avatar.ts`, `vault-annotations.ts`. |
@@ -139,7 +139,7 @@ This section is the explicit preview of edits. Implementation should follow it c
 | **New “Completion log”** | Per U1–U9: Done / Partial / Deviation (hybrid API paths, seed names Beacon/Silo/Forge, cache not keyed by projectId, dead components remain). |
 | **Open Questions — Avatars** | Update: partially implemented via `/avatars/by-name/:slug` and member avatar routes. |
 | **Features beyond plan** | List vault annotations, team sidebar collapse, Pexels avatar migration. |
-| **U2 verification** | Fix `teambridge.db` → `state.sqlite`. |
+| **U2 verification** | Fix `coord.db` → `state.sqlite`. |
 
 ---
 
@@ -160,7 +160,7 @@ Define:
 
 - **Project** — organizational container; has **ProjectMembers** (team roster).
 - **Track** — a coordinated work session (alias: `Workspace` in types/API); has **Participants** (per-track agents/branches).
-- **Vault** — flat markdown projection per track under `.teambridge/workspaces/{sessionName}/vault/`.
+- **Vault** — flat markdown projection per track under `.coord/workspaces/{sessionName}/vault/`.
 - **Naming map** — UI “track” vs HTTP `/workspaces/*` vs DB table `tracks` vs disk `workspaces/`.
 - **Avatar identity** — display name → slug → `name_{slug}` storage; assign tags use slug.
 - **Vault annotations** — optional row metadata in markdown, not events.
@@ -188,7 +188,7 @@ Cover:
 
 - Scripts and ports (daemon 9473, Vite dev server)
 - Routes: `/` → `/projects`, `/projects/:projectId`
-- Env: `VITE_TEAMBRIDGE_DAEMON_URL`, `VITE_TEAMBRIDGE_REPO_ROOT`; URL query overrides
+- Env: `VITE_COORD_DAEMON_URL`, `VITE_COORD_REPO_ROOT`; URL query overrides
 - Prerequisites: run seed for demo data
 - UI map: project picker, track sidebar, vault highlights (color/assign), team sidebar
 - Link to vault annotation syntax in CONCEPTS
@@ -223,7 +223,7 @@ Cover:
 
 **Files:** `README.md`, `docs/dashboard.md`
 
-**Approach:** Quick start commands verified against root `package.json` scripts. Dashboard doc matches `apps/dashboard/src/App.tsx` routes and `teambridgeClient.ts` config.
+**Approach:** Quick start commands verified against root `package.json` scripts. Dashboard doc matches `apps/dashboard/src/App.tsx` routes and `coordClient.ts` config.
 
 **Test expectation:** none — documentation only
 

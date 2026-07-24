@@ -1,12 +1,12 @@
-# Teambridge Team Implementation Plan
+# Coord Team Implementation Plan
 
-This document is the execution plan for the first Teambridge build. `agent.md` is the product vision and long-lived agent guide; this file is the team plan for Nihal, Kushagra, and Ronish.
+This document is the execution plan for the first Coord build. `agent.md` is the product vision and long-lived agent guide; this file is the team plan for Nihal, Kushagra, and Ronish.
 
 ## TL;DR
 
-- Build Teambridge contract-first. Shared schemas live in `packages/core/src/contracts/` and every package imports from there.
+- Build Coord contract-first. Shared schemas live in `packages/core/src/contracts/` and every package imports from there.
 - Nihal handles backend/core: daemon, local state, Supabase relay, event ordering, checkpoints, vault materialization, conflicts.
-- Kushagra handles CLI and agent UX: `teambridge` commands, Claude Code hooks, auto-injection, inbox commands, terminal workflows.
+- Kushagra handles CLI and agent UX: `coord` commands, Claude Code hooks, auto-injection, inbox commands, terminal workflows.
 - Ronish handles MCP and dashboard: MCP resources/tools, dashboard views, inbox/conflict UI, workspace visibility.
 - Keep the first version local-first. Supabase is the relay and bootstrap layer, not where agents directly reason.
 - Use one workspace vault. No personal/team/task vault split.
@@ -15,13 +15,13 @@ This document is the execution plan for the first Teambridge build. `agent.md` i
 
 ## Product Shape
 
-Teambridge creates a shared coding session around one repo/task.
+Coord creates a shared coding session around one repo/task.
 
 ```bash
-teambridge init
-teambridge start <session_name> [base_ref]
-teambridge join <session_name>
-teambridge enter <session_name>
+coord init
+coord start <session_name> [base_ref]
+coord join <session_name>
+coord enter <session_name>
 ```
 
 `start` records an immutable `base_commit`. Every joiner gets their own worktree/branch from that same commit. The shared context is not the code folder. The shared context is an event-sourced workspace vault that every teammate materializes locally.
@@ -60,7 +60,7 @@ Responsible for:
 
 Primary output:
 
-- A `teambridge` CLI that makes start/join/status/ask/inbox/vault flows feel simple and requires no per-session flags in normal use.
+- A `coord` CLI that makes start/join/status/ask/inbox/vault flows feel simple and requires no per-session flags in normal use.
 
 ### Ronish: MCP/Dashboard
 
@@ -90,7 +90,7 @@ Responsible for:
 
 Primary output:
 
-- Agents can use Teambridge through MCP, and humans can inspect workspace state through a local dashboard.
+- Agents can use Coord through MCP, and humans can inspect workspace state through a local dashboard.
 
 See also: [docs/CONCEPTS.md](../docs/CONCEPTS.md), [docs/daemon-api.md](../docs/daemon-api.md), [docs/dashboard.md](../docs/dashboard.md).
 
@@ -138,7 +138,7 @@ Rules:
 ```text
 packages/
 ├── core/                  # contracts, shared helpers, validation
-├── cli/                   # teambridge command
+├── cli/                   # coord command
 ├── daemon/                # local runtime authority
 ├── mcp/                   # HTTP MCP server
 └── vault/                 # event -> vault materializer
@@ -154,7 +154,7 @@ apps/
 Command:
 
 ```bash
-teambridge start <session_name> [base_ref]
+coord start <session_name> [base_ref]
 ```
 
 Behavior:
@@ -172,7 +172,7 @@ Behavior:
 Command:
 
 ```bash
-teambridge join <session_name>
+coord join <session_name>
 ```
 
 Behavior:
@@ -200,10 +200,10 @@ Required behavior:
 Phase 1 should use one user-published event type: `publish`. The CLI writes to a vault file chosen by the user/agent:
 
 ```bash
-teambridge publish decisions.md "Backend is the source of truth for invoice state."
-teambridge publish observations.md "Frontend reads derived totals from the invoice API."
-teambridge publish blockers.md "Need refresh-token behavior decided before UI retry logic."
-teambridge publish test-results.md "pnpm test passed for billing package."
+coord publish decisions.md "Backend is the source of truth for invoice state."
+coord publish observations.md "Frontend reads derived totals from the invoice API."
+coord publish blockers.md "Need refresh-token behavior decided before UI retry logic."
+coord publish test-results.md "pnpm test passed for billing package."
 ```
 
 Phase 1 keeps the vault intentionally flat:
@@ -227,7 +227,7 @@ The vault is a readable local projection of ordered events.
 Default files:
 
 ```text
-.teambridge/workspaces/{session_name}/vault/
+.coord/workspaces/{session_name}/vault/
 ├── README.md
 ├── decisions.md
 ├── observations.md
@@ -355,11 +355,11 @@ MCP is the primary agent-facing API.
 Resources:
 
 ```text
-teambridge://workspace
-teambridge://participants
-teambridge://vault/context
-teambridge://inbox
-teambridge://conflicts
+coord://workspace
+coord://participants
+coord://vault/context
+coord://inbox
+coord://conflicts
 ```
 
 Tools:
@@ -378,7 +378,7 @@ Workspace resolution must be explicit and deterministic:
 - Prefer explicit query params or configured workspace ID.
 - Accept headers from hook/agent wrapper when available.
 - Use daemon `state.sqlite` to map CWD/worktree path to workspace.
-- Use `.teambridge/.active` only as fallback.
+- Use `.coord/.active` only as fallback.
 
 ## Supabase Contract
 
@@ -427,7 +427,7 @@ Execution order:
   - Kushagra adds `packages/cli` and CLI parser skeleton.
   - Ronish adds `packages/mcp` and `apps/dashboard` skeletons.
 - Step 3, Nihal first: make the local daemon real enough for other packages to call it: health, config discovery, local SQLite, local workspace store, and contract validation/tests.
-- Step 4, Kushagra after daemon health/config exist: implement `teambridge init`, `teambridge status`, `teambridge ws show`, `teambridge ws who`, `teambridge ws branches`, and CLI-to-daemon wiring.
+- Step 4, Kushagra after daemon health/config exist: implement `coord init`, `coord status`, `coord ws show`, `coord ws who`, `coord ws branches`, and CLI-to-daemon wiring.
 - Step 5, Nihal + Kushagra in parallel:
   - Nihal implements daemon workspace create/join APIs and workspace manifest persistence.
   - Kushagra implements `start`, `join`, `enter`, base commit resolution, and worktree creation.
@@ -439,14 +439,14 @@ Execution order:
 Pass example:
 
 ```bash
-teambridge init
-teambridge start billing-refactor main
-teambridge join billing-refactor --as kushagra
-teambridge join billing-refactor --as ronish
-teambridge publish decisions.md "Backend is the source of truth for invoice state."
-teambridge vault read decisions.md
-teambridge vault search "invoice state"
-teambridge vault context
+coord init
+coord start billing-refactor main
+coord join billing-refactor --as kushagra
+coord join billing-refactor --as ronish
+coord publish decisions.md "Backend is the source of truth for invoice state."
+coord vault read decisions.md
+coord vault search "invoice state"
+coord vault context
 ```
 
 Pass when:
@@ -481,20 +481,20 @@ Pass example:
 
 ```bash
 # Device A, Nihal
-teambridge start billing-refactor main
-teambridge publish observations.md "Refresh endpoint retries forever when token refresh fails."
+coord start billing-refactor main
+coord publish observations.md "Refresh endpoint retries forever when token refresh fails."
 
 # Device B, Kushagra
-teambridge join billing-refactor
-teambridge vault search "Refresh endpoint"
+coord join billing-refactor
+coord vault search "Refresh endpoint"
 
 # Device A goes offline, publishes locally, then reconnects.
-teambridge publish blockers.md "Need backend decision before changing retry UI."
-teambridge status
+coord publish blockers.md "Need backend decision before changing retry UI."
+coord status
 
 # Device C, Ronish, joins late.
-teambridge join billing-refactor
-teambridge vault read observations.md
+coord join billing-refactor
+coord vault read observations.md
 ```
 
 Pass when:
@@ -507,7 +507,7 @@ Pass when:
 
 ### Phase 3: Agent UX, MCP, Inbox, and Dashboard
 
-Goal: agents and humans can use Teambridge naturally through hooks, MCP, inbox, and dashboard without per-session flags.
+Goal: agents and humans can use Coord naturally through hooks, MCP, inbox, and dashboard without per-session flags.
 
 Execution order:
 
@@ -517,15 +517,15 @@ Execution order:
   - Kushagra upgrades the Phase 1 context endpoint into smarter compact context UX, then wires Claude Code hook auto-injection and delta injection.
 - Step 3, Ronish + Kushagra in parallel after inbox endpoints exist:
   - Ronish implements MCP tools: `team_publish`, `team_ask`, `team_reply`, `vault_search`, `vault_read`, `workspace_status`.
-  - Kushagra implements `teambridge ask`, `teambridge inbox`, `teambridge reply`, and unread/pending question UX.
+  - Kushagra implements `coord ask`, `coord inbox`, `coord reply`, and unread/pending question UX.
 - Step 4, Ronish after dashboard APIs are stable: implement dashboard workspace, participants, branches, presence, inbox, conflicts, and vault highlights.
 - Step 5, Nihal while integrations land: add end-to-end tests for local participants, offline/reconnect sync, and new joiner bootstrap.
-- Step 6, Kushagra + everyone: document and dogfood one real Teambridge session.
+- Step 6, Kushagra + everyone: document and dogfood one real Coord session.
 
 Pass example:
 
 ```bash
-cd "$(teambridge enter billing-refactor)"
+cd "$(coord enter billing-refactor)"
 claude
 ```
 
@@ -546,12 +546,12 @@ team_ask({
 ```
 
 ```bash
-teambridge dashboard
+coord dashboard
 ```
 
 Pass when:
 
-- Claude Code receives compact context automatically inside a Teambridge worktree.
+- Claude Code receives compact context automatically inside a Coord worktree.
 - Agent can publish, read, search, and ask through MCP.
 - CLI inbox and dashboard show the same questions/replies.
 - Dashboard shows participants, branches, presence, conflicts, and vault highlights.

@@ -6,7 +6,7 @@ first — this file covers how to build, test, and navigate the code.
 
 ## What this is
 
-**Condominium** (npm name `teambridge`) — a shared workspace for teams building
+**Coord** (npm name `coord`) — a shared workspace for teams building
 with AI coding agents. Multiple developers work on the same task in separate git
 branches while sharing context through a vault, a local daemon, a dashboard, and
 (eventually) MCP tools. Current status lives in [`PROGRESS.md`](./PROGRESS.md).
@@ -17,7 +17,7 @@ branches while sharing context through a vault, a local daemon, a dashboard, and
 packages/core       Shared types + contracts (src/contracts/) — start here
 packages/daemon     Local HTTP API on :9473 (state, vault, relay)
 packages/vault      Vault materialization from events.jsonl
-packages/cli        `teambridge` CLI (commander)
+packages/cli        `coord` CLI (commander)
 packages/mcp        MCP resource/tool stubs (server not yet wired)
 apps/dashboard      React + Vite + TanStack Query UI on :5173
 supabase/           Phase 2 relay migration (tc_ tables)
@@ -26,8 +26,8 @@ docs/               Concepts, daemon API, worktrees, design choices, plans
 report/             Team build plan + Phase 2 relay plan
 ```
 
-Local runtime state lives in `.teambridge/` at the git root (SQLite at
-`.teambridge/state.sqlite`, worktrees, vault, avatars).
+Local runtime state lives in `.coord/` at the git root (SQLite at
+`.coord/state.sqlite`, worktrees, vault, avatars).
 
 ## Commands
 
@@ -40,7 +40,7 @@ pnpm daemon                # HTTP API on http://127.0.0.1:9473
 pnpm seed                  # optional demo projects (Beacon, Silo, Forge)
 pnpm dashboard             # dev UI on http://127.0.0.1:5173
 pnpm dashboard:preview     # production build + preview
-pnpm teambridge <args>     # run the built CLI (node packages/cli/dist/index.js)
+pnpm coord <args>     # run the built CLI (node packages/cli/dist/index.js)
 pnpm test                  # per-package unit tests (node --test)
 pnpm test:integration      # builds, then runs tests/integration/*.test.mjs
 ```
@@ -60,7 +60,7 @@ daemon code before exercising a flow.
   integration tests are `tests/integration/*.test.mjs`, run serially.
 - **Naming hybrid:** UI and docs say **track**; several APIs and types still
   say **workspace** (`/workspaces/*` mutations vs. `/projects` + `/tracks`
-  reads, `.teambridge/workspaces/{sessionName}/` on disk). This is intentional
+  reads, `.coord/workspaces/{sessionName}/` on disk). This is intentional
   until a future `/tracks/*` rename — see [`docs/CONCEPTS.md`](./docs/CONCEPTS.md).
 - **Vault is a projection, not the truth.** `events.jsonl` is canonical
   (ordered by per-workspace `seq`, not timestamps); markdown vault files are

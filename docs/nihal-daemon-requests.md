@@ -28,7 +28,7 @@ All references use function names in `packages/daemon/src/index.ts` (line number
 | 3 | `DELETE /workspaces/:id/worktree` | Open | No | MEDIUM |
 | 4 | `/status` resolves by session name (not id-only) | **Done** (`getWorkspaceByIdentifier`) | No | MEDIUM |
 | 5 | Transaction-wrap + idempotent `join` inserts | Open | No | MEDIUM |
-| 6 | Shared `safeDisplayName` / `sanitizeSessionName` in `@teambridge/core` | Open | No | HIGH (low effort) |
+| 6 | Shared `safeDisplayName` / `sanitizeSessionName` in `@coord/core` | Open | No | HIGH (low effort) |
 | 7 | Compute `current_commit` from the worktree, not repoRoot HEAD | Open | No | LOW |
 
 ---
@@ -46,10 +46,10 @@ row — with no CLI-side DB writes.
   (mirror `JoinRequestBodySchema`).
 - In `startWorkspace`: when `worktreePath` is present, set the `worktrees` insert
   `path = resolve(body.worktreePath)` and
-  `persistedBranch = teambridge/<session>/<safeName>`. When absent → behavior byte-identical to today.
+  `persistedBranch = coord/<session>/<safeName>`. When absent → behavior byte-identical to today.
 
 **Acceptance.** `POST /workspaces/start` with `worktreePath` persists a `worktrees` row at that
-path on the teambridge branch; without it, unchanged.
+path on the coord branch; without it, unchanged.
 **CLI use.** Flip the creator to the same git-first sequence as a joiner — the product's
 "separate hands" isolation for everyone, with the daemon owning the DB.
 
@@ -100,14 +100,14 @@ a raw 500.
 **Acceptance.** Re-join is idempotent and returns a clean result; no orphan rows.
 **CLI use.** Lets the CLI drop its "translate 500 → already joined" workaround.
 
-## #6 — Shared sanitizer in `@teambridge/core` · HIGH (low effort)
+## #6 — Shared sanitizer in `@coord/core` · HIGH (low effort)
 
-**Why.** The branch string `teambridge/<rawSession>/<safeName>` must be **byte-identical** on both
+**Why.** The branch string `coord/<rawSession>/<safeName>` must be **byte-identical** on both
 sides, or `UNIQUE(branch)` reconciliation breaks. Today `safeDisplayName` lives only in the daemon
 and the CLI has to hand-replicate it — a drift risk that turns into a silent
 join failure.
 
-**Change.** Lift `safeDisplayName` into `@teambridge/core` and add `assertValidSessionName` /
+**Change.** Lift `safeDisplayName` into `@coord/core` and add `assertValidSessionName` /
 `sanitizeSessionName`; the daemon imports from there. Also worth deciding: should the daemon
 **validate** `sessionName` against `^[A-Za-z0-9._-]+$` server-side? It currently stores the name
 raw into a git ref (index.ts:371, 378), so a name with spaces / `..` / leading `-` persists an
