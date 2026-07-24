@@ -69,5 +69,5 @@ export async function runStart(argv: string[], options: ClientOptions): Promise<
   console.log(`Workspace id: ${manifest.id}`);
   console.log(`Branch:   ${worktree.branch}`);
   console.log(`Worktree: ${worktree.path}`);
-  console.log(`Enter it with: cd "${worktree.path}" && claude`);
+  console.log(`Continue with: coord work ${manifest.sessionName}`);
 }

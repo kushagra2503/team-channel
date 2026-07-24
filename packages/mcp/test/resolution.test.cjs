@@ -33,6 +33,23 @@ test('explicit sessionName returns with that session name', async () => {
   assert.equal(result.workspaceId, undefined);
 });
 
+test('launcher-provided environment resolves the active workspace', async () => {
+  const previousWorkspaceId = process.env.COORD_WORKSPACE_ID;
+  const previousSessionName = process.env.COORD_SESSION_NAME;
+  process.env.COORD_WORKSPACE_ID = 'ws_from_launcher';
+  process.env.COORD_SESSION_NAME = 'launcher-track';
+  try {
+    const result = await resolveWorkspaceContext({});
+    assert.equal(result.workspaceId, 'ws_from_launcher');
+    assert.equal(result.sessionName, 'launcher-track');
+  } finally {
+    if (previousWorkspaceId === undefined) delete process.env.COORD_WORKSPACE_ID;
+    else process.env.COORD_WORKSPACE_ID = previousWorkspaceId;
+    if (previousSessionName === undefined) delete process.env.COORD_SESSION_NAME;
+    else process.env.COORD_SESSION_NAME = previousSessionName;
+  }
+});
+
 test('.coord/.active containing "billing-refactor\\n" resolves to that session name', async () => {
   const dir = makeTempRepo();
   try {

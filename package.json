@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "description": "Coord — shared workspace for teams building with AI agents.",
+  "bin": {
+    "coord": "packages/cli/dist/index.js"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "dashboard": "pnpm --filter @coord/dashboard dev --host 127.0.0.1",

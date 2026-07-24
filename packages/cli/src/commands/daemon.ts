@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, openSync, c
 import { join, resolve } from 'node:path';
 import type { ClientOptions } from '../daemon-client';
 
+const DEFAULT_DAEMON_PORT = 9473;
+const DAEMON_START_TIMEOUT_MS = 5_000;
+
 type DaemonState = {
   pid: number;
   port: number;
@@ -45,24 +48,75 @@ function daemonEntryPoint(): string {
 function parsePort(argv: string[], fallback: string | undefined): number {
   const index = argv.indexOf('--port');
   const value = index >= 0 ? argv[index + 1] : fallback;
-  const port = Number(value ?? 9473);
+  const port = Number(value ?? DEFAULT_DAEMON_PORT);
   if (!Number.isInteger(port) || port <= 0) {
     throw new Error('Daemon port must be a positive integer.');
   }
   return port;
 }
 
-async function runDaemonStart(argv: string[], options: ClientOptions): Promise<void> {
-  const existing = readState(options.repoRoot);
-  if (existing && isProcessAlive(existing.pid)) {
-    console.log(`Coord daemon already running on ${existing.baseUrl}`);
-    console.log(`PID: ${existing.pid}`);
-    console.log(`Log: ${existing.logPath}`);
-    return;
+function portFromBaseUrl(baseUrl: string | undefined): number {
+  if (!baseUrl) return parsePort([], process.env.COORD_DAEMON_PORT);
+
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error(`Invalid Coord daemon URL: ${baseUrl}`);
   }
 
-  const port = parsePort(argv, process.env.COORD_DAEMON_PORT);
+  if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost')) {
+    throw new Error(
+      `Cannot auto-start a remote daemon at ${baseUrl}. Start it separately or unset COORD_DAEMON_URL.`
+    );
+  }
+
+  return Number(url.port || 80);
+}
+
+async function daemonIsHealthy(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(new URL('/health', baseUrl), {
+      signal: AbortSignal.timeout(750)
+    });
+    if (!response.ok) return false;
+    const body = await response.json() as { ok?: boolean };
+    return body.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForDaemon(baseUrl: string): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < DAEMON_START_TIMEOUT_MS) {
+    if (await daemonIsHealthy(baseUrl)) return;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 75));
+  }
+  throw new Error(`Coord daemon did not become ready at ${baseUrl}. Check .coord/daemon/daemon.log.`);
+}
+
+async function startManagedDaemon(
+  options: ClientOptions,
+  port: number,
+  quiet: boolean
+): Promise<{ started: boolean; baseUrl: string }> {
   const baseUrl = `http://127.0.0.1:${port}`;
+  const existing = readState(options.repoRoot);
+  if (existing && isProcessAlive(existing.pid)) {
+    if (await daemonIsHealthy(baseUrl)) {
+      if (!quiet) {
+        console.log(`Coord daemon already running on ${baseUrl}`);
+        console.log(`PID: ${existing.pid}`);
+        console.log(`Log: ${existing.logPath}`);
+      }
+      return { started: false, baseUrl };
+    }
+    throw new Error(
+      `A managed Coord daemon is running as PID ${existing.pid}, but ${baseUrl} is not healthy. Check ${existing.logPath}.`
+    );
+  }
+
   const dir = stateDir(options.repoRoot);
   mkdirSync(dir, { recursive: true });
 
@@ -95,9 +149,42 @@ async function runDaemonStart(argv: string[], options: ClientOptions): Promise<v
   };
   writeFileSync(statePath(options.repoRoot), `${JSON.stringify(state, null, 2)}\n`);
 
-  console.log(`Started Coord daemon on ${baseUrl}`);
-  console.log(`PID: ${state.pid}`);
-  console.log(`Log: ${logPath}`);
+  try {
+    await waitForDaemon(baseUrl);
+  } catch (error) {
+    if (state.pid && isProcessAlive(state.pid)) {
+      process.kill(state.pid, 'SIGTERM');
+    }
+    rmSync(statePath(options.repoRoot), { force: true });
+    throw error;
+  }
+
+  if (!quiet) {
+    console.log(`Started Coord daemon on ${baseUrl}`);
+    console.log(`PID: ${state.pid}`);
+    console.log(`Log: ${logPath}`);
+  }
+  return { started: true, baseUrl };
+}
+
+/**
+ * Make normal commands self-starting while preserving explicit remote daemon
+ * configurations. Returns true only when this call launched the daemon.
+ */
+export async function ensureDaemonRunning(options: ClientOptions): Promise<boolean> {
+  const configuredBaseUrl = options.baseUrl ?? `http://127.0.0.1:${parsePort([], process.env.COORD_DAEMON_PORT)}`;
+  if (await daemonIsHealthy(configuredBaseUrl)) return false;
+
+  const port = portFromBaseUrl(configuredBaseUrl);
+  const result = await startManagedDaemon(options, port, true);
+  return result.started;
+}
+
+async function runDaemonStart(argv: string[], options: ClientOptions): Promise<void> {
+  const port = argv.includes('--port')
+    ? parsePort(argv, process.env.COORD_DAEMON_PORT)
+    : portFromBaseUrl(options.baseUrl);
+  await startManagedDaemon(options, port, false);
 }
 
 async function runDaemonStatus(options: ClientOptions): Promise<void> {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   apiGet,
   createTempGitRepo,
+  getFreePort,
   parseCreatedProjectId,
   parseStartedWorkspaceId,
   pathsEqual,
@@ -22,12 +23,15 @@ test('CLI init → project create → start → status against a live daemon', a
     await daemon.stop();
   });
 
-  const init = runCli(['init', '--first-name', 'Ada', '--last-name', 'Lovelace', '--agent', 'cursor'], {
+  const init = runCli(['init', '--first-name', 'Ada', '--last-name', 'Lovelace', '--agent', 'cursor', '--project-name', 'Integration App'], {
     repoRoot,
     baseUrl: daemon.baseUrl
   });
   assert.equal(init.exitCode, 0, init.stderr || init.stdout);
   assert.match(init.stdout, /Initialized Coord for Ada Lovelace/);
+  assert.match(init.stdout, /Created project "Integration App"/);
+  assert.match(init.stdout, /Next: coord work <track>/);
+  const projectId = parseCreatedProjectId(init.stdout);
 
   const profileAfterInit = await apiGet('/user/profile', { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(profileAfterInit.response.status, 200);
@@ -46,14 +50,6 @@ test('CLI init → project create → start → status against a live daemon', a
   });
   assert.equal(initAgain.exitCode, 0, initAgain.stderr || initAgain.stdout);
   assert.match(initAgain.stdout, /already initialized for Ada Lovelace/);
-
-  const create = runCli(
-    ['project', 'create', '--name', 'Integration App', '--description', 'CLI integration fixture'],
-    { repoRoot, baseUrl: daemon.baseUrl }
-  );
-  assert.equal(create.exitCode, 0, create.stderr || create.stdout);
-  assert.match(create.stdout, /Created project "Integration App"/);
-  const projectId = parseCreatedProjectId(create.stdout);
 
   const profileAfterCreate = await apiGet('/user/profile', { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(profileAfterCreate.body.data.profile.defaultProjectId, projectId);
@@ -117,22 +113,50 @@ test('CLI start picks the only project when --project is omitted', async (t) => 
     await daemon.stop();
   });
 
-  runCli(['init', '--first-name', 'Grace', '--last-name', 'Hopper'], { repoRoot, baseUrl: daemon.baseUrl });
-
-  const create = runCli(['project', 'create', '--name', 'Solo Project'], {
+  const init = runCli(['init', '--first-name', 'Grace', '--last-name', 'Hopper', '--project-name', 'Solo Project'], {
     repoRoot,
     baseUrl: daemon.baseUrl
   });
-  assert.equal(create.exitCode, 0, create.stderr || create.stdout);
-  parseCreatedProjectId(create.stdout);
+  assert.equal(init.exitCode, 0, init.stderr || init.stdout);
+  parseCreatedProjectId(init.stdout);
 
-  const track = runCli(['start', 'solo-track'], { repoRoot, baseUrl: daemon.baseUrl });
-  assert.equal(track.exitCode, 0, track.stderr || track.stdout);
-  assert.match(track.stdout, /Started session "solo-track"/);
+  const work = runCli(['work', 'solo-track', '--no-launch'], { repoRoot, baseUrl: daemon.baseUrl });
+  assert.equal(work.exitCode, 0, work.stderr || work.stdout);
+  assert.match(work.stdout, /Started session "solo-track"/);
+  assert.match(work.stdout, /Ready on "solo-track"/);
 
   const status = runCli(['status'], { repoRoot, baseUrl: daemon.baseUrl });
   assert.equal(status.exitCode, 0, status.stderr || status.stdout);
   assert.match(status.stdout, /solo-track → proj_/);
+});
+
+test('coord init auto-starts its daemon and creates a folder-named project', async (t) => {
+  const repoRoot = await createTempGitRepo();
+  const port = await getFreePort();
+  t.after(async () => {
+    runCli(['daemon', 'stop'], { repoRoot, cwd: repoRoot });
+    await removeTempDir(repoRoot);
+  });
+
+  const previousPort = process.env.COORD_DAEMON_PORT;
+  process.env.COORD_DAEMON_PORT = String(port);
+  try {
+    const init = runCli(
+      ['init', '--first-name', 'Linus', '--last-name', 'Torvalds', '--agent', 'codex'],
+      { repoRoot, cwd: repoRoot }
+    );
+    assert.equal(init.exitCode, 0, init.stderr || init.stdout);
+    assert.match(init.stdout, /Started the Coord daemon/);
+    assert.match(init.stdout, /Created project "/);
+    assert.match(init.stdout, /Coord is ready/);
+
+    const work = runCli(['work', 'first-track', '--no-launch'], { repoRoot, cwd: repoRoot });
+    assert.equal(work.exitCode, 0, work.stderr || work.stdout);
+    assert.match(work.stdout, /Ready on "first-track"/);
+  } finally {
+    if (previousPort === undefined) delete process.env.COORD_DAEMON_PORT;
+    else process.env.COORD_DAEMON_PORT = previousPort;
+  }
 });
 
 test('CLI fails fast when daemon is unreachable', async (t) => {

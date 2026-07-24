@@ -9,17 +9,36 @@ Requires Node.js 22+ and pnpm.
 ```bash
 pnpm install
 pnpm build
-pnpm daemon          # API on http://127.0.0.1:9473
+```
+
+To use the development build as `coord` from any repository:
+
+```bash
+npm link
+cd /path/to/your/project
+coord init
+coord work my-track
+```
+
+`coord init` starts the local daemon when needed, creates your profile, and
+creates a project named after the repository folder. `coord work` creates or
+joins the track worktree and launches your configured agent there. Passing
+`--claude`, `--codex`, `--cursor`, or `--shell` overrides the agent for one
+run. After setup, bare `coord` selects a track and launches the default agent.
+
+For dashboard development:
+
+```bash
 pnpm seed            # Optional demo projects: Beacon, Silo, Forge
 pnpm dashboard       # UI on http://127.0.0.1:5173
 ```
 
-**Your own data (no seed):**
+When running without the global development link, prefix commands with
+`pnpm`, for example:
 
 ```bash
 pnpm coord init
-pnpm coord project create --name "My App"
-pnpm coord start my-track
+pnpm coord work my-track
 ```
 
 Optional: add `PEXELS_API_KEY` to `.env` for flower profile photos.
