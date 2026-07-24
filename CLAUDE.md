@@ -36,17 +36,20 @@ Requires Node.js 22+ and pnpm.
 ```bash
 pnpm install
 pnpm build                 # pnpm -r build (build before running the CLI/daemon)
-pnpm daemon                # HTTP API on http://127.0.0.1:9473
+pnpm daemon                # explicit daemon start; init/work auto-start it
 pnpm seed                  # optional demo projects (Beacon, Silo, Forge)
 pnpm dashboard             # dev UI on http://127.0.0.1:5173
 pnpm dashboard:preview     # production build + preview
-pnpm coord <args>     # run the built CLI (node packages/cli/dist/index.js)
+pnpm coord init            # profile + folder-named project
+pnpm coord work <track>    # create/join worktree and launch the agent
+pnpm coord <args>          # run the built CLI (node packages/cli/dist/index.js)
 pnpm test                  # per-package unit tests (node --test)
 pnpm test:integration      # builds, then runs tests/integration/*.test.mjs
 ```
 
 The CLI runs against the built output, so `pnpm build` after changing CLI or
-daemon code before exercising a flow.
+daemon code before exercising a flow. Run `npm link` from this repository to
+make the development build available as `coord` in other repositories.
 
 ## Conventions
 

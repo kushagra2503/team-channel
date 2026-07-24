@@ -49,3 +49,11 @@ export function readWorktreePointer(
     return null;
   }
 }
+
+export function writeActiveTrack(repoRoot: string, sessionName: string): string {
+  const coordDir = join(repoRoot, '.coord');
+  mkdirSync(coordDir, { recursive: true });
+  const path = join(coordDir, '.active');
+  writeFileSync(path, `${sessionName.trim()}\n`);
+  return path;
+}

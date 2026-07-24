@@ -5,7 +5,7 @@ digest; the authoritative checklist stays in [`todo.md`](./todo.md), and the
 per-phase build plan lives in
 [`report/team-implementation-plan.md`](./report/team-implementation-plan.md).
 
-_Last updated: 2026-07-12._
+_Last updated: 2026-07-25._
 
 ## At a glance
 
@@ -22,7 +22,8 @@ Runnable end-to-end on one machine:
 ```bash
 pnpm install
 pnpm build
-pnpm daemon                 # HTTP API on http://127.0.0.1:9473
+pnpm coord init             # auto-start daemon, profile, folder-named project
+pnpm coord work my-track    # create/join worktree and launch the coding agent
 pnpm seed                   # optional demo projects: Beacon, Silo, Forge
 pnpm dashboard              # React UI on http://127.0.0.1:5173
 pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
@@ -32,12 +33,14 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   SQLite state, projects/tracks, participants, worktrees, publish events,
   vault materialization + rebuild, `vault context`, FTS5 vault search, avatars,
   repo context, and Supabase relay mirroring/sync.
-- **CLI** (`packages/cli`, `pnpm coord`) — `init` (with `--relay
-  local|supabase`), `status`, `project create|list`, `start`, `join`, `enter`,
+- **CLI** (`packages/cli`, `pnpm coord`) — simplified onboarding through
+  `init` (auto-start daemon + folder-named project) and `work` (create/join a
+  worktree + launch Claude Code, Codex, Cursor, Ghost, or a shell). Bare
+  `coord` selects a track and launches the default agent. Lower-level commands
+  remain available: `status`, `project create|list`, `start`, `join`, `enter`,
   `publish`, `vault read|context|search`, `context` (compact vault context +
-  teammate deltas), `hook install|uninstall|status` (Claude Code
-  auto-injection), `ws show|who|branches`, plus relay commands `login`,
-  `sessions`, `list`, `sync`, `status relay`.
+  teammate deltas), `hook install|uninstall|status`, `ws show|who|branches`,
+  plus relay commands `login`, `sessions`, `list`, `sync`, `status relay`.
 - **Vault** (`packages/vault`) — flat Phase 1 files (`decisions.md`,
   `observations.md`, `blockers.md`, `test-results.md`, `attempts.md`)
   materialized from `events.jsonl`; row annotations (`[tb color= assign=]`)
@@ -55,8 +58,10 @@ pnpm test:integration       # full CLI + daemon flow, incl. vault-flow.test.mjs
   `participants`, `vault/context`, `inbox`, `conflicts`) and six tools
   (`team_publish`, `vault_search`, `vault_read`, `workspace_status`,
   `team_ask`, `team_reply`) — all calling the daemon. Workspace resolution
-  from explicit params, local `state.sqlite` worktree mapping, or
-  `.coord/.active` fallback. Start with `coord mcp`. Integration tests
+  from explicit params, launcher environment, local `state.sqlite` worktree
+  mapping, or `.coord/.active` fallback. `coord work` configures the MCP server
+  for Claude Code and Codex automatically; it can also be started directly
+  with `coord mcp`. Integration tests
   spawn the server over stdio and verify JSON-RPC handshake, resource/tool
   lists, live resource reads, and full ask/reply/conflict flows.
 

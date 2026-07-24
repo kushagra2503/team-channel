@@ -40,7 +40,10 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<ApiResul
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return apiFail('INTERNAL_ERROR', `Cannot reach the coord daemon at ${url} — is it running? (run \`pnpm daemon\`)\n  ${message}`);
+    return apiFail(
+      'INTERNAL_ERROR',
+      `Cannot reach the Coord daemon at ${url}. Run \`coord daemon start\` or use \`coord work\` to start it automatically.\n  ${message}`
+    );
   }
 
   const text = await response.text();

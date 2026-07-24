@@ -47,7 +47,12 @@ function isInstalled(settings: ClaudeSettings): boolean {
   return (settings.hooks?.SessionStart ?? []).some(entryTargetsCoord);
 }
 
-async function runHookInstall(argv: string[], options: ClientOptions, cwd: string): Promise<void> {
+export async function installClaudeHook(
+  argv: string[],
+  options: ClientOptions,
+  cwd: string,
+  quiet = false
+): Promise<void> {
   const command = parseFlag(argv, '--command') ?? HOOK_COMMAND;
   const path = settingsPath(cwd);
   const settings = readSettings(path);
@@ -68,18 +73,24 @@ async function runHookInstall(argv: string[], options: ClientOptions, cwd: strin
       }
     }
     writeSettings(path, settings);
-    console.log(`Coord SessionStart hook already present — refreshed in ${path}`);
+    if (!quiet) {
+      console.log(`Coord SessionStart hook already present — refreshed in ${path}`);
+    }
   } else {
     sessionStart.push({ hooks: [{ type: 'command', command }] });
     writeSettings(path, settings);
-    console.log(`Installed Coord SessionStart hook in ${path}`);
-    console.log(`Command: ${command}`);
+    if (!quiet) {
+      console.log(`Installed Coord SessionStart hook in ${path}`);
+      console.log(`Command: ${command}`);
+    }
   }
 
-  if (!autoInject) {
+  if (!autoInject && !quiet) {
     console.log('Note: config.autoInject is false — the hook is installed but you disabled auto-injection in .coord/config.json.');
   }
-  console.log('New Claude Code sessions in this worktree will now receive shared context automatically.');
+  if (!quiet) {
+    console.log('New Claude Code sessions in this worktree will now receive shared context automatically.');
+  }
 }
 
 function runHookUninstall(cwd: string): void {
@@ -133,7 +144,7 @@ export async function runHook(argv: string[], options: ClientOptions): Promise<v
   const cwd = process.cwd();
 
   if (sub === 'install') {
-    await runHookInstall(argv.slice(1), options, cwd);
+    await installClaudeHook(argv.slice(1), options, cwd);
     return;
   }
   if (sub === 'uninstall') {

@@ -12,12 +12,14 @@ export type ResolutionInput = {
 
 export async function resolveWorkspaceContext(input: ResolutionInput): Promise<McpResourceContext> {
   const baseUrl = input.baseUrl ?? process.env.COORD_DAEMON_URL;
+  const workspaceId = input.workspaceId ?? process.env.COORD_WORKSPACE_ID;
+  const sessionName = input.sessionName ?? process.env.COORD_SESSION_NAME;
 
-  // 1. Explicit params
-  if (input.workspaceId || input.sessionName) {
+  // 1. Explicit params or launcher-provided environment
+  if (workspaceId || sessionName) {
     return {
-      workspaceId: input.workspaceId,
-      sessionName: input.sessionName,
+      workspaceId,
+      sessionName,
       repoRoot: input.repoRoot,
       baseUrl
     };

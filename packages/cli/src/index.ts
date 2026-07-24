@@ -14,13 +14,16 @@ import { runStatus } from './commands/status';
 import { runDaemon } from './commands/daemon';
 import { runLogin, runRelayStatus, runSessions, runSync } from './commands/relay';
 import { runMcp } from './commands/mcp';
+import { runWork } from './commands/work';
 import { daemonBaseUrl, resolveRepoRoot } from './repo';
 
 function usage(): void {
   console.log(`Coord CLI
 
 Usage:
-  coord init [--first-name NAME] [--last-name NAME] [--agent cursor|claude-code|codex] [--relay local|supabase]
+  coord                              Select a track and launch your default agent
+  coord init [--first-name NAME] [--last-name NAME] [--agent AGENT] [--project-name NAME] [--no-project]
+  coord work [TRACK] [--agent AGENT] [--claude|--codex|--cursor|--ghost|--shell] [--no-launch]
   coord project create [--name NAME] [--description TEXT]
   coord project list
   coord start [NAME] [BASE_REF] [--project PROJECT_ID]
@@ -51,16 +54,22 @@ Environment:
   COORD_DAEMON_URL   default http://127.0.0.1:9473
   COORD_DAEMON_PORT  used when URL unset
 
-Run \`pnpm daemon\` in another terminal before CLI commands.`);
+Coord automatically starts a local daemon for \`init\` and \`work\`.`);
 }
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const command = argv[0];
+  const command = argv[0] ?? 'work';
 
-  if (!command || command === '--help' || command === '-h') {
+  if (
+    command === '--help'
+    || command === '-h'
+    || command === 'help'
+    || argv.includes('--help')
+    || argv.includes('-h')
+  ) {
     usage();
-    process.exit(command ? 0 : 1);
+    return;
   }
 
   const repoRoot = resolveRepoRoot();
@@ -69,6 +78,11 @@ async function main(): Promise<void> {
   try {
     if (command === 'init') {
       await runInit(argv.slice(1), options);
+      return;
+    }
+
+    if (command === 'work') {
+      await runWork(argv.slice(1), options);
       return;
     }
 

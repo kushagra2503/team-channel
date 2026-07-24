@@ -105,14 +105,19 @@ export async function startTestDaemon(repoRoot) {
 }
 
 export function runCli(args, { repoRoot, baseUrl, cwd }) {
+  const env = {
+    ...process.env,
+    COORD_REPO_ROOT: repoRoot
+  };
+  if (baseUrl) {
+    env.COORD_DAEMON_URL = baseUrl;
+  } else {
+    delete env.COORD_DAEMON_URL;
+  }
   try {
     const stdout = execFileSync(process.execPath, [CLI_BIN, ...args], {
       cwd: cwd ?? repoRoot,
-      env: {
-        ...process.env,
-        COORD_DAEMON_URL: baseUrl,
-        COORD_REPO_ROOT: repoRoot
-      },
+      env,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe']
     });

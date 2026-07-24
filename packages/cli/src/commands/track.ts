@@ -150,9 +150,18 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
     // Duplicate display name on this track: the worktree may be legitimate prior
     // work, so surface it and do NOT roll back (daemon ask #5 is only partial).
     if (/unique constraint failed:\s*participants/i.test(joined.error.message)) {
+      writeWorktreePointer(options.repoRoot, {
+        workspaceId: track.id,
+        sessionName: track.sessionName,
+        displayName,
+        path: worktree.path,
+        branch: worktree.branch,
+        baseCommit: track.baseCommit,
+        role: 'joiner'
+      });
       console.log(`You are already a participant in session "${track.sessionName}" as ${displayName}.`);
       console.log(`Worktree: ${worktree.path}`);
-      console.log(`Enter it with: cd "${worktree.path}" && claude`);
+      console.log(`Continue with: coord work ${track.sessionName}`);
       return;
     }
     // Otherwise roll back only what we created this run.
@@ -176,5 +185,5 @@ export async function runTrackJoin(argv: string[], options: ClientOptions): Prom
   console.log(`${verb} session "${track.sessionName}" as ${displayName}.`);
   console.log(`Branch:   ${worktree.branch}`);
   console.log(`Worktree: ${worktree.path}`);
-  console.log(`Enter it with: cd "${worktree.path}" && claude`);
+  console.log(`Continue with: coord work ${track.sessionName}`);
 }
